@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 170" role="img" aria-labelledby="title" preserveAspectRatio="xMidYMid meet">
+  <title id="title">CALOREAZI</title>
+  <g transform="translate(8 8) scale(1.2)">
+    <path d="M78 19A47 47 0 1 0 70 109L52 91A23 23 0 1 1 68 44Z" fill="#DF7044"/>
+    <path d="M32 104C49 86 58 63 77 51c10-6 20-7 29-3-11 2-18 8-25 18-12 17-21 33-36 43Z" fill="#E1AA3D"/>
+  </g>
+  <g fill="#111111" font-family="Montserrat, Arial, Helvetica, sans-serif" font-size="84" letter-spacing="2">
+    <text x="176" y="112" font-weight="800">CAL</text>
+    <text x="352" y="112" font-weight="550">OR</text>
+    <text x="480" y="112" font-weight="300">EAZI</text>
+  </g>
+</svg>

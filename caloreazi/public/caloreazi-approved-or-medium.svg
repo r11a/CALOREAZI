@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2176 768" role="img" aria-labelledby="title" preserveAspectRatio="xMidYMid meet">
+  <title id="title">CALOREAZI</title>
+  <defs>
+    <filter id="transparent-background" x="-2%" y="-5%" width="104%" height="110%" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="
+        1 0 0 0 0
+        0 1 0 0 0
+        0 0 1 0 0
+       -2 -2 -2 0 5.72"/>
+    </filter>
+  </defs>
+  <image href="/caloreazi-approved-or-medium.png" x="0" y="0" width="2176" height="768" filter="url(#transparent-background)"/>
+</svg>

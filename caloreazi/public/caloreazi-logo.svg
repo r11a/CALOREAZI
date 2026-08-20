@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="165 175 1785 385" role="img" aria-labelledby="title" preserveAspectRatio="xMidYMid meet">
+  <title id="title">CALOREAZI</title>
+  <defs>
+    <filter id="remove-ivory" x="-5%" y="-20%" width="110%" height="140%" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="
+        1 0 0 0 0
+        0 1 0 0 0
+        0 0 1 0 0
+       -2 -2 -2 0 5.72"/>
+    </filter>
+  </defs>
+  <image href="/caloreazi-logo-light-v2.png" x="0" y="0" width="2117" height="743" filter="url(#remove-ivory)"/>
+</svg>
