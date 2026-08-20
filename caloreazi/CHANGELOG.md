@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Remembers signed-in users for 30 days with a persistent add-on session secret.
+- Adds daily history foundations, weight measurements and trend feedback.
+- Adds favorite meals and one-tap repeat logging.
+- Adds a visual quick-add flow for vegetables, fruit, and drinks with editable portions.
+- Adds Admin health, AI feature usage, last-login visibility, and user disable/enable controls.
+
 ## 0.4.0
 
 - Adds AI meal-photo analysis with camera/gallery capture and editable nutrition estimates.

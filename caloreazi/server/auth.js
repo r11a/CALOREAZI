@@ -1,8 +1,11 @@
 import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback);
 const COOKIE = "caloreazi_session";
+const SESSION_DAYS = 30;
 
 export function remoteUser(request) {
   const id = request.headers.get("x-remote-user-id");
@@ -22,7 +25,14 @@ export async function verifyPassword(password, record) {
 }
 
 function signingSecret() {
-  const source = process.env.CALOREAZI_SESSION_SECRET || process.env.SUPERVISOR_TOKEN || "caloreazi-local-development-only";
+  let source = process.env.CALOREAZI_SESSION_SECRET;
+  if (!source) {
+    const dir = process.env.CALOREAZI_DATA_DIR || (process.platform === "win32" ? path.join(process.cwd(), ".data") : "/data");
+    const file = path.join(dir, ".session-secret");
+    mkdirSync(dir, { recursive: true });
+    try { source = readFileSync(file, "utf8").trim(); }
+    catch (error) { if (error?.code !== "ENOENT") throw error; source = randomBytes(32).toString("base64url"); writeFileSync(file, source, { mode: 0o600 }); }
+  }
   return createHmac("sha256", source).update("admin-session-v1").digest();
 }
 
@@ -31,8 +41,10 @@ function signature(payload) { return createHmac("sha256", signingSecret()).updat
 function cookiePath(request) { return request?.headers.get("x-ingress-path") || "/"; }
 
 export function createSessionCookie(request, user) {
-  const payload = Buffer.from(JSON.stringify({ userId: user.id, role: user.role, sessionVersion: Number(user.sessionVersion || 1), exp: Date.now() + 12 * 60 * 60 * 1000 })).toString("base64url");
-  return `${COOKIE}=${payload}.${signature(payload)}; Path=${cookiePath(request)}; HttpOnly; SameSite=Strict; Max-Age=43200`;
+  const maxAge = SESSION_DAYS * 24 * 60 * 60;
+  const payload = Buffer.from(JSON.stringify({ userId: user.id, role: user.role, sessionVersion: Number(user.sessionVersion || 1), exp: Date.now() + maxAge * 1000 })).toString("base64url");
+  const secure = request?.headers.get("x-forwarded-proto") === "https" || new URL(request?.url || "http://localhost").protocol === "https:" ? "; Secure" : "";
+  return `${COOKIE}=${payload}.${signature(payload)}; Path=${cookiePath(request)}; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure}`;
 }
 
 export function clearSessionCookie(request) { return `${COOKIE}=; Path=${cookiePath(request)}; HttpOnly; SameSite=Strict; Max-Age=0`; }
@@ -46,7 +58,7 @@ export function currentSession(request) {
   catch { return null; }
 }
 
-function sessionUser(state, session) { return session && state.users.find((item) => item.id === session.userId && Number(item.sessionVersion || 1) === Number(session.sessionVersion || 1)); }
+function sessionUser(state, session) { return session && state.users.find((item) => item.id === session.userId && item.disabled !== true && Number(item.sessionVersion || 1) === Number(session.sessionVersion || 1)); }
 export function isAdmin(state, request) { const session = currentSession(request); const user = sessionUser(state, session); return Boolean(session?.role === "admin" && user?.role === "admin"); }
 export function requireAdmin(state, request) { return isAdmin(state, request) ? null : Response.json({ error: "נדרשת התחברות מנהל" }, { status: 403 }); }
 export function requireUser(state, request) { const session = currentSession(request); return sessionUser(state, session) ? session : null; }

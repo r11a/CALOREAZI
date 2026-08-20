@@ -44,6 +44,22 @@ export async function readState() {
   }
 }
 
+export function ensureUserData(state, userId) {
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const data = state.userData[userId] || { profile: null, today: { date: todayDate, waterMl: 0, meals: [] } };
+  data.history = Array.isArray(data.history) ? data.history : [];
+  data.measurements = Array.isArray(data.measurements) ? data.measurements : [];
+  data.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+  data.activity = Array.isArray(data.activity) ? data.activity : [];
+  data.today = { ...structuredClone(defaultState.today), ...(data.today || {}) };
+  if (data.today.date && data.today.date !== todayDate && (data.today.meals.length || data.today.waterMl)) {
+    if (!data.history.some((day) => day.date === data.today.date)) data.history.push(structuredClone(data.today));
+    data.today = { date: todayDate, waterMl: 0, meals: [] };
+  } else if (!data.today.date) data.today.date = todayDate;
+  state.userData[userId] = data;
+  return data;
+}
+
 export async function writeState(state) {
   const files = await paths();
   await writeFile(files.temp, JSON.stringify(state, null, 2), { mode: 0o600 });
@@ -94,7 +110,7 @@ export function publicState(state, admin = false) {
 export function userView(state, userId, admin = false) {
   const user = state.users.find((item) => item.id === userId);
   if (!user) return null;
-  const data = state.userData[userId] || { profile: null, today: structuredClone(defaultState.today) };
+  const data = ensureUserData(state, userId);
   const ai = admin
     ? { ...state.ai, encryptedKey: undefined, keyConfigured: Boolean(state.ai?.encryptedKey) }
     : { keyConfigured: Boolean(state.ai?.encryptedKey), available: Boolean(state.ai?.encryptedKey) };
@@ -104,6 +120,10 @@ export function userView(state, userId, admin = false) {
     currentUser: { id: user.id, name: user.name, role: user.role },
     profile: data.profile || null,
     today: { ...structuredClone(defaultState.today), ...(data.today || {}) },
+    history: data.history,
+    measurements: data.measurements,
+    favorites: data.favorites,
+    activity: data.activity,
     ai,
     aiUsage: admin ? state.aiUsage : [],
     adminConfigured: state.users.some((item) => item.role === "admin" && item.password?.hash),

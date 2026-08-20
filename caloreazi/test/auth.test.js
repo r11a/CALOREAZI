@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSessionCookie, hashPassword, isAdmin, verifyPassword } from "../server/auth.js";
+import { createSessionCookie, hashPassword, isAdmin, requireUser, verifyPassword } from "../server/auth.js";
 
 test("stores and verifies an admin password using scrypt", async () => {
   const record = await hashPassword("strong-password");
@@ -21,4 +21,13 @@ test("invalidates a session when the account session version changes", async () 
   const cookie = createSessionCookie(new Request("http://localhost"), user);
   assert.equal(isAdmin({ users: [{ ...user, sessionVersion: 2 }] }, new Request("http://localhost", { headers: { cookie } })), true);
   assert.equal(isAdmin({ users: [{ ...user, sessionVersion: 3 }] }, new Request("http://localhost", { headers: { cookie } })), false);
+});
+
+test("persists login for 30 days and rejects a disabled account", () => {
+  const user = { id: "member-1", role: "user", sessionVersion: 1 };
+  const cookie = createSessionCookie(new Request("http://localhost"), user);
+  assert.match(cookie, /Max-Age=2592000/);
+  const request = new Request("http://localhost", { headers: { cookie } });
+  assert.ok(requireUser({ users: [user] }, request));
+  assert.equal(requireUser({ users: [{ ...user, disabled: true }] }, request), null);
 });

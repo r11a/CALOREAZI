@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./logo-fix.css";
 import "./product.css";
+import "./features.css";
 
 export const metadata: Metadata = {
   title: "CALOREAZI — המאמן התזונתי האישי שלך",

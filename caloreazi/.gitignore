@@ -1,0 +1,5 @@
+.data/
+.testdata-*/
+.next/
+dist/
+node_modules/

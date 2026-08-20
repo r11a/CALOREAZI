@@ -20,7 +20,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "סיסמת מנהל שגויה" }, { status: 401 });
   }
 
-  return Response.json({ ok: true, role: "admin" }, { headers: { "Set-Cookie": createSessionCookie(request, admin), "Cache-Control": "no-store" } });
+  const loggedInAt = new Date().toISOString();
+  await updateState((latest) => { const account = latest.users.find((item) => item.id === admin.id); account.lastLogin = loggedInAt; return latest; });
+
+  return Response.json({ ok: true, role: "admin", rememberedDays: 30 }, { headers: { "Set-Cookie": createSessionCookie(request, admin), "Cache-Control": "no-store" } });
 }
 
 export async function DELETE(request: Request) {

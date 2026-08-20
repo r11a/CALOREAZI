@@ -1,5 +1,5 @@
 "use client";
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, jsx-a11y/no-autofocus */
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
@@ -12,6 +12,10 @@ type AppState = {
   today: { waterMl: number; meals: any[] };
   ai: any;
   aiUsage: any[];
+  history: any[];
+  measurements: any[];
+  favorites: any[];
+  activity: any[];
   adminConfigured: boolean;
 };
 const emptyOnboarding = {
@@ -34,6 +38,17 @@ const goalLabels: Record<string, string> = {
   maintain: "שמירה על המשקל",
   gain: "עלייה מבוקרת במשקל",
   healthy: "אכילה בריאה יותר",
+};
+const quickFoods: Record<string, { name: string; icon: string; portion: string; kcal: number; protein: number; carbs: number; fat: number }[]> = {
+  vegetables: [
+    { name: "עגבנייה", icon: "🍅", portion: "עגבנייה בינונית", kcal: 22, protein: 1, carbs: 5, fat: 0 }, { name: "מלפפון", icon: "🥒", portion: "מלפפון בינוני", kcal: 24, protein: 1, carbs: 5, fat: 0 }, { name: "גזר", icon: "🥕", portion: "גזר בינוני", kcal: 30, protein: 1, carbs: 7, fat: 0 }, { name: "פלפל", icon: "🫑", portion: "פלפל בינוני", kcal: 31, protein: 1, carbs: 6, fat: 0 }, { name: "ברוקולי", icon: "🥦", portion: "כוס מבושלת", kcal: 55, protein: 4, carbs: 11, fat: 1 }, { name: "סלט ירקות", icon: "🥗", portion: "קערה, ללא רוטב", kcal: 80, protein: 3, carbs: 15, fat: 1 },
+  ],
+  fruits: [
+    { name: "תפוח", icon: "🍎", portion: "תפוח בינוני", kcal: 95, protein: 1, carbs: 25, fat: 0 }, { name: "בננה", icon: "🍌", portion: "בננה בינונית", kcal: 105, protein: 1, carbs: 27, fat: 0 }, { name: "תפוז", icon: "🍊", portion: "תפוז בינוני", kcal: 62, protein: 1, carbs: 15, fat: 0 }, { name: "ענבים", icon: "🍇", portion: "כוס", kcal: 104, protein: 1, carbs: 27, fat: 0 }, { name: "תותים", icon: "🍓", portion: "כוס", kcal: 49, protein: 1, carbs: 12, fat: 0 }, { name: "אגס", icon: "🍐", portion: "אגס בינוני", kcal: 101, protein: 1, carbs: 27, fat: 0 },
+  ],
+  drinks: [
+    { name: "מים", icon: "💧", portion: "כוס 250 מ״ל", kcal: 0, protein: 0, carbs: 0, fat: 0 }, { name: "קפה שחור", icon: "☕", portion: "כוס ללא סוכר", kcal: 5, protein: 0, carbs: 1, fat: 0 }, { name: "קפה עם חלב", icon: "☕", portion: "כוס בינונית", kcal: 90, protein: 5, carbs: 9, fat: 4 }, { name: "תה", icon: "🍵", portion: "כוס ללא סוכר", kcal: 2, protein: 0, carbs: 0, fat: 0 }, { name: "משקה קל", icon: "🥤", portion: "פחית 330 מ״ל", kcal: 139, protein: 0, carbs: 35, fat: 0 }, { name: "יין", icon: "🍷", portion: "כוס 150 מ״ל", kcal: 125, protein: 0, carbs: 4, fat: 0 }, { name: "בירה", icon: "🍺", portion: "בקבוק 330 מ״ל", kcal: 142, protein: 1, carbs: 11, fat: 0 },
+  ],
 };
 
 async function api(url: string, options?: RequestInit) {
@@ -97,6 +112,11 @@ export default function Home() {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [photoPreview, setPhotoPreview] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
+  const [weightOpen, setWeightOpen] = useState(false);
+  const [weightValue, setWeightValue] = useState(0);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickCategory, setQuickCategory] = useState("");
+  const [adminHealth, setAdminHealth] = useState<any>(null);
   const photoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -138,6 +158,9 @@ export default function Home() {
     [state],
   );
   const isAdmin = state?.currentUser?.role === "admin";
+  const weightEntries = state?.measurements || [];
+  const latestWeight = weightEntries.at(-1)?.weight || profile?.weight || 0;
+  const weightChange = weightEntries.length > 1 ? Number((weightEntries.at(-1).weight - weightEntries[0].weight).toFixed(1)) : 0;
 
   async function login(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
@@ -146,8 +169,9 @@ export default function Home() {
   }
 
   async function loadAdminData() {
-    const [users, aiData] = await Promise.all([api("/api/admin/users"), api("/api/ai/settings")]);
+    const [users, aiData, health] = await Promise.all([api("/api/admin/users"), api("/api/ai/settings"), api("/api/admin/health")]);
     setAdminUsers(users); setModelCatalog(aiData.models);
+    setAdminHealth(health);
     const available = aiData.models[aiData.settings.provider] || [];
     const selected = available.find((item: any) => item.id === aiData.settings.model) || available[0];
     setAiForm((current) => ({ ...current, ...aiData.settings, ...(selected ? { model: selected.id, inputCost: selected.inputCost, outputCost: selected.outputCost } : {}), apiKey: "" }));
@@ -240,6 +264,10 @@ export default function Home() {
       setError((e as Error).message);
     }
   }
+  async function saveFavorite(mealId: string) { try { setState(await api("/api/favorites", { method: "POST", body: JSON.stringify({ mealId }) })); } catch (e) { setError((e as Error).message); } }
+  async function repeatFavorite(id: string) { try { setState(await api("/api/favorites", { method: "POST", body: JSON.stringify({ action: "repeat", id }) })); } catch (e) { setError((e as Error).message); } }
+  async function saveWeight(event: FormEvent) { event.preventDefault(); setBusy(true); try { setState(await api("/api/measurements", { method: "POST", body: JSON.stringify({ weight: weightValue }) })); setWeightOpen(false); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
+  async function selectQuickFood(item: any) { if (item.name === "מים") { await addWater(); setQuickAddOpen(false); return; } setMealForm({ name: `${item.name} · ${item.portion}`, kcal: item.kcal, protein: item.protein, carbs: item.carbs, fat: item.fat }); setPhotoPreview(""); setPhotoStatus("ערכים משוערים למנה המקובלת — אפשר לתקן כמות וערכים לפני השמירה."); setQuickAddOpen(false); setMealOpen(true); }
   async function saveAi(test = false) {
     setBusy(true);
     setAiStatus("");
@@ -523,7 +551,7 @@ export default function Home() {
               <p className="eyebrow">הארוחות שלי</p>
               <h2>מה אכלת היום</h2>
             </div>
-            <button onClick={() => setMealOpen(true)}>הוסף ארוחה</button>
+            <button onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }}>הוסף ידנית</button>
           </header>
           {state.today.meals.length === 0 ? (
             <div className="empty-state">
@@ -546,6 +574,7 @@ export default function Home() {
                     {meal.kcal}
                     <small> kcal</small>
                   </b>
+                  <button className="meal-favorite" onClick={() => saveFavorite(meal.id)} aria-label={`שמירת ${meal.name} כמועדפת`}>☆</button>
                   <button
                     className="meal-delete"
                     onClick={() => deleteMeal(meal.id)}
@@ -557,8 +586,14 @@ export default function Home() {
               ))}
             </div>
           )}
+          {state.favorites?.length > 0 && <div className="favorites-strip"><strong>ארוחות מועדפות</strong><div>{state.favorites.map((favorite) => <button key={favorite.id} onClick={() => repeatFavorite(favorite.id)}><span>＋</span>{favorite.meal.name}<small>{favorite.meal.kcal} kcal</small></button>)}</div></div>}
         </div>
         <div className="side-stack">
+          <section className="panel weight-panel">
+            <header><div><p className="eyebrow">מגמת משקל</p><h2>המשקל שלי</h2></div><strong>{latestWeight}<small> ק״ג</small></strong></header>
+            <div className="weight-summary"><span className={weightChange <= 0 ? "positive" : "attention"}>{weightEntries.length > 1 ? `${weightChange > 0 ? "+" : ""}${weightChange} ק״ג בתקופה` : "נדרשות שתי מדידות להצגת מגמה"}</span><small>יעד: {profile.targetWeight} ק״ג</small></div>
+            <button onClick={() => { setWeightValue(latestWeight); setWeightOpen(true); }}>עדכן משקל</button>
+          </section>
           <section className="panel water-panel">
             <header>
               <div>
@@ -710,6 +745,7 @@ export default function Home() {
               <button disabled>הרשאות</button>
               <button onClick={() => document.getElementById("admin-security")?.scrollIntoView({ behavior: "smooth" })}>אבטחה</button>
             </nav>
+            {adminHealth && <section className="health-grid"><article><span className="health-ok">●</span><small>Application</small><strong>תקין</strong></article><article><span className="health-ok">●</span><small>Database</small><strong>{adminHealth.meals} ארוחות</strong></article><article><span className={adminHealth.ai === "configured" ? "health-ok" : "health-warn"}>●</span><small>AI</small><strong>{adminHealth.ai === "configured" ? "מחובר" : "דורש הגדרה"}</strong></article><article><span className="health-ok">●</span><small>משתמשים</small><strong>{adminHealth.activeUsers}/{adminHealth.users} פעילים</strong></article><article><span className="health-ok">●</span><small>בקשות AI החודש</small><strong>{adminHealth.aiRequests}</strong></article><article><span className="health-ok">●</span><small>עלות AI משוערת</small><strong>${Number(adminHealth.estimatedAiCost).toFixed(4)}</strong></article></section>}
             <div className="admin-intro" id="admin-ai">
               <strong>הגדרת AI גלובלית</strong>
               <span>
@@ -809,7 +845,7 @@ export default function Home() {
             </div>
             <section className="admin-users" id="admin-users">
               <div className="admin-section-title"><div><p className="eyebrow">גישה למערכת</p><h3>משתמשים</h3></div><span>{adminUsers.length} חשבונות</span></div>
-              <div className="user-list">{adminUsers.map((user) => <article key={user.id}><div><strong>{user.name}</strong><small>{user.email}</small></div><span className={user.role === "admin" ? "admin-role" : "user-role"}>{user.role.toUpperCase()}</span></article>)}</div>
+              <div className="user-list">{adminUsers.map((user) => <article key={user.id}><div><strong>{user.name}</strong><small>{user.email} · {user.lastLogin ? `כניסה אחרונה ${new Date(user.lastLogin).toLocaleDateString("he-IL")}` : "טרם התחבר"}</small></div><span className={user.role === "admin" ? "admin-role" : "user-role"}>{user.disabled ? "מושבת" : user.role.toUpperCase()}</span>{user.role !== "admin" && <button className="user-toggle" onClick={async () => { try { await api("/api/admin/users", { method: "PATCH", body: JSON.stringify({ id: user.id, disabled: !user.disabled }) }); await loadAdminData(); } catch (e) { setAiStatus((e as Error).message); } }}>{user.disabled ? "הפעל" : "השבת"}</button>}</article>)}</div>
               <form className="new-user-form" onSubmit={createUser}><h4>יצירת משתמש חדש</h4><div className="settings-grid"><label>שם<input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} /></label><label>אימייל<input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} /></label><label className="wide">סיסמה זמנית<input type="password" minLength={8} value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} /></label></div><button className="primary" disabled={busy || !newUser.name || !newUser.email || newUser.password.length < 8}>צור משתמש</button></form>
             </section>
             {aiStatus && <p className="settings-status">{aiStatus}</p>}
@@ -828,6 +864,8 @@ export default function Home() {
           </section>
         </div>
       )}
+      {quickAddOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setQuickAddOpen(false)} /><section className="settings-modal quick-add-modal"><header><div><p className="eyebrow">הוספה מהירה</p><h2>{quickCategory ? "מה להוסיף?" : "בחר קטגוריה"}</h2></div><button onClick={() => setQuickAddOpen(false)}>×</button></header>{!quickCategory ? <div className="category-grid"><button onClick={() => setQuickCategory("vegetables")}><img src="/category-vegetables-v1.png" alt="מבחר ירקות" /><strong>ירקות</strong><small>טריים, מבושלים וסלט</small></button><button onClick={() => setQuickCategory("fruits")}><img src="/category-fruits-v1.png" alt="מבחר פירות" /><strong>פירות</strong><small>מנה נפוצה בלחיצה</small></button><button onClick={() => setQuickCategory("drinks")}><img src="/category-drinks-v1.png" alt="מבחר משקאות" /><strong>משקאות</strong><small>חמים, קלים, יין ובירה</small></button></div> : <><button className="category-back" onClick={() => setQuickCategory("")}>→ חזרה לקטגוריות</button><div className="quick-food-grid">{quickFoods[quickCategory].map((item) => <button key={`${item.name}-${item.portion}`} onClick={() => selectQuickFood(item)}><span>{item.icon}</span><strong>{item.name}</strong><small>{item.portion}</small><b>{item.kcal} kcal</b></button>)}</div></>}</section></div>}
+      {weightOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setWeightOpen(false)} /><form className="settings-modal compact-modal" onSubmit={saveWeight}><header><div><p className="eyebrow">מגמה ולא תנודה</p><h2>עדכון משקל</h2></div><button type="button" onClick={() => setWeightOpen(false)}>×</button></header><p className="modal-help">מדידה עקבית באותה שעה חשובה יותר משינוי של יום בודד.</p><div className="field-stack"><label>משקל נוכחי בק״ג<input type="number" min="25" max="350" step="0.1" value={weightValue || ""} onChange={(e) => setWeightValue(Number(e.target.value))} autoFocus /></label></div><footer><button type="button" onClick={() => setWeightOpen(false)}>ביטול</button><button className="primary" disabled={busy || !weightValue}>שמור מדידה</button></footer></form></div>}
       {mealOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setMealOpen(false)} />

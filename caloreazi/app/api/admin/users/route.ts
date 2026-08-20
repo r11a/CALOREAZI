@@ -23,3 +23,12 @@ export async function POST(request: Request) {
   await updateState((latest) => { latest.users.push(user); latest.userData[user.id] = { profile: null, today: { date: "", waterMl: 0, meals: [] } }; return latest; });
   return Response.json({ id: user.id, name: user.name, email: user.email, username: user.username, role: user.role, createdAt: user.createdAt }, { status: 201 });
 }
+
+export async function PATCH(request: Request) {
+  const state = await readState(); const denied = requireAdmin(state, request); if (denied) return denied;
+  const body = await request.json(); const target = state.users.find((item) => item.id === body.id);
+  if (!target) return Response.json({ error: "המשתמש לא נמצא" }, { status: 404 });
+  if (target.role === "admin" && body.disabled === true) return Response.json({ error: "לא ניתן להשבית את חשבון המנהל הראשי" }, { status: 400 });
+  await updateState(async (latest) => { const user = latest.users.find((item) => item.id === body.id); if (typeof body.disabled === "boolean") { user.disabled = body.disabled; user.sessionVersion = Number(user.sessionVersion || 1) + 1; } if (String(body.password || "").length >= 10) { user.password = await hashPassword(String(body.password)); user.sessionVersion = Number(user.sessionVersion || 1) + 1; } return latest; });
+  return Response.json({ ok: true });
+}
