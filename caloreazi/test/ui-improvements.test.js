@@ -4,6 +4,7 @@ import test from "node:test";
 
 const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+const expansionCss = await readFile(new URL("../app/expansion.css", import.meta.url), "utf8");
 
 test("health profile is editable and explicitly bounded as non-medical advice", () => {
   for (const field of ["diabetesStatus", "hypertension", "foodAllergies", "relevantMedications", "pregnancyStatus"])
@@ -24,4 +25,9 @@ test("food library filters and mobile accessibility rules are present", () => {
   assert.match(page, /libraryVisibility/);
   assert.match(css, /focus-visible/);
   assert.match(css, /prefers-reduced-motion/);
+});
+
+test("dark streak card and mobile meal timeline have explicit responsive layouts", () => {
+  assert.match(expansionCss, /\.theme-dark \.streak/);
+  assert.match(expansionCss, /\.meal-list article\{[^}]*display:grid!important;grid-template-columns:48px minmax\(0,1fr\) auto/);
 });
