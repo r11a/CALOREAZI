@@ -11,9 +11,10 @@ test("health profile is editable and explicitly bounded as non-medical advice", 
   assert.match(page, /אינו תחליף לייעוץ רפואי/);
 });
 
-test("meal editing, quantity shortcuts and deletion undo stay available", () => {
+test("meal rows expose one clear edit action while deletion undo stays available", () => {
   assert.match(page, /editingMealId/);
-  assert.match(page, /scaleMeal/);
+  assert.doesNotMatch(page, /className="meal-quantity"/);
+  assert.doesNotMatch(page, /className="meal-favorite"/);
   assert.match(page, /undoDeleteMeal/);
 });
 

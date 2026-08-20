@@ -1,4 +1,4 @@
-# CALOREAZI 1.3.0
+# CALOREAZI 1.3.1
 
 Private Home Assistant nutrition coach with persistent onboarding, daily tracking, global Admin-managed AI, and AI meal-photo analysis.
 

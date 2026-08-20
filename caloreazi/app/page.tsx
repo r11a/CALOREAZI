@@ -373,6 +373,23 @@ function goalStatus(value: number, target: number) {
   return { className: "goal-over", label: "מעל היעד" };
 }
 
+function AppIcon({ name }: { name: "camera" | "image" | "plus" | "coach" | "edit" | "water" | "activity" | "home" | "history" | "settings" | "lock" }) {
+  const paths = {
+    camera: <><path d="M14.5 5 13 3h-2L9.5 5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><circle cx="12" cy="11.5" r="3.5"/></>,
+    image: <><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-4-4L7 20"/></>,
+    plus: <><path d="M12 5v14M5 12h14"/></>,
+    coach: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4Z"/><path d="m18.5 15 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z"/></>,
+    edit: <><path d="M4 20h4l11-11-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></>,
+    water: <path d="M12 3s5 5.7 5 10a5 5 0 0 1-10 0c0-4.3 5-10 5-10Z"/>,
+    activity: <><path d="M4 12h3l2-5 4 10 2-5h5"/></>,
+    home: <><path d="m4 10 8-7 8 7"/><path d="M6 9v11h12V9M10 20v-6h4v6"/></>,
+    history: <><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2M5 5 3-2"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 15 6l-.3-2.6h-4L10.5 6A7 7 0 0 0 9 7L6.6 6l-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A7 7 0 0 0 10.5 18l.2 2.6h4L15 18a7 7 0 0 0 1.5-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/></>,
+    lock: <><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
+  };
+  return <svg className="app-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
 async function api(url: string, options?: RequestInit) {
   const target = url.startsWith("/") ? url.slice(1) : url;
   const multipart = options?.body instanceof FormData;
@@ -1068,18 +1085,6 @@ export default function Home() {
       setError((e as Error).message);
     }
   }
-  async function scaleMeal(id: string, scale: number) {
-    try {
-      setState(
-        await api("/api/meals", {
-          method: "PATCH",
-          body: JSON.stringify({ id, scale }),
-        }),
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
   function editMeal(meal: any) {
     const date = new Date(meal.time);
     date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -1100,18 +1105,6 @@ export default function Home() {
     setManualAiMode(false);
     setCatalogOnly(false);
     setMealOpen(true);
-  }
-  async function saveFavorite(mealId: string) {
-    try {
-      setState(
-        await api("/api/favorites", {
-          method: "POST",
-          body: JSON.stringify({ mealId }),
-        }),
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    }
   }
   async function repeatFavorite(id: string) {
     try {
@@ -1931,7 +1924,7 @@ export default function Home() {
           onClick={() => setCameraChoiceOpen(true)}
           disabled={busy}
         >
-          <span className="camera-icon">📷</span>
+          <span className="camera-icon"><AppIcon name="camera" /></span>
           <span>
             <strong>צילום ארוחה</strong>
             <small>צלם ארוחה וקבל ניתוח AI</small>
@@ -1960,23 +1953,11 @@ export default function Home() {
             setQuickAddOpen(true);
           }}
         >
-          <span className="manual-icon">＋</span>
+          <span className="manual-icon"><AppIcon name="plus" /></span>
           <span>
             <strong>הוספה ידנית</strong>
             <small>פרי, ירק, משקה או ארוחה</small>
           </span>
-        </button>
-        <button className="coach-action" onClick={() => setCoachOpen(true)}>
-          <span className="coach-spark">✦</span>
-          <span>
-            <strong>שאל את המאמן</strong>
-            <small>
-              {state.ai.keyConfigured
-                ? "המלצות אישיות לפי היום שלך"
-                : "המאמן עדיין לא זמין"}
-            </small>
-          </span>
-          <b>←</b>
         </button>
       </section>
       {error && (
@@ -2049,36 +2030,12 @@ export default function Home() {
                       {meal.kcal}
                       <small> kcal</small>
                     </b>
-                    <div
-                      className="meal-quantity"
-                      aria-label="שינוי מהיר של הכמות"
-                    >
-                      <button onClick={() => scaleMeal(meal.id, 0.5)}>½</button>
-                      <button onClick={() => scaleMeal(meal.id, 1.5)}>
-                        +50%
-                      </button>
-                      <button onClick={() => scaleMeal(meal.id, 2)}>×2</button>
-                    </div>
                     <button
                       className="meal-edit"
                       onClick={() => editMeal(meal)}
                       aria-label={`עריכת ${meal.name}`}
                     >
-                      ✎
-                    </button>
-                    <button
-                      className="meal-favorite"
-                      onClick={() => saveFavorite(meal.id)}
-                      aria-label={`שמירת ${meal.name} כמועדפת`}
-                    >
-                      ☆
-                    </button>
-                    <button
-                      className="meal-delete"
-                      onClick={() => deleteMeal(meal.id)}
-                      aria-label={`מחיקת ${meal.name}`}
-                    >
-                      ×
+                      <AppIcon name="edit" /> עריכה
                     </button>
                   </article>
                 ))}
@@ -2122,17 +2079,17 @@ export default function Home() {
           <section className="panel insights-panel">
             <header>
               <div>
-                <p className="eyebrow">לפי המצב היומי</p>
-                <h2>המלצות להמשך היום</h2>
+                <p className="eyebrow">המלצת המאמן</p>
+                <h2>{dailyInsights[0]?.title || "היום שלך"}</h2>
               </div>
               <button className="insights-more" onClick={openInsights}>
                 מגמות
               </button>
             </header>
             <div className="daily-insights">
-              {dailyInsights.map((item) => (
+              {dailyInsights.slice(0, 1).map((item) => (
                 <article key={item.title}>
-                  <i>{item.icon}</i>
+                  <i><AppIcon name={item.title.includes("שתייה") ? "water" : "coach"} /></i>
                   <div>
                     <strong>{item.title}</strong>
                     <small>{item.text}</small>
@@ -2141,8 +2098,8 @@ export default function Home() {
               ))}
             </div>
             <footer className="tracking-actions">
-              <button onClick={() => setActivityOpen(true)}>＋ פעילות</button>
-              <button onClick={openInsights}>שבוע וחודש</button>
+              <button onClick={() => setActivityOpen(true)}><AppIcon name="activity" /> פעילות</button>
+              <button onClick={() => setCoachOpen(true)}><AppIcon name="coach" /> שאל את המאמן</button>
             </footer>
           </section>
           <section className="panel water-panel">
@@ -2172,59 +2129,30 @@ export default function Home() {
               {state.today.waterMl.toLocaleString()} מתוך{" "}
               {profile.waterMl.toLocaleString()} מ״ל
             </p>
-            <button onClick={addWater}>＋ כוס 250ml</button>
-          </section>
-          <section className="insight-card coach-insight">
-            <span>✦</span>
-            <div>
-              <p className="eyebrow">תובנה מהמאמן</p>
-              <strong>
-                {state.ai.keyConfigured
-                  ? dailyInsights[0].title
-                  : isAdmin
-                    ? "חבר ספק AI כדי להתחיל"
-                    : "המאמן עדיין לא הוגדר"}
-              </strong>
-              <p>
-                {state.ai.keyConfigured
-                  ? dailyInsights[0].text
-                  : isAdmin
-                    ? "הגדר מפתח גלובלי במרכז הניהול."
-                    : "רק מנהל המערכת יכול להגדיר את שירות ה־AI."}
-              </p>
-            </div>
-            {(state.ai.keyConfigured || isAdmin) && (
-              <button
-                onClick={() =>
-                  state.ai.keyConfigured ? setCoachOpen(true) : openAdmin()
-                }
-              >
-                {state.ai.keyConfigured ? "פתח שיחה" : "מרכז ניהול"}
-              </button>
-            )}
+            <button onClick={addWater}><AppIcon name="water" /> כוס 250ml</button>
           </section>
         </div>
       </section>
       <nav className="bottom-nav">
         <button className="active">
-          <span>⌂</span>היום
+          <span><AppIcon name="home" /></span>היום
         </button>
         <button onClick={() => setHistoryOpen(true)}>
-          <span>▦</span>היסטוריה
+          <span><AppIcon name="history" /></span>היסטוריה
         </button>
         <button
           className="nav-camera"
           onClick={() => photoInput.current?.click()}
           aria-label="צילום ארוחה"
         >
-          📷
+          <AppIcon name="camera" />
         </button>
         <button onClick={openAdmin}>
-          <span>{isAdmin ? "⚙" : "🔒"}</span>
+          <span><AppIcon name={isAdmin ? "settings" : "lock"} /></span>
           {isAdmin ? "ניהול" : "Admin"}
         </button>
         <button onClick={() => setCoachOpen(true)}>
-          <span>✦</span>מאמן
+          <span><AppIcon name="coach" /></span>מאמן
         </button>
       </nav>
       {coachOpen && (
@@ -2232,7 +2160,7 @@ export default function Home() {
           <button className="backdrop" onClick={() => setCoachOpen(false)} />
           <aside className="coach-sheet">
             <header>
-              <div className="coach-avatar">✦</div>
+              <div className="coach-avatar"><AppIcon name="coach" /></div>
               <div>
                 <strong>המאמן של CALOREAZI</strong>
                 <small>
@@ -4026,7 +3954,7 @@ export default function Home() {
                   photoInput.current?.click();
                 }}
               >
-                <span>📷</span>
+                <span><AppIcon name="camera" /></span>
                 <strong>צלם עכשיו</strong>
                 <small>פתח את המצלמה האחורית</small>
               </button>
@@ -4036,7 +3964,7 @@ export default function Home() {
                   uploadInput.current?.click();
                 }}
               >
-                <span>▧</span>
+                <span><AppIcon name="image" /></span>
                 <strong>בחר מהגלריה</strong>
                 <small>תמונה קיימת בטלפון או במחשב</small>
               </button>
@@ -4555,6 +4483,7 @@ export default function Home() {
               )}
             </section>
             <footer>
+              {editingMealId && <button className="danger" type="button" onClick={async () => { await deleteMeal(editingMealId); setEditingMealId(""); setMealOpen(false); }}>מחק ארוחה</button>}
               <button type="button" onClick={() => setMealOpen(false)}>
                 ביטול
               </button>
