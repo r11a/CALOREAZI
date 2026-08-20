@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Replaced the nested SVG logo with the approved self-contained transparent PNG.
+- Verified the logo inside the full production interface before release.
+
 ## 0.1.2
 
 - Fixed the approved logo asset resolving outside the Home Assistant Ingress path.

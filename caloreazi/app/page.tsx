@@ -16,7 +16,7 @@ export default function Home() {
   return (
     <main className={dark ? "app-shell theme-dark" : "app-shell"} dir="rtl">
       <header className="topbar">
-        <div className="logo"><img src="/caloreazi-approved-or-medium.svg" alt="CALOREAZI" /></div>
+        <div className="logo"><img src="/caloreazi-wordmark-transparent.png" alt="CALOREAZI" /></div>
         <div className="top-actions">
           <button className="theme-toggle" onClick={() => setDark((value) => !value)} aria-label="החלפת ערכת צבעים">{dark ? "☀" : "◐"}</button>
           <button className="avatar" aria-label="פתיחת פרופיל">ר</button>
