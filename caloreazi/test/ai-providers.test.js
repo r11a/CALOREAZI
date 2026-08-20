@@ -3,6 +3,7 @@ import test from "node:test";
 import { generateOpenAiCoachReply } from "../server/ai/openai.js";
 import { generateGeminiCoachReply } from "../server/ai/gemini.js";
 import { aiRole } from "../server/ai/models.js";
+import { generateFoodImage } from "../server/ai/images.js";
 
 test("OpenAI adapter returns text and normalized token usage", async () => {
   const original = globalThis.fetch;
@@ -39,4 +40,15 @@ test("AI roles select separate coach, vision and image models", () => {
   assert.equal(aiRole(ai, "coach").model, "gpt-5.6-sol");
   assert.equal(aiRole(ai, "vision").model, "gpt-5.6-luna");
   assert.equal(aiRole(ai, "image").model, "gpt-image-1-mini");
+});
+
+test("Gemini image adapter uses generateContent and reads inline image data", async () => {
+  const original = globalThis.fetch; let request;
+  globalThis.fetch = async (url, options) => { request = { url, body: JSON.parse(options.body) }; return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "YQ==" } }] } }] })); };
+  try {
+    const image = await generateFoodImage({ provider: "gemini", model: "gemini-3.1-flash-image", apiKey: "test", name: "mango" });
+    assert.match(request.url, /gemini-3\.1-flash-image:generateContent$/);
+    assert.deepEqual(request.body.generationConfig.responseModalities, ["IMAGE"]);
+    assert.equal(image, "data:image/png;base64,YQ==");
+  } finally { globalThis.fetch = original; }
 });
