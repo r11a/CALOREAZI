@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushOfflineCaptures, offlineCaptureCount, queueOfflineCapture } from "./offline-queue";
 
 type AppState = {
   authenticated?: boolean;
@@ -493,6 +494,9 @@ export default function Home() {
   });
   const [photoPreview, setPhotoPreview] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
+  const [photoQuality, setPhotoQuality] = useState<{ level: "good" | "warning"; message: string } | null>(null);
+  const [mealConfidence, setMealConfidence] = useState<"low" | "medium" | "high">("low");
+  const [mealResult, setMealResult] = useState<any>(null);
   const [weightValue, setWeightValue] = useState(0);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickCategory, setQuickCategory] = useState("");
@@ -511,7 +515,10 @@ export default function Home() {
     backupRetention: 14,
   });
   const [storageStatus, setStorageStatus] = useState<any>(null);
+  const [storagePendingMedia, setStoragePendingMedia] = useState(0);
+  const [databaseStatus, setDatabaseStatus] = useState<any>(null);
   const [online, setOnline] = useState(true);
+  const [offlineQueueCount, setOfflineQueueCount] = useState(0);
   const [waterOpen, setWaterOpen] = useState(false);
   const [waterValue, setWaterValue] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -604,11 +611,12 @@ export default function Home() {
   }, []);
   useEffect(() => {
     setOnline(navigator.onLine);
-    const update = () => setOnline(navigator.onLine);
+    const update = () => { setOnline(navigator.onLine); offlineCaptureCount().then(setOfflineQueueCount).catch(() => undefined); if (navigator.onLine) flushOfflineCaptures(async (capture) => { await api("/api/ai/analyze-meal", { method: "POST", headers: { "Idempotency-Key": capture.clientId }, body: JSON.stringify(capture) }); }).then(() => offlineCaptureCount().then(setOfflineQueueCount)).catch(() => undefined); };
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
     if ("serviceWorker" in navigator)
       navigator.serviceWorker.register("sw.js").catch(() => undefined);
+    update();
     return () => {
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
@@ -755,13 +763,14 @@ export default function Home() {
   }
 
   async function loadAdminData() {
-    const [users, aiData, health, backups, audit, storage] = await Promise.all([
+    const [users, aiData, health, backups, audit, storage, database] = await Promise.all([
       api("/api/admin/users"),
       api("/api/ai/settings"),
       api("/api/admin/health"),
       api("/api/admin/backups"),
       api("/api/admin/audit"),
       api("/api/admin/storage"),
+      api("/api/admin/database"),
     ]);
     setAdminUsers(users);
     setModelCatalog(aiData.models);
@@ -771,6 +780,8 @@ export default function Home() {
     setAdminAudit(audit.items || []);
     setStorageForm(storage.settings);
     setStorageStatus(storage.status);
+    setStoragePendingMedia(storage.pendingMedia || 0);
+    setDatabaseStatus(database);
     const available = aiData.models[aiData.settings.provider] || [];
     const selected =
       available.find((item: any) => item.id === aiData.settings.model) ||
@@ -847,6 +858,27 @@ export default function Home() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function syncStorage() {
+    setBusy(true);
+    try {
+      const result = await api("/api/admin/storage", { method: "POST" });
+      setStoragePendingMedia(Math.max(0, storagePendingMedia - Number(result.synced || 0)));
+      setAiStatus(`${result.synced || 0} קובצי מדיה סונכרנו ליעד הקבוע ✓`);
+      await loadAdminData();
+    } catch (e) { setAiStatus((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  async function maintainDatabase(action: "integrity" | "optimize") {
+    setBusy(true);
+    try {
+      await api("/api/admin/database", { method: "POST", body: JSON.stringify({ action }) });
+      setDatabaseStatus(await api("/api/admin/database"));
+      setAiStatus(action === "integrity" ? "בדיקת שלמות מסד הנתונים הסתיימה ✓" : "מסד הנתונים נותח ומוטב ✓");
+    } catch (e) { setAiStatus((e as Error).message); }
+    finally { setBusy(false); }
   }
 
   async function openAdmin() {
@@ -1031,6 +1063,7 @@ export default function Home() {
         transcript: mealTranscript,
         image: photoPreview,
         analysisJobId,
+        confidence: mealConfidence === "high" ? .9 : mealConfidence === "medium" ? .7 : .45,
       };
       let latest = state;
       if (!catalogOnly)
@@ -1054,6 +1087,7 @@ export default function Home() {
         latest = await api("/api/state");
       }
       setState(latest);
+      if (!catalogOnly) setMealResult({ name: finalMeal.name, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId) });
       setMealOpen(false);
       setEditingMealId("");
       setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 });
@@ -1064,6 +1098,8 @@ export default function Home() {
       setAnalysisJobId("");
       setPhotoPreview("");
       setPhotoStatus("");
+      setPhotoQuality(null);
+      setMealConfidence("low");
       setSaveToLibrary(false);
       setFoodVisibility("private");
       setGenerateFoodArtwork(false);
@@ -1521,8 +1557,16 @@ export default function Home() {
     setBusy(true);
     setPhotoStatus("מנתח את הארוחה בעזרת AI…");
     try {
+      const originalUrl = URL.createObjectURL(file);
+      const original = new Image(); original.src = originalUrl; await original.decode();
+      const shortestSide = Math.min(original.width, original.height); URL.revokeObjectURL(originalUrl);
+      const quality = shortestSide < 640 || file.size < 45_000
+        ? { level: "warning" as const, message: "איכות הצילום נמוכה יחסית. מומלץ לצלם שוב מקרוב ובתאורה טובה לקבלת זיהוי מדויק יותר." }
+        : { level: "good" as const, message: "איכות ורזולוציית הצילום מתאימות לניתוח." };
+      setPhotoQuality(quality);
       const imageDataUrl = await prepareImage(file);
       const clientId = crypto.randomUUID();
+      if (!navigator.onLine) { await queueOfflineCapture({ imageDataUrl, clientId, createdAt: new Date().toISOString() }); setOfflineQueueCount(await offlineCaptureCount()); setPhotoPreview(imageDataUrl); setMealSource("photo"); setPhotoStatus("הצילום נשמר במכשיר ויישלח אוטומטית לניתוח כשהחיבור יחזור."); setMealOpen(true); return; }
       setPhotoPreview(imageDataUrl);
       setMealSource("photo");
       setMealItems([]);
@@ -1556,6 +1600,7 @@ export default function Home() {
       setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 });
       setMealItems(result.items);
       setAiOriginalItems(structuredClone(result.items));
+      setMealConfidence(result.confidence || "low");
       setPhotoStatus(
         `זוהו ${result.items.length} פריטים (${result.confidence === "high" ? "ביטחון גבוה" : result.confidence === "medium" ? "ביטחון בינוני" : "ביטחון נמוך"}). בדוק משקל וכמות; החישוב יתבצע רק לאחר אישור. ${result.explanation || ""}`,
       );
@@ -1986,6 +2031,8 @@ export default function Home() {
           {error} ×
         </button>
       )}
+      {offlineQueueCount > 0 && <aside className="offline-queue-status" role="status">{offlineQueueCount} {offlineQueueCount === 1 ? "צילום ממתין" : "צילומים ממתינים"} לחיבור ולניתוח</aside>}
+      {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הארוחה עודכנה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name} · {mealResult.kcal} קלוריות</span><small>{mealResult.protein}g חלבון · {mealResult.carbs}g פחמימות · {mealResult.fat}g שומן</small></div><button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
       {undoMeal && (
         <aside className="undo-toast" role="status">
           <span>“{undoMeal.name}” נמחקה</span>
@@ -2322,6 +2369,12 @@ export default function Home() {
                 onClick={() => setAdminTab("storage")}
               >
                 אחסון
+              </button>
+              <button
+                className={adminTab === "database" ? "active" : ""}
+                onClick={() => setAdminTab("database")}
+              >
+                מסד נתונים
               </button>
               <button
                 className={adminTab === "backups" ? "active" : ""}
@@ -2823,6 +2876,23 @@ export default function Home() {
                   </span>
                 </div>
               )}
+              <div className="storage-pending">
+                <span><strong>{storagePendingMedia}</strong> קובצי מדיה ממתינים לסנכרון</span>
+                <button type="button" onClick={syncStorage} disabled={busy || !storagePendingMedia}>סנכרן עכשיו</button>
+              </div>
+            </section>
+            <section className="admin-users admin-operations" id="admin-database">
+              <div className="admin-section-title">
+                <div><p className="eyebrow">PostgreSQL</p><h3>מסד נתונים</h3></div>
+                <div className="database-actions">
+                  <button onClick={() => maintainDatabase("integrity")} disabled={busy || !databaseStatus?.configured}>בדיקת שלמות</button>
+                  <button className="primary" onClick={() => maintainDatabase("optimize")} disabled={busy || !databaseStatus?.configured}>בצע אופטימיזציה</button>
+                </div>
+              </div>
+              {!databaseStatus?.configured ? <p className="modal-help">מסד PostgreSQL אינו מוגדר בסביבת הפיתוח הנוכחית.</p> : databaseStatus.status === "error" ? <p className="form-error">מסד הנתונים מוגדר אך אינו זמין כרגע: {databaseStatus.error}</p> : <>
+                <div className="database-summary"><article><small>נפח כולל</small><strong>{(Number(databaseStatus.sizeBytes || 0) / 1024 / 1024).toFixed(1)} MB</strong></article><article><small>רשומות פעילות</small><strong>{Number(databaseStatus.records || 0).toLocaleString("he-IL")}</strong></article><article><small>טבלאות</small><strong>{databaseStatus.tables?.length || 0}</strong></article></div>
+                <div className="database-tables">{(databaseStatus.tables || []).map((table: any) => <article key={table.name}><strong>{table.name}</strong><span>{Number(table.rows || 0).toLocaleString("he-IL")} רשומות</span><small>{(Number(table.sizeBytes || 0) / 1024).toFixed(0)} KB · {Number(table.deadRows || 0)} רשומות מתות</small></article>)}</div>
+              </>}
             </section>
             <section
               className="admin-users admin-operations"
@@ -4248,6 +4318,7 @@ export default function Home() {
               {photoStatus && (
                 <p className="photo-status wide">{photoStatus}</p>
               )}
+              {photoQuality && <p className={`photo-quality ${photoQuality.level} wide`}><strong>{photoQuality.level === "good" ? "צילום תקין" : "כדאי לשפר את הצילום"}</strong><span>{photoQuality.message}</span></p>}
               {mealSource === "photo" && <div className="photo-guide wide"><strong>בדיקת צילום</strong><span>ודא שכל הצלחת מוארת ונמצאת בפריים, שאין מזון מוסתר ושניתן להבין את גודל המנה.</span><small>בביטחון נמוך חובה לבדוק את שם הפריט, המשקל והכמות לפני השמירה.</small></div>}
               <label className="wide">
                 שם הארוחה

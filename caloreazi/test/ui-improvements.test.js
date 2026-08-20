@@ -38,3 +38,19 @@ test("admin exposes runtime version, AI fallbacks and backup policy", () => {
   assert.match(page, /backupType/);
   assert.match(page, /30_000/);
 });
+
+test("admin exposes database diagnostics and recoverable storage synchronization", () => {
+  assert.match(page, /admin-database/);
+  assert.match(page, /maintainDatabase/);
+  assert.match(page, /storagePendingMedia/);
+  assert.match(page, /syncStorage/);
+  assert.match(expansionCss, /admin-tab-database/);
+});
+
+test("photo capture communicates quality, confidence, offline state and save result", () => {
+  assert.match(page, /photoQuality/);
+  assert.match(page, /mealConfidence/);
+  assert.match(page, /offlineQueueCount/);
+  assert.match(page, /meal-result-toast/);
+  assert.match(css, /photo-quality/);
+});

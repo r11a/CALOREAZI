@@ -33,11 +33,17 @@ export async function storageCapacity(target) { const filesystem = await statfs(
 
 export async function saveMediaDataUrl(state, dataUrl, id) {
   const match = String(dataUrl || "").match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/); if (!match) return null;
-  const target = await probeStorage(state, "gallery"); let file = `${id}.webp`; let contentType = "image/webp"; const source = Buffer.from(match[2], "base64"); let buffer = source;
+  let target; let pendingDestination = null; try { target = await probeStorage(state, "gallery"); } catch (error) { const desired = resolveStorageDir(state, "gallery"); if (desired.destination === "internal") throw error; pendingDestination = { destination: desired.destination, relativePath: desired.relativePath }; target = await probeStorage(state, "gallery", { ...storageSettings(state), galleryDestination: "internal", galleryRelativePath: "gallery-pending" }); } let file = `${id}.webp`; let contentType = "image/webp"; const source = Buffer.from(match[2], "base64"); let buffer = source;
   try { const sharp = (await import("sharp")).default; buffer = await sharp(source).resize({ width: 640, height: 640, fit: "inside", withoutEnlargement: true }).webp({ quality: 80, alphaQuality: 90 }).toBuffer(); }
   catch { file = `${id}.image`; contentType = match[1]; }
   await writeFile(path.join(target.resolved, file), buffer, { mode: 0o600 });
-  return { file, contentType, destination: target.destination, relativePath: target.relativePath, size: buffer.length, sha256: createHash("sha256").update(buffer).digest("hex") };
+  return { file, contentType, destination: target.destination, relativePath: target.relativePath, size: buffer.length, sha256: createHash("sha256").update(buffer).digest("hex"), ...(pendingDestination ? { pendingDestination, pendingSince: new Date().toISOString() } : {}) };
+}
+
+export async function syncPendingMedia(state) {
+  let synced = 0; const media = Object.values(state.userData || {}).flatMap((data) => [...(data.history || []), data.today].flatMap((day) => day?.meals || []).map((meal) => meal.media).filter((item) => item?.pendingDestination));
+  for (const item of media) { const source = resolveStorageDir(state, "gallery", { ...storageSettings(state), galleryDestination: item.destination, galleryRelativePath: item.relativePath }); const destination = resolveStorageDir(state, "gallery", { ...storageSettings(state), galleryDestination: item.pendingDestination.destination, galleryRelativePath: item.pendingDestination.relativePath }); await mkdir(destination.resolved, { recursive: true }); const name = path.basename(item.file); await writeFile(path.join(destination.resolved, name), await readFile(path.join(source.resolved, name)), { mode: 0o600 }); await unlink(path.join(source.resolved, name)); item.destination = item.pendingDestination.destination; item.relativePath = item.pendingDestination.relativePath; delete item.pendingDestination; delete item.pendingSince; synced += 1; }
+  return synced;
 }
 
 export async function readMedia(state, media) { const target = resolveStorageDir(state, "gallery", { ...storageSettings(state), galleryDestination: media.destination, galleryRelativePath: media.relativePath }); return readFile(path.join(target.resolved, path.basename(media.file))); }

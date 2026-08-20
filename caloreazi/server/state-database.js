@@ -122,5 +122,18 @@ export async function databaseHealth() {
   catch (error) { return { status: "error", configured: true, error: error instanceof Error ? error.message : "database unavailable" }; }
 }
 
+export async function databaseDiagnostics() {
+  if (!databaseStateEnabled()) return { status: "unconfigured", configured: false, sizeBytes: 0, records: 0, tables: [] };
+  try { const encoded = await psql(["-c", `SELECT encode(convert_to(json_build_object('status','ok','configured',true,'sizeBytes',pg_database_size(current_database()),'records',(SELECT COALESCE(SUM(n_live_tup),0)::bigint FROM pg_stat_user_tables),'tables',(SELECT json_agg(json_build_object('name',relname,'rows',n_live_tup,'deadRows',n_dead_tup,'sizeBytes',pg_total_relation_size(relid)) ORDER BY pg_total_relation_size(relid) DESC) FROM pg_stat_user_tables))::text,'UTF8'),'base64')`]); return JSON.parse(Buffer.from(encoded, "base64").toString("utf8")); }
+  catch (error) { return { status: "error", configured: true, sizeBytes: 0, records: 0, tables: [], error: error instanceof Error ? error.message : "database unavailable" }; }
+}
+
+export async function maintainDatabase(action) {
+  if (!databaseStateEnabled()) throw new Error("Database is not configured");
+  if (action === "integrity") return { ok: true, result: await psql(["-c", "SELECT CASE WHEN COUNT(*)=0 THEN 'ok' ELSE 'orphaned meals' END FROM meals m LEFT JOIN users u ON u.id=m.user_id WHERE u.id IS NULL"]) };
+  if (action === "optimize") { await psql(["-c", "VACUUM (ANALYZE)"]); return { ok: true, result: "vacuum analyze completed" }; }
+  throw new Error("Unsupported maintenance action");
+}
+
 export async function exportDatabase(file) { await execFileAsync("pg_dump", [process.env.CALOREAZI_DATABASE_URL, "--format=custom", "--no-owner", "--no-privileges", "--file", file], { windowsHide: true }); }
 export async function restoreDatabase(file) { await execFileAsync("pg_restore", ["--clean", "--if-exists", "--no-owner", "--no-privileges", "--dbname", process.env.CALOREAZI_DATABASE_URL, file], { windowsHide: true }); }
