@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- Added password-based login and signed sessions for every CALOREAZI account.
+- Added a protected Admin Center with global AI/token configuration and user creation.
+- Added isolated profile, onboarding, meal, water, and AI usage data per user.
+- Added automatic migration of the existing owner and nutrition data into the Admin account.
+- Added transparent Mifflin–St Jeor calorie targets with BMI, maintenance calories, goal adjustment, expected pace, and safety floors.
+- Updated the default Gemini model for new configurations to `gemini-3.6-flash`.
+- Allowed non-admin Home Assistant users to open CALOREAZI and authenticate with their own account.
+
 ## 0.2.1
 
 - Fixed client API requests so they retain the Home Assistant Ingress base path.

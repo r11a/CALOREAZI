@@ -20,12 +20,14 @@ API keys are encrypted at rest with AES-256-GCM. The key and encryption secret r
 ## Current product scope
 
 - Progressive owner onboarding and personalized starting targets.
+- Password-based user accounts, signed sessions, isolated nutrition data, and a protected Admin Center.
+- Closed registration: administrators create additional user accounts and temporary passwords.
 - Persistent daily water and manual meal/macronutrient tracking.
 - Context-aware AI Coach using the owner profile and current day.
 - OpenAI and Gemini adapters, connection testing, token logging, estimated costs, soft warnings, and hard monthly limits.
 - Responsive Hebrew light and granite-dark interfaces.
 
-Camera meal analysis, full authentication for standalone LAN access, multiple accounts, history, and backup administration are not yet complete. Home Assistant Ingress is the recommended access path. Standalone LAN access is also enabled by default on port `8686` for testing.
+Camera meal analysis, password reset, history, and backup administration are not yet complete. Home Assistant Ingress is the recommended access path. Standalone LAN access is also enabled by default on port `8686` for testing.
 
 ## License
 
