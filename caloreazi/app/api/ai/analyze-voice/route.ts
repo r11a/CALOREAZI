@@ -4,6 +4,7 @@ import { generateGeminiCoachReply } from "@/server/ai/gemini.js";
 import { generateOpenAiCoachReply } from "@/server/ai/openai.js";
 import { transcribeMealAudio } from "@/server/ai/transcribe.js";
 import { estimateCost, evaluateBudget } from "@/server/ai/usage.js";
+import { aiErrorStatus } from "@/server/ai/http.js";
 import { decryptSecret, readState, updateState } from "@/server/store.js";
 export const runtime = "nodejs";
 
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
   try {
     const apiKey = await decryptSecret(state.ai.encryptedKey);
     let transcript = browserTranscript;
-    try { transcript = await transcribeMealAudio({ provider: state.ai.provider, apiKey, model: state.ai.model, audioDataUrl: String(audioDataUrl) }) || transcript; }
+    try { if (!transcript) transcript = await transcribeMealAudio({ provider: state.ai.provider, apiKey, model: state.ai.model, audioDataUrl: String(audioDataUrl) }) || transcript; }
     catch (error) { if (!transcript) throw error; }
     if (!transcript) throw new Error("לא נשמע תיאור ברור בהקלטה");
     const call = state.ai.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply;
@@ -38,5 +39,5 @@ export async function POST(request: Request) {
     const analysis = parseItems(result.text); const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: state.ai.inputCost, outputCostPerMillion: state.ai.outputCost });
     await updateState((latest) => { latest.aiUsage.push({ id: crypto.randomUUID(), month, at: new Date().toISOString(), userId: session.userId, feature: "meal_voice", provider: latest.ai.provider, model: latest.ai.model, ...result.usage, cost }); return latest; });
     return Response.json({ transcript, ...analysis, usage: { ...result.usage, estimatedCost: cost } });
-  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "ניתוח ההקלטה נכשל" }, { status: 502 }); }
+  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "ניתוח ההקלטה נכשל" }, { status: aiErrorStatus(error) }); }
 }

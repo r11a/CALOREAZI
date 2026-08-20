@@ -2,6 +2,7 @@ import { requireUser } from "@/server/auth.js";
 import { generateGeminiCoachReply } from "@/server/ai/gemini.js";
 import { generateFoodImage } from "@/server/ai/images.js";
 import { generateOpenAiCoachReply } from "@/server/ai/openai.js";
+import { aiErrorStatus } from "@/server/ai/http.js";
 import { estimateCost, evaluateBudget } from "@/server/ai/usage.js";
 import { decryptSecret, readState, updateState } from "@/server/store.js";
 export const runtime = "nodejs";
@@ -26,5 +27,5 @@ export async function POST(request: Request) {
     const textCost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: state.ai.inputCost, outputCostPerMillion: state.ai.outputCost }); const cost = textCost + .02;
     await updateState((latest) => { latest.aiUsage.push({ id: crypto.randomUUID(), month, at: new Date().toISOString(), userId: session.userId, feature: "food_catalog_draft", provider: latest.ai.provider, model: latest.ai.model, ...result.usage, cost }); return latest; });
     return Response.json({ ...draft, image, estimatedCost: cost });
-  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "יצירת הפריט נכשלה" }, { status: 502 }); }
+  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "יצירת הפריט נכשלה" }, { status: aiErrorStatus(error) }); }
 }

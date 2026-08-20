@@ -16,9 +16,12 @@ export async function POST(request: Request) {
     const data = ensureUserData(latest, session.userId);
     const source = ["photo", "voice"].includes(body.source) ? body.source : "manual";
     const originalImage = /^data:image\/(jpeg|png|webp);base64,/.test(String(body.image || "")) && String(body.image).length <= 8_000_000 ? String(body.image) : ""; const id = crypto.randomUUID(); const media = originalImage ? await saveMediaDataUrl(latest, originalImage, id) : null;
-    const meal = { id, name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time: new Date().toISOString() };
+    const requestedTime = new Date(body.occurredAt || Date.now()); const time = Number.isFinite(requestedTime.getTime()) && requestedTime.getTime() <= Date.now() ? requestedTime.toISOString() : new Date().toISOString();
+    const meal = { id, name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
     meal.score = calculateMealScore(meal);
-    data.today.meals.push(meal);
+    const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: process.env.TZ || "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(time));
+    const targetDay = localDate === data.today.date ? data.today : (data.history.find((day) => day.date === localDate) || (() => { const day = { date: localDate, waterMl: 0, meals: [] }; data.history.push(day); return day; })());
+    targetDay.meals.push(meal); targetDay.meals.sort((a, b) => String(a.time).localeCompare(String(b.time))); data.history.sort((a, b) => a.date.localeCompare(b.date));
     if (["photo", "voice"].includes(source) && items.length) {
       const original = Array.isArray(body.aiOriginalItems) ? body.aiOriginalItems : [];
       items.forEach((item, index) => {

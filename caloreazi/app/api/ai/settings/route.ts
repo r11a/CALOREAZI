@@ -1,6 +1,7 @@
 import { addAudit, decryptSecret, encryptSecret, publicState, readState, updateState } from "@/server/store.js";
 import { currentSession, requireAdmin } from "@/server/auth.js";
 import { generateOpenAiCoachReply } from "@/server/ai/openai.js";
+import { aiErrorStatus } from "@/server/ai/http.js";
 import { generateGeminiCoachReply } from "@/server/ai/gemini.js";
 import { AI_MODELS, findModel } from "@/server/ai/models.js";
 export const runtime = "nodejs";
@@ -32,6 +33,6 @@ export async function POST(request: Request) {
     const result = await call({ apiKey, model: state.ai.model, instructions: "Reply with the single Hebrew word תקין", input: "Connection test" });
     return Response.json({ ok: true, reply: result.text, usage: result.usage });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "AI connection test failed" }, { status: 502 });
+    return Response.json({ error: error instanceof Error ? error.message : "AI connection test failed" }, { status: aiErrorStatus(error) });
   }
 }

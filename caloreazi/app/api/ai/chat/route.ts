@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { decryptSecret, ensureUserData, readState, updateState } from "@/server/store.js";
 import { generateOpenAiCoachReply } from "@/server/ai/openai.js";
+import { aiErrorStatus } from "@/server/ai/http.js";
 import { generateGeminiCoachReply } from "@/server/ai/gemini.js";
 import { estimateCost, evaluateBudget } from "@/server/ai/usage.js";
 import { requireUser } from "@/server/auth.js";
@@ -74,5 +75,5 @@ export async function POST(request: Request) {
     const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: state.ai.inputCost, outputCostPerMillion: state.ai.outputCost });
     await updateState((latest) => { const data = ensureUserData(latest, session.userId); const at = new Date().toISOString(); data.coachHistory.push({ role: "user", text: String(message).trim(), at }, { role: "assistant", text: reply, at }); data.coachHistory = data.coachHistory.slice(-40); latest.aiUsage.push({ id: crypto.randomUUID(), month, at, userId: session.userId, feature: "coach", provider: latest.ai.provider, model: latest.ai.model, ...result.usage, cost }); return latest; });
     return Response.json({ reply, usage: { ...result.usage, estimatedCost: cost, budgetState: budget.state } });
-  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "AI request failed" }, { status: 502 }); }
+  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "AI request failed" }, { status: aiErrorStatus(error) }); }
 }

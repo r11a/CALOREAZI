@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2
+
+- Fixed category and food images under Home Assistant Ingress by resolving assets relative to the active Ingress path.
+- Made voice analysis faster by reusing a valid browser transcript instead of transcribing the audio twice, with visible elapsed processing time and phases.
+- Added AI timeouts, one safe retry for transient provider failures, low-latency Gemini thinking and useful provider-specific errors instead of generic 502 responses.
+- Added date and time selection when logging a forgotten meal and automatic chronological placement in the correct daily timeline.
+
 ## 1.0.1
 
 - Reused the proven PROJECTS voice-recording pattern: browser-native MediaRecorder and multipart audio upload.

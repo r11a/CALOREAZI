@@ -19,7 +19,7 @@ RUN chmod +x /etc/services.d/app/run /etc/services.d/nginx/run \
     && rm -f /etc/nginx/http.d/default.conf
 
 LABEL \
-  io.hass.version="1.0.1" \
+  io.hass.version="1.0.2" \
   io.hass.type="app" \
   io.hass.arch="amd64"
 
