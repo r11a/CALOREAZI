@@ -9,7 +9,14 @@ export const metadata: Metadata = {
   description: "מעקב תזונה חכם, פשוט ואישי עם AI Coach שמכיר אותך.",
   applicationName: "CALOREAZI",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg", apple: "/favicon.svg" },
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/pwa-icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/favicon.svg",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#F26A3D" };
