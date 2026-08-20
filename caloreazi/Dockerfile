@@ -9,6 +9,9 @@ RUN npm run build
 
 FROM ${BUILD_FROM}
 
+ARG BUILD_COMMIT=unknown
+ENV CALOREAZI_BUILD_COMMIT=${BUILD_COMMIT}
+
 RUN apk add --no-cache ca-certificates nginx nodejs npm postgresql17 postgresql17-client su-exec
 
 WORKDIR /opt/caloreazi
@@ -19,7 +22,7 @@ RUN chmod +x /etc/services.d/app/run /etc/services.d/nginx/run /etc/services.d/p
     && rm -f /etc/nginx/http.d/default.conf
 
 LABEL \
-  io.hass.version="1.2.1" \
+  io.hass.version="1.3.0" \
   io.hass.type="app" \
   io.hass.arch="amd64"
 

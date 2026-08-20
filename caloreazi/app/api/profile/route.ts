@@ -31,6 +31,13 @@ export async function PUT(request: Request) {
       activity: body.activity || profile.activity,
       diet: body.diet || profile.diet,
       restrictions: String(body.restrictions || ""),
+      diabetesStatus: ["none", "borderline", "prediabetes", "diabetes"].includes(body.diabetesStatus) ? body.diabetesStatus : "none",
+      hypertension: Boolean(body.hypertension),
+      foodAllergies: String(body.foodAllergies || "").slice(0, 500),
+      relevantMedications: String(body.relevantMedications || "").slice(0, 500),
+      pregnancyStatus: ["none", "pregnant", "breastfeeding"].includes(body.pregnancyStatus) ? body.pregnancyStatus : "none",
+      trainingDayBonus: Math.min(600, Math.max(0, Number(body.trainingDayBonus) || 0)),
+      targetMode: body.targetMode === "custom" ? "custom" : "automatic",
       avatar,
     });
     const caloriePlan = calculateNutritionTargets(profile);
@@ -39,6 +46,13 @@ export async function PUT(request: Request) {
     profile.protein = Math.round(Number(profile.weight) * (profile.goal === "gain" ? 1.8 : 1.6));
     profile.carbs = Math.round((caloriePlan.calories * .45) / 4);
     profile.fat = Math.round((caloriePlan.calories * .3) / 9);
+    if (profile.targetMode === "custom") {
+      profile.calories = Math.min(6000, Math.max(caloriePlan.safetyFloor, Number(body.customCalories) || profile.calories));
+      profile.protein = Math.min(400, Math.max(20, Number(body.customProtein) || profile.protein));
+      profile.carbs = Math.min(800, Math.max(20, Number(body.customCarbs) || profile.carbs));
+      profile.fat = Math.min(250, Math.max(15, Number(body.customFat) || profile.fat));
+    }
+    profile.targetRanges = { calories: { min: Math.round(profile.calories * .95), max: Math.round(profile.calories * 1.05) }, protein: { min: Math.round(profile.protein * .9), max: Math.round(profile.protein * 1.15) }, carbs: { min: Math.round(profile.carbs * .85), max: Math.round(profile.carbs * 1.15) }, fat: { min: Math.round(profile.fat * .85), max: Math.round(profile.fat * 1.15) } };
     return latest;
   });
   return Response.json(userView(state, session.userId, session.role === "admin"));

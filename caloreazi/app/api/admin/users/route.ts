@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const state = await readState();
   const denied = requireAdmin(state, request);
   if (denied) return denied;
-  return Response.json(state.users.map(({ password, ...user }) => ({ ...user, passwordConfigured: Boolean(password?.hash), activeSessions: (state.sessions || []).filter((session) => session.userId === user.id && !session.revokedAt && new Date(session.expiresAt).getTime() > Date.now()).length })));
+  return Response.json(state.users.map(({ password, ...user }) => { const profile = state.userData?.[user.id]?.profile; return ({ ...user, passwordConfigured: Boolean(password?.hash), activeSessions: (state.sessions || []).filter((session) => session.userId === user.id && !session.revokedAt && new Date(session.expiresAt).getTime() > Date.now()).length, healthSummary: profile ? { diabetesStatus: profile.diabetesStatus || "none", hypertension: Boolean(profile.hypertension), allergies: Boolean(profile.foodAllergies), pregnancyStatus: profile.pregnancyStatus || "none" } : null }); }));
 }
 
 export async function POST(request: Request) {

@@ -50,6 +50,7 @@ export async function POST(request: Request) {
     goals: { goal: profile.goal, currentWeightKg: currentWeight, targetWeightKg: Number(profile.targetWeight), remainingKg: Number((currentWeight - Number(profile.targetWeight)).toFixed(1)) },
     bodyAndPlan: { sex: profile.sex, age: profile.age, heightCm: profile.height, bmi: profile.caloriePlan?.bmi, bmr: profile.caloriePlan?.bmr, maintenanceKcal: profile.caloriePlan?.maintenanceCalories, dailyTargetKcal: profile.calories, proteinTargetG: profile.protein, carbsTargetG: profile.carbs, fatTargetG: profile.fat, waterTargetMl: profile.waterMl },
     preferences: { activityLevel: profile.activity, workoutsPerWeek: profile.workouts, diet: profile.diet, restrictions: profile.restrictions || "אין מגבלות מתועדות" },
+    healthContext: { diabetesStatus: profile.diabetesStatus || "none", hypertension: Boolean(profile.hypertension), foodAllergies: profile.foodAllergies || "", relevantMedications: profile.relevantMedications || "", pregnancyStatus: profile.pregnancyStatus || "none" },
     today: { date: userData.today.date, totals: dayTotals(userData.today), waterMl: userData.today.waterMl, meals: userData.today.meals.map((meal: any) => ({ time: meal.time, period: meal.period, name: meal.name, kcal: meal.kcal, protein: meal.protein, items: meal.items?.map((item: any) => `${item.quantity || 1}× ${item.name} ${item.grams || "?"}g`) })) },
     last7Days: { trackedDays: week.length, averageKcal: average(weekTotals.map((item: any) => item.kcal)), averageProteinG: average(weekTotals.map((item: any) => item.protein)), averageWaterMl: average(week.map((day: any) => Number(day.waterMl || 0))), activityMinutes: recentActivity.filter((item: any) => week.some((day: any) => day.date === item.date)).reduce((sum: number, item: any) => sum + Number(item.minutes || 0), 0) },
     progress: { previousWeightKg: previousWeight, changeFromPreviousKg: previousWeight == null ? null : Number((currentWeight - previousWeight).toFixed(1)), measurements: measurements.slice(-10) },
@@ -65,6 +66,7 @@ export async function POST(request: Request) {
 - הבדל בבירור בין נתון שנמדד, הערכת AI ומידע שחסר. אל תמציא ארוחות, כמויות או העדפות.
 - תן בדרך כלל תשובה תמציתית עם 1–3 צעדים מעשיים. שאל לכל היותר שאלת הבהרה אחת ורק אם היא נחוצה.
 - אין אבחון רפואי. התריע רק כשיש סיכון ממשי; אל תנסח הסתייגות גנרית בכל תשובה.
+- התייחס ל-healthContext בתכנון ארוחות ובהמלצות. בסוכרת/טרום־סוכרת העדף פחמימות עתירות סיבים, חלוקה לאורך היום ושילוב חלבון; אל תבטיח איזון סוכר ואל תציע שינוי תרופות. באלרגיה מתועדת אל תמליץ על המזון האלרגני. בהריון/הנקה או עם תרופות רלוונטיות שמור על המלצות שמרניות והפנה לאיש מקצוע כשנדרש.
 - אם המידע סותר, העדף מדידה חדשה על פרופיל ישן והסבר את הסתירה בקצרה.`;
   const input = `USER_CONTEXT:\n${JSON.stringify(context, null, 2)}\n\nRECENT_CONVERSATION:\n${recentConversation.map((item: any) => `${item.role === "user" ? "משתמש" : "מאמן"}: ${item.text}`).join("\n") || "אין עדיין"}\n\nCURRENT_USER_MESSAGE:\n${String(message).trim()}`;
   try {

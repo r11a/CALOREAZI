@@ -2,7 +2,7 @@ import { requireUser } from "@/server/auth.js";
 import { calculateMealFromItems, calculateMealScore } from "@/server/nutrition.js";
 import { addAudit, ensureUserData, readState, updateState, userView } from "@/server/store.js";
 import { saveMediaDataUrl } from "@/server/storage.js";
-import { removeOwnedMeal } from "@/server/domains/meals/repository.js";
+import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "@/server/domains/meals/repository.js";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -41,6 +41,36 @@ export async function DELETE(request: Request) {
   const initial = await readState(); const session = requireUser(initial, request);
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
   const { id } = await request.json();
-  const state = await updateState((latest) => { const meal = removeOwnedMeal(latest, session.userId, id); if (meal) { latest.trash.push({ id: crypto.randomUUID(), userId: session.userId, type: "meal", data: meal, deletedAt: new Date().toISOString() }); addAudit(latest, { userId: session.userId, action: "meal.deleted", target: id }); } return latest; });
+  let undoId = "";
+  const state = await updateState((latest) => { const meal = removeOwnedMeal(latest, session.userId, id); if (meal) { undoId = crypto.randomUUID(); latest.trash.push({ id: undoId, userId: session.userId, type: "meal", data: meal, deletedAt: new Date().toISOString() }); addAudit(latest, { userId: session.userId, action: "meal.deleted", target: id }); } return latest; });
+  return Response.json({ ...userView(state, session.userId, session.role === "admin"), undoId });
+}
+
+export async function PATCH(request: Request) {
+  const initial = await readState(); const session = requireUser(initial, request);
+  if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
+  const body = await request.json(); const id = String(body.id || "");
+  let foundMeal = false;
+  const state = await updateState((latest) => {
+    const found = findOwnedMeal(latest, session.userId, id); if (!found) return latest;
+    foundMeal = true;
+    const meal = found.meal;
+    if (body.scale !== undefined) {
+      const scale = Math.max(.25, Math.min(4, Number(body.scale) || 1));
+      ["kcal", "protein", "carbs", "fat"].forEach((field) => { meal[field] = Math.round(Number(meal[field] || 0) * scale * 10) / 10; });
+      meal.items = (meal.items || []).map((item) => ({ ...item, quantity: Math.round(Number(item.quantity || 1) * scale * 100) / 100 }));
+    } else {
+      const name = String(body.name || "").trim(); const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
+      const calculated = items.length ? calculateMealFromItems(items) : body;
+      if (name) meal.name = name;
+      meal.period = ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : meal.period;
+      meal.kcal = Math.max(0, Number(calculated.kcal) || 0); meal.protein = Math.max(0, Number(calculated.protein) || 0); meal.carbs = Math.max(0, Number(calculated.carbs) || 0); meal.fat = Math.max(0, Number(calculated.fat) || 0); meal.items = items;
+      const requested = new Date(body.occurredAt || meal.time); if (Number.isFinite(requested.getTime()) && requested.getTime() <= Date.now()) meal.time = requested.toISOString();
+    }
+    meal.score = calculateMealScore(meal); meal.updatedAt = new Date().toISOString();
+    const previousDay = found.day; previousDay.meals = previousDay.meals.filter((item) => item.id !== id); restoreOwnedMeal(latest, session.userId, meal);
+    addAudit(latest, { userId: session.userId, action: "meal.updated", target: id }); return latest;
+  });
+  if (!foundMeal) return Response.json({ error: "הארוחה לא נמצאה" }, { status: 404 });
   return Response.json(userView(state, session.userId, session.role === "admin"));
 }
