@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.2.1
+
+- Replaced undersized fruit and vegetable sprites with complete, position-safe photographic sprite sheets.
+- Fixed the history timeline so each event is a horizontal row on one vertical axis without page-width overflow.
+- Added calorie and macro target comparisons with below, near, in-range and over-target color states.
+- Restored release-note and runtime-version updates across all version sources.
+
+## 1.2.0
+
+- Rebuilt history as a visual timeline and redesigned today's chronological meal list.
+- Added food-library management, expanded quick foods, coach recommendations and improved mobile readability.
+- Fixed Gemini image generation and automatic state refresh after manual changes.
+
+## 1.1.1
+
+- Fixed PostgreSQL startup inside the Home Assistant image and added a real container boot gate to CI.
+
+## 1.1.0
+
+- Added normalized PostgreSQL persistence, role-specific AI models, security controls, backups, jobs and nutrition-source separation.
+
 ## 1.0.3
 
 - Rebuilt the Admin Center as a focused, tabbed commercial management interface instead of one oversized scrolling form.
