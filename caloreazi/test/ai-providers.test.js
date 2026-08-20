@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { generateOpenAiCoachReply } from "../server/ai/openai.js";
 import { generateGeminiCoachReply } from "../server/ai/gemini.js";
-import { aiRole } from "../server/ai/models.js";
+import { aiRole, aiRoleCandidates } from "../server/ai/models.js";
 import { generateFoodImage } from "../server/ai/images.js";
 
 test("OpenAI adapter returns text and normalized token usage", async () => {
@@ -40,6 +40,11 @@ test("AI roles select separate coach, vision and image models", () => {
   assert.equal(aiRole(ai, "coach").model, "gpt-5.6-sol");
   assert.equal(aiRole(ai, "vision").model, "gpt-5.6-luna");
   assert.equal(aiRole(ai, "image").model, "gpt-image-1-mini");
+});
+
+test("AI roles expose a distinct fallback without duplicating the primary", () => {
+  const ai = { provider: "openai", model: "gpt-5.6-terra", roles: { vision: { model: "gpt-5.6-terra", fallbackModel: "gpt-5.6-luna" } } };
+  assert.deepEqual(aiRoleCandidates(ai, "vision").map((item) => item.model), ["gpt-5.6-terra", "gpt-5.6-luna"]);
 });
 
 test("Gemini image adapter uses generateContent and reads inline image data", async () => {

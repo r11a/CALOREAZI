@@ -31,3 +31,10 @@ test("dark streak card and mobile meal timeline have explicit responsive layouts
   assert.match(expansionCss, /\.theme-dark \.streak/);
   assert.match(expansionCss, /\.meal-list article\{[^}]*display:grid!important;grid-template-columns:48px minmax\(0,1fr\) auto/);
 });
+
+test("admin exposes runtime version, AI fallbacks and backup policy", () => {
+  assert.match(page, /adminHealth\.version/);
+  assert.match(page, /visionFallbackModel/);
+  assert.match(page, /backupType/);
+  assert.match(page, /30_000/);
+});

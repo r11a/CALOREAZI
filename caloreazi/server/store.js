@@ -3,6 +3,7 @@ import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
 import { calculateDayScore } from "./nutrition.js";
 import { databaseStateEnabled, readDatabaseState, replaceDatabaseState, updateDatabaseState } from "./state-database.js";
+import { localDateAt, userTimeZone } from "./local-date.js";
 
 const defaultState = {
   version: 1,
@@ -76,8 +77,7 @@ export function addAudit(state, { userId = null, action, target = "system", resu
 }
 
 export function ensureUserData(state, userId) {
-  const todayDate = new Date().toISOString().slice(0, 10);
-  const data = state.userData[userId] || { profile: null, today: { date: todayDate, waterMl: 0, meals: [] } };
+  const data = state.userData[userId] || { profile: null, today: { date: "", waterMl: 0, meals: [] } };
   data.history = Array.isArray(data.history) ? data.history : [];
   data.measurements = Array.isArray(data.measurements) ? data.measurements : [];
   data.favorites = Array.isArray(data.favorites) ? data.favorites : [];
@@ -85,6 +85,7 @@ export function ensureUserData(state, userId) {
   data.foodCalibration = Array.isArray(data.foodCalibration) ? data.foodCalibration : [];
   data.coachHistory = Array.isArray(data.coachHistory) ? data.coachHistory : [];
   data.today = { ...structuredClone(defaultState.today), ...(data.today || {}) };
+  const todayDate = localDateAt(new Date(), userTimeZone(data));
   if (data.today.date && data.today.date !== todayDate && (data.today.meals.length || data.today.waterMl)) {
     if (!data.history.some((day) => day.date === data.today.date)) data.history.push(structuredClone(data.today));
     data.today = { date: todayDate, waterMl: 0, meals: [] };
@@ -163,9 +164,9 @@ export function userView(state, userId, admin = false) {
     return { linkId: link.id, user: sharedUser ? { id: sharedUser.id, name: sharedUser.name, avatar: sharedData.profile?.avatar || "" } : null, permissions: link.permissions, today, measurements: link.permissions?.weight ? sharedData.measurements : [], profile: link.permissions?.weight ? { weight: sharedData.profile?.weight, targetWeight: sharedData.profile?.targetWeight } : null };
   });
   const trackedDates = [...data.history, data.today].filter((day) => day.meals?.length || day.waterMl).map((day) => day.date).sort().reverse();
-  let streak = 0; const cursor = new Date();
-  if (trackedDates[0] !== cursor.toISOString().slice(0, 10)) cursor.setDate(cursor.getDate() - 1);
-  while (trackedDates.includes(cursor.toISOString().slice(0, 10))) { streak += 1; cursor.setDate(cursor.getDate() - 1); }
+  let streak = 0; const cursor = new Date(); const timeZone = userTimeZone(data);
+  if (trackedDates[0] !== localDateAt(cursor, timeZone)) cursor.setUTCDate(cursor.getUTCDate() - 1);
+  while (trackedDates.includes(localDateAt(cursor, timeZone))) { streak += 1; cursor.setUTCDate(cursor.getUTCDate() - 1); }
   return {
     version: state.version,
     owner: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: data.profile?.avatar || "" },

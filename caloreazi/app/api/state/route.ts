@@ -1,6 +1,7 @@
 import { createSessionCookie, remoteUser, requireUser } from "@/server/auth.js";
 import { readState, updateState, userView } from "@/server/store.js";
 import { calculateNutritionTargets } from "@/server/nutrition.js";
+import { localDateAt, userTimeZone } from "@/server/local-date.js";
 export const runtime = "nodejs";
 export async function GET(request: Request) {
   let state = await readState();
@@ -8,6 +9,9 @@ export async function GET(request: Request) {
   let session = requireUser(state, request); let ingressCookie = "";
   if (!session) { const ingress = remoteUser(request); const user = ingress && state.users.find((item) => item.haUserId === ingress.id && !item.disabled); if (user) { const sid = crypto.randomUUID(); const createdAt = new Date().toISOString(); state = await updateState((latest) => { latest.sessions.push({ id: sid, userId: user.id, createdAt, lastSeenAt: createdAt, expiresAt: new Date(Date.now() + 30 * 86400000).toISOString(), userAgent: "Home Assistant Ingress" }); return latest; }); session = { sid, userId: user.id, role: user.role, sessionVersion: Number(user.sessionVersion || 1) }; ingressCookie = createSessionCookie(request, user, sid); } }
   if (!session) return Response.json({ authenticated: false, bootstrapRequired: false, adminConfigured: state.users.some((item) => item.role === "admin" && item.password?.hash) }, { headers: { "Cache-Control": "no-store" } });
+  const currentData = state.userData[session.userId];
+  if (currentData?.today?.date !== localDateAt(new Date(), userTimeZone(currentData)))
+    state = await updateState((latest) => { userView(latest, session.userId, session.role === "admin"); return latest; });
   const data = state.userData[session.userId];
   if (data?.profile && !data.profile.caloriePlan) {
     state = await updateState((latest) => {

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { localDateAt } from "./local-date.js";
 
 const execFileAsync = promisify(execFile);
 export function databaseStateEnabled() { return Boolean(process.env.CALOREAZI_DATABASE_URL); }
@@ -55,7 +56,7 @@ function hydrate(raw) {
   const state = { version: Number(raw.version || 1), owner: null, adminAuth: null, users: raw.users || [], sessions: raw.sessions || [], userData: {}, ai: raw.ai || {}, aiUsage: raw.aiUsage || [], analysisJobs: raw.analysisJobs || [], foodCatalog: raw.foodCatalog || [], partnerships: raw.partnerships || [], trash: raw.trash || [], auditLog: raw.auditLog || [], systemSettings: raw.systemSettings || {} };
   for (const user of state.users) state.userData[user.id] = emptyData(raw.profiles?.[user.id] || null);
   const getData = (id) => state.userData[id] || (state.userData[id] = emptyData());
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateAt();
   for (const row of raw.days || []) { const data = getData(row.userId); const day = { ...row.payload, meals: [] }; if (day.date === today) data.today = day; else data.history.push(day); }
   for (const row of raw.meals || []) { const data = getData(row.userId); const localDate = String(row.localDate || row.payload.time || "").slice(0, 10) || today; let day = localDate === today ? data.today : data.history.find((item) => item.date === localDate); if (!day) { day = { date: localDate, waterMl: 0, meals: [] }; if (localDate === today) data.today = day; else data.history.push(day); } day.meals.push(row.payload); }
   for (const [key, target] of [["measurements","measurements"],["activities","activity"],["favorites","favorites"],["calibrations","foodCalibration"],["coach","coachHistory"]]) for (const row of raw[key] || []) getData(row.userId)[target].push(row.payload);

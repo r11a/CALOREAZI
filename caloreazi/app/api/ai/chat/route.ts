@@ -5,7 +5,7 @@ import { aiErrorStatus } from "@/server/ai/http.js";
 import { generateGeminiCoachReply } from "@/server/ai/gemini.js";
 import { estimateCost, evaluateBudget } from "@/server/ai/usage.js";
 import { requireUser } from "@/server/auth.js";
-import { aiRole, findModel } from "@/server/ai/models.js";
+import { aiRoleCandidates, findModel } from "@/server/ai/models.js";
 export const runtime = "nodejs";
 
 function dayTotals(day: any) {
@@ -70,8 +70,10 @@ export async function POST(request: Request) {
 - אם המידע סותר, העדף מדידה חדשה על פרופיל ישן והסבר את הסתירה בקצרה.`;
   const input = `USER_CONTEXT:\n${JSON.stringify(context, null, 2)}\n\nRECENT_CONVERSATION:\n${recentConversation.map((item: any) => `${item.role === "user" ? "משתמש" : "מאמן"}: ${item.text}`).join("\n") || "אין עדיין"}\n\nCURRENT_USER_MESSAGE:\n${String(message).trim()}`;
   try {
-    const role = aiRole(state.ai, "coach"); const selectedModel = findModel(role.provider, role.model); const call = role.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply;
-    const result = await call({ apiKey: await decryptSecret(state.ai.encryptedKey), model: role.model, instructions, input });
+    const candidates = aiRoleCandidates(state.ai, "coach"); let role = candidates[0]; let result: any; let lastError: unknown;
+    for (const candidate of candidates) { try { role = candidate; const call = role.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply; result = await call({ apiKey: await decryptSecret(state.ai.encryptedKey), model: role.model, instructions, input }); break; } catch (error) { lastError = error; } }
+    if (!result) throw lastError || new Error("לא נמצא מודל מאמן זמין");
+    const selectedModel = findModel(role.provider, role.model);
     const reply = recentConversation.length > 0
       ? result.text.replace(/^\s*(?:היי|שלום|אהלן)(?:\s+[^,!:.]{1,24})?\s*[,!:.—-]*\s*/u, "")
       : result.text;

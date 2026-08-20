@@ -14,9 +14,10 @@ export async function PUT(request: Request) {
   const body = await request.json();
   const provider = body.provider === "gemini" ? "gemini" : "openai";
   const coach = findModel(provider, String(body.coachModel || body.model || "")); const vision = findModel(provider, String(body.visionModel || body.model || "")); const image = findImageModel(provider, String(body.imageModel || IMAGE_MODELS[provider][0].id));
-  if (!coach || !vision || !vision.vision || !image) return Response.json({ error: "אחד המודלים שנבחרו אינו מתאים לתפקיד או אינו מאושר" }, { status: 400 });
+  const coachFallback = String(body.coachFallbackModel || ""); const visionFallback = String(body.visionFallbackModel || ""); const imageFallback = String(body.imageFallbackModel || "");
+  if (!coach || !vision || !vision.vision || !image || (coachFallback && !findModel(provider, coachFallback)) || (visionFallback && !findModel(provider, visionFallback)?.vision) || (imageFallback && !findImageModel(provider, imageFallback))) return Response.json({ error: "אחד המודלים שנבחרו אינו מתאים לתפקיד או אינו מאושר" }, { status: 400 });
   const state = await updateState(async (state) => {
-    state.ai = { ...state.ai, provider, model: coach.id, roles: { coach: { provider, model: coach.id }, vision: { provider, model: vision.id }, image: { provider, model: image.id } }, inputCost: coach.inputCost, outputCost: coach.outputCost, monthlyBudget: Math.max(0, Number(body.monthlyBudget) || 0), softLimit: Math.min(100, Math.max(1, Number(body.softLimit) || 80)), hardLimit: body.hardLimit !== false };
+    state.ai = { ...state.ai, provider, model: coach.id, roles: { coach: { provider, model: coach.id, fallbackModel: coachFallback }, vision: { provider, model: vision.id, fallbackModel: visionFallback }, image: { provider, model: image.id, fallbackModel: imageFallback } }, inputCost: coach.inputCost, outputCost: coach.outputCost, monthlyBudget: Math.max(0, Number(body.monthlyBudget) || 0), softLimit: Math.min(100, Math.max(1, Number(body.softLimit) || 80)), hardLimit: body.hardLimit !== false };
     if (String(body.apiKey || "").trim()) state.ai.encryptedKey = await encryptSecret(String(body.apiKey).trim());
     addAudit(state, { userId: currentSession(request)?.userId, action: "ai.settings_updated", target: provider, details: `coach=${coach.id}; vision=${vision.id}; image=${image.id}; ${String(body.apiKey || "").trim() ? "API key replaced" : "Configuration updated"}` });
     return state;

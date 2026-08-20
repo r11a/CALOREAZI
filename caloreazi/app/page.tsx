@@ -468,6 +468,9 @@ export default function Home() {
     coachModel: "gpt-5-mini",
     visionModel: "gpt-5-mini",
     imageModel: "gpt-image-1-mini",
+    coachFallbackModel: "",
+    visionFallbackModel: "",
+    imageFallbackModel: "",
     apiKey: "",
     inputCost: 0.25,
     outputCost: 2,
@@ -496,12 +499,16 @@ export default function Home() {
   const [adminHealth, setAdminHealth] = useState<any>(null);
   const [adminTab, setAdminTab] = useState("ai");
   const [adminBackups, setAdminBackups] = useState<any[]>([]);
+  const [backupType, setBackupType] = useState("database");
   const [adminAudit, setAdminAudit] = useState<any[]>([]);
   const [storageForm, setStorageForm] = useState({
     backupDestination: "internal",
     backupRelativePath: "CALOREAZI/Backups",
     galleryDestination: "internal",
     galleryRelativePath: "CALOREAZI/Gallery",
+    automaticBackup: true,
+    backupHour: 3,
+    backupRetention: 14,
   });
   const [storageStatus, setStorageStatus] = useState<any>(null);
   const [online, setOnline] = useState(true);
@@ -583,7 +590,16 @@ export default function Home() {
       .catch((e) => setError(e.message));
   }, []);
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    let lastLocalDate = new Date().toLocaleDateString("en-CA");
+    const timer = window.setInterval(() => {
+      const current = new Date();
+      setNow(current);
+      const nextLocalDate = current.toLocaleDateString("en-CA");
+      if (nextLocalDate !== lastLocalDate) {
+        lastLocalDate = nextLocalDate;
+        api("/api/state").then(setState).catch(() => undefined);
+      }
+    }, 15_000);
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
@@ -614,9 +630,11 @@ export default function Home() {
     };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
+    const polling = window.setInterval(refresh, 30_000);
     return () => {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(polling);
     };
   }, []);
   const profile = state?.profile;
@@ -762,6 +780,9 @@ export default function Home() {
       ...aiData.settings,
       coachModel: aiData.settings.roles?.coach?.model || selected?.id,
       visionModel: aiData.settings.roles?.vision?.model || selected?.id,
+      coachFallbackModel: aiData.settings.roles?.coach?.fallbackModel || "",
+      visionFallbackModel: aiData.settings.roles?.vision?.fallbackModel || "",
+      imageFallbackModel: aiData.settings.roles?.image?.fallbackModel || "",
       imageModel:
         aiData.settings.roles?.image?.model ||
         aiData.imageModels?.[aiData.settings.provider]?.[0]?.id,
@@ -779,7 +800,7 @@ export default function Home() {
   async function createBackup() {
     setBusy(true);
     try {
-      const data = await api("/api/admin/backups", { method: "POST" });
+      const data = await api("/api/admin/backups", { method: "POST", body: JSON.stringify({ type: backupType }) });
       setAdminBackups(data.backups || []);
       setAiStatus("הגיבוי נוצר ואומת ✓");
       await loadAdminData();
@@ -883,7 +904,7 @@ export default function Home() {
     try {
       const data = await api("/api/onboarding", {
         method: "POST",
-        body: JSON.stringify(onboarding),
+        body: JSON.stringify({ ...onboarding, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
       setState(data);
       setAiForm((current) => ({ ...current, ...data.ai, apiKey: "" }));
@@ -1149,7 +1170,7 @@ export default function Home() {
     try {
       let latest = await api("/api/profile", {
         method: "PUT",
-        body: JSON.stringify(profileForm),
+        body: JSON.stringify({ ...profileForm, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
       if (weightValue && Number(weightValue) !== Number(latestWeight))
         latest = await api("/api/measurements", {
@@ -2274,6 +2295,7 @@ export default function Home() {
                 <h2>מרכז ניהול</h2>
               </div>
               <span className="admin-badge">ADMIN</span>
+              {adminHealth && <span className="admin-version">גרסה {adminHealth.version}<small>{adminHealth.build === "development" ? "פיתוח" : adminHealth.build?.slice(0, 7)}</small></span>}
               <button onClick={() => setSettingsOpen(false)}>×</button>
             </header>
             <nav className="admin-nav">
@@ -2360,6 +2382,9 @@ export default function Home() {
                     ${Number(adminHealth.estimatedAiCost).toFixed(4)}
                   </strong>
                 </article>
+                <article><span className="health-ok">●</span><small>Sessions פעילים</small><strong>{adminHealth.activeSessions}</strong></article>
+                <article><span className={adminHealth.analysisJobs?.failed ? "health-warn" : "health-ok"}>●</span><small>תור ניתוח AI</small><strong>{adminHealth.analysisJobs?.pending || 0} ממתינים · {adminHealth.analysisJobs?.failed || 0} נכשלו</strong></article>
+                <article><span className={adminHealth.trashItems ? "health-warn" : "health-ok"}>●</span><small>סל מחזור</small><strong>{adminHealth.trashItems || 0} פריטים</strong></article>
               </section>
             )}
             <div className="admin-intro" id="admin-ai">
@@ -2457,6 +2482,9 @@ export default function Home() {
                   ))}
                 </select>
               </label>
+              <label>גיבוי למאמן<select value={aiForm.coachFallbackModel} onChange={(e) => setAiForm({ ...aiForm, coachFallbackModel: e.target.value })}><option value="">ללא מודל גיבוי</option>{modelCatalog[aiForm.provider]?.filter((model) => model.id !== aiForm.coachModel).map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select></label>
+              <label>גיבוי לזיהוי ארוחה<select value={aiForm.visionFallbackModel} onChange={(e) => setAiForm({ ...aiForm, visionFallbackModel: e.target.value })}><option value="">ללא מודל גיבוי</option>{modelCatalog[aiForm.provider]?.filter((model) => model.vision && model.id !== aiForm.visionModel).map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select></label>
+              <label>גיבוי ליצירת תמונות<select value={aiForm.imageFallbackModel} onChange={(e) => setAiForm({ ...aiForm, imageFallbackModel: e.target.value })}><option value="">ללא מודל גיבוי</option>{imageModelCatalog[aiForm.provider]?.filter((model) => model.id !== aiForm.imageModel).map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select></label>
               <div className="model-explanation wide">
                 <strong>שלושה תפקידים נפרדים</strong>
                 <span>
@@ -2814,9 +2842,9 @@ export default function Home() {
                 </button>
               </div>
               <p className="modal-help">
-                כל גיבוי כולל משתמשים, הגדרות ונתוני תזונה. לפני שחזור נוצר
-                Safety Backup אוטומטי.
+                בחר מסד נתונים, הגדרות בלבד או גיבוי מלא הכולל מדיה. לפני שחזור נוצר Safety Backup אוטומטי.
               </p>
+              <div className="backup-policy"><label>סוג גיבוי<select value={backupType} onChange={(e) => setBackupType(e.target.value)}><option value="database">מסד נתונים</option><option value="configuration">הגדרות</option><option value="full">מלא כולל תמונות</option></select></label><label>שעה אוטומטית<input type="number" min="0" max="23" value={storageForm.backupHour} onChange={(e) => setStorageForm({ ...storageForm, backupHour: Number(e.target.value) })} /></label><label>מספר גיבויים לשמירה<input type="number" min="2" max="60" value={storageForm.backupRetention} onChange={(e) => setStorageForm({ ...storageForm, backupRetention: Number(e.target.value) })} /></label></div>
               <div className="backup-list">
                 {adminBackups.length ? (
                   adminBackups.slice(0, 8).map((backup) => (
@@ -4220,6 +4248,7 @@ export default function Home() {
               {photoStatus && (
                 <p className="photo-status wide">{photoStatus}</p>
               )}
+              {mealSource === "photo" && <div className="photo-guide wide"><strong>בדיקת צילום</strong><span>ודא שכל הצלחת מוארת ונמצאת בפריים, שאין מזון מוסתר ושניתן להבין את גודל המנה.</span><small>בביטחון נמוך חובה לבדוק את שם הפריט, המשקל והכמות לפני השמירה.</small></div>}
               <label className="wide">
                 שם הארוחה
                 <input

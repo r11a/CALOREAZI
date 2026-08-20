@@ -3,6 +3,7 @@ import { calculateMealFromItems, calculateMealScore } from "@/server/nutrition.j
 import { addAudit, ensureUserData, readState, updateState, userView } from "@/server/store.js";
 import { saveMediaDataUrl } from "@/server/storage.js";
 import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "@/server/domains/meals/repository.js";
+import { localDateAt, userTimeZone } from "@/server/local-date.js";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     const meal = { id, name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
     meal.score = calculateMealScore(meal);
     if (body.analysisJobId) { const job = latest.analysisJobs?.find((item) => item.id === body.analysisJobId && item.userId === session.userId); if (job) { job.status = "completed"; job.mealId = meal.id; job.completedAt = new Date().toISOString(); job.updatedAt = job.completedAt; } }
-    const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: process.env.TZ || "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(time));
+    const localDate = localDateAt(time, userTimeZone(data));
     const targetDay = localDate === data.today.date ? data.today : (data.history.find((day) => day.date === localDate) || (() => { const day = { date: localDate, waterMl: 0, meals: [] }; data.history.push(day); return day; })());
     targetDay.meals.push(meal); targetDay.meals.sort((a, b) => String(a.time).localeCompare(String(b.time))); data.history.sort((a, b) => a.date.localeCompare(b.date));
     if (["photo", "voice"].includes(source) && items.length) {

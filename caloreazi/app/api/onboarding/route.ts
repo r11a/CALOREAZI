@@ -1,6 +1,7 @@
 import { createSessionCookie, currentSession, hashPassword, remoteUser, requireUser } from "@/server/auth.js";
 import { calculateNutritionTargets } from "@/server/nutrition.js";
 import { readState, updateState, userView } from "@/server/store.js";
+import { localDateAt, validTimeZone } from "@/server/local-date.js";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -26,10 +27,11 @@ export async function POST(request: Request) {
 
   const caloriePlan = calculateNutritionTargets(body);
   const calories = caloriePlan.calories;
-  const profile = { goal: body.goal, sex: body.sex, age, height, weight, targetWeight: Number(body.targetWeight) || weight, activity: body.activity, workouts: Number(body.workouts) || 0, diet: body.diet || "none", restrictions: String(body.restrictions || ""), calories, caloriePlan, protein: Math.round(weight * (body.goal === "gain" ? 1.8 : 1.6)), carbs: Math.round((calories * .45) / 4), fat: Math.round((calories * .3) / 9), waterMl: Math.round(weight * 32 / 250) * 250, completedAt: new Date().toISOString() };
+  const timeZone = validTimeZone(body.timeZone);
+  const profile = { timeZone, goal: body.goal, sex: body.sex, age, height, weight, targetWeight: Number(body.targetWeight) || weight, activity: body.activity, workouts: Number(body.workouts) || 0, diet: body.diet || "none", restrictions: String(body.restrictions || ""), calories, caloriePlan, protein: Math.round(weight * (body.goal === "gain" ? 1.8 : 1.6)), carbs: Math.round((calories * .45) / 4), fat: Math.round((calories * .3) / 9), waterMl: Math.round(weight * 32 / 250) * 250, completedAt: new Date().toISOString() };
   const state = await updateState((latest) => {
     if (newAdmin) { latest.users.push(newAdmin); latest.owner = { ...newAdmin, password: undefined }; latest.adminAuth = newAdmin.password; latest.sessions = latest.sessions || []; latest.sessions.push({ id: newSessionId, userId: newAdmin.id, createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(), userAgent: String(request.headers.get("user-agent") || "").slice(0, 200) }); }
-    latest.userData[session.userId] = { profile, today: { date: new Date().toISOString().slice(0, 10), waterMl: 0, meals: [] } };
+    latest.userData[session.userId] = { profile, today: { date: localDateAt(new Date(), timeZone), waterMl: 0, meals: [] } };
     return latest;
   });
   const user = state.users.find((item) => item.id === session.userId);

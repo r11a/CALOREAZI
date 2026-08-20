@@ -1,6 +1,7 @@
 import { requireUser } from "@/server/auth.js";
 import { calculateNutritionTargets } from "@/server/nutrition.js";
 import { readState, updateState, userView } from "@/server/store.js";
+import { validTimeZone } from "@/server/local-date.js";
 
 export const runtime = "nodejs";
 
@@ -36,6 +37,7 @@ export async function PUT(request: Request) {
       foodAllergies: String(body.foodAllergies || "").slice(0, 500),
       relevantMedications: String(body.relevantMedications || "").slice(0, 500),
       pregnancyStatus: ["none", "pregnant", "breastfeeding"].includes(body.pregnancyStatus) ? body.pregnancyStatus : "none",
+      timeZone: validTimeZone(body.timeZone || profile.timeZone),
       trainingDayBonus: Math.min(600, Math.max(0, Number(body.trainingDayBonus) || 0)),
       targetMode: body.targetMode === "custom" ? "custom" : "automatic",
       avatar,

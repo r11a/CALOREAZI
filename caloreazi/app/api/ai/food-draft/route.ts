@@ -5,7 +5,7 @@ import { generateOpenAiCoachReply } from "@/server/ai/openai.js";
 import { aiErrorStatus } from "@/server/ai/http.js";
 import { estimateCost, evaluateBudget } from "@/server/ai/usage.js";
 import { decryptSecret, readState, updateState } from "@/server/store.js";
-import { aiRole, findModel } from "@/server/ai/models.js";
+import { aiRole, aiRoleCandidates, findModel } from "@/server/ai/models.js";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -25,8 +25,8 @@ export async function POST(request: Request) {
     const draft = { name: String(parsed.name || foodName).trim().slice(0, 80), portion: String(parsed.portion || "מנה אחת").trim().slice(0, 80), kcal: number(parsed.kcal, 2000), protein: number(parsed.protein, 200), carbs: number(parsed.carbs, 300), fat: number(parsed.fat, 200), confidence: ["high", "medium", "low"].includes(parsed.confidence) ? parsed.confidence : "low" };
     if (!draft.kcal && category !== "drinks") throw new Error("לא התקבל ערך קלורי תקין");
     let image = ""; let imageWarning = "";
-    try { image = await generateFoodImage({ provider: imageRole.provider, model: imageRole.model, apiKey, name: `${draft.name}, ${draft.portion}` }); }
-    catch (error) { image = `./category-${category}-v1.png?v=103`; imageWarning = error instanceof Error ? error.message : "יצירת התמונה נכשלה"; }
+    let imageError: unknown; for (const candidate of aiRoleCandidates(state.ai, "image")) { try { image = await generateFoodImage({ provider: candidate.provider, model: candidate.model, apiKey, name: `${draft.name}, ${draft.portion}` }); break; } catch (error) { imageError = error; } }
+    if (!image) { image = `./category-${category}-v1.png?v=103`; imageWarning = imageError instanceof Error ? imageError.message : "יצירת התמונה נכשלה"; }
     const textCost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: selectedModel?.inputCost || state.ai.inputCost, outputCostPerMillion: selectedModel?.outputCost || state.ai.outputCost }); const cost = textCost + .02;
     await updateState((latest) => { latest.aiUsage.push({ id: crypto.randomUUID(), month, at: new Date().toISOString(), userId: session.userId, feature: "food_catalog_draft", provider: visionRole.provider, model: visionRole.model, imageProvider: imageRole.provider, imageModel: imageRole.model, ...result.usage, cost }); return latest; });
     return Response.json({ ...draft, image, imageWarning, estimatedCost: cost });

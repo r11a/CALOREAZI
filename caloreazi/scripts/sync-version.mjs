@@ -6,6 +6,7 @@ const targets = [
   ["config.yaml", /version: "[^"]+"/, `version: "${version}"`],
   ["Dockerfile", /io\.hass\.version="[^"]+"/, `io.hass.version="${version}"`],
   ["app/health/route.ts", /version: "[^"]+"/, `version: "${version}"`],
+  ["app/api/admin/health/route.ts", /CALOREAZI_VERSION \|\| "[^"]+"/, `CALOREAZI_VERSION || "${version}"`],
   ["README.md", /^# CALOREAZI .+$/m, `# CALOREAZI ${version}`],
   ["public/sw.js", /caloreazi-shell-v[^";]+/, `caloreazi-shell-v${version}`],
 ];
