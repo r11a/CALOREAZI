@@ -1,5 +1,5 @@
 name: "CALOREAZI"
-version: "0.1.0"
+version: "0.1.1"
 slug: "caloreazi"
 description: "AI-assisted nutrition tracking, made easy"
 url: "https://github.com/r11a/CALOREAZI"
@@ -10,7 +10,7 @@ boot: auto
 init: false
 ingress: true
 ingress_port: 8099
-ingress_entry: /
+ingress_stream: true
 panel_icon: mdi:food-apple-outline
 panel_title: CALOREAZI
 panel_admin: true
