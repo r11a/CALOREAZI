@@ -8,8 +8,12 @@ const emptyOnboarding = { name: "", email: "", goal: "lose", sex: "male", age: 3
 const goalLabels: Record<string, string> = { lose: "ירידה הדרגתית במשקל", maintain: "שמירה על המשקל", gain: "עלייה מבוקרת במשקל", healthy: "אכילה בריאה יותר" };
 
 async function api(url: string, options?: RequestInit) {
-  const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...(options?.headers || {}) } });
-  const data = await response.json();
+  const target = url.startsWith("/") ? url.slice(1) : url;
+  const response = await fetch(target, { ...options, headers: { "Content-Type": "application/json", ...(options?.headers || {}) } });
+  const body = await response.text();
+  let data: any;
+  try { data = JSON.parse(body); }
+  catch { throw new Error(`השרת החזיר תשובה לא תקינה (${response.status})`); }
   if (!response.ok) throw new Error(data.error || "הפעולה נכשלה");
   return data;
 }

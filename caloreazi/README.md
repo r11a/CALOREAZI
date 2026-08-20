@@ -25,7 +25,7 @@ API keys are encrypted at rest with AES-256-GCM. The key and encryption secret r
 - OpenAI and Gemini adapters, connection testing, token logging, estimated costs, soft warnings, and hard monthly limits.
 - Responsive Hebrew light and granite-dark interfaces.
 
-Camera meal analysis, full authentication for standalone LAN access, multiple accounts, history, and backup administration are not yet complete. Home Assistant Ingress is the recommended access path for this release.
+Camera meal analysis, full authentication for standalone LAN access, multiple accounts, history, and backup administration are not yet complete. Home Assistant Ingress is the recommended access path. Standalone LAN access is also enabled by default on port `8686` for testing.
 
 ## License
 

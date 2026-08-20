@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed client API requests so they retain the Home Assistant Ingress base path.
+- Added safe handling for malformed or non-JSON server responses.
+- Re-enabled standalone LAN access on port `8686` by default.
+
 ## 0.2.0
 
 - Added a five-step progressive onboarding flow and first-value personalized targets.
