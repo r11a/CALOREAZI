@@ -14,11 +14,16 @@ const defaultState = {
   aiUsage: [],
   foodCatalog: [],
   partnerships: [],
+  trash: [],
+  auditLog: [],
+  systemSettings: { trashRetentionDays: 30, backupRetention: 14 },
 };
 
 function dataDir() {
   return process.env.CALOREAZI_DATA_DIR || (process.platform === "win32" ? path.join(process.cwd(), ".data") : "/data");
 }
+
+export function getDataDir() { return dataDir(); }
 
 async function paths() {
   const dir = dataDir();
@@ -36,6 +41,9 @@ export async function readState() {
     state.users = Array.isArray(saved.users) ? saved.users : [];
     state.userData = saved.userData || {};
     state.partnerships = Array.isArray(saved.partnerships) ? saved.partnerships : [];
+    state.trash = Array.isArray(saved.trash) ? saved.trash : [];
+    state.auditLog = Array.isArray(saved.auditLog) ? saved.auditLog : [];
+    state.systemSettings = { ...defaultState.systemSettings, ...(saved.systemSettings || {}) };
     if (state.owner && state.users.length === 0) {
       state.users = [{ ...state.owner, password: state.adminAuth || null }];
       state.userData[state.owner.id] = { profile: state.profile, today: state.today };
@@ -47,6 +55,12 @@ export async function readState() {
   }
 }
 
+export function addAudit(state, { userId = null, action, target = "system", result = "success", details = "" }) {
+  state.auditLog = Array.isArray(state.auditLog) ? state.auditLog : [];
+  state.auditLog.push({ id: crypto.randomUUID(), userId, action, target, result, details: String(details || "").slice(0, 300), at: new Date().toISOString() });
+  state.auditLog = state.auditLog.slice(-1000);
+}
+
 export function ensureUserData(state, userId) {
   const todayDate = new Date().toISOString().slice(0, 10);
   const data = state.userData[userId] || { profile: null, today: { date: todayDate, waterMl: 0, meals: [] } };
@@ -55,6 +69,7 @@ export function ensureUserData(state, userId) {
   data.favorites = Array.isArray(data.favorites) ? data.favorites : [];
   data.activity = Array.isArray(data.activity) ? data.activity : [];
   data.foodCalibration = Array.isArray(data.foodCalibration) ? data.foodCalibration : [];
+  data.coachHistory = Array.isArray(data.coachHistory) ? data.coachHistory : [];
   data.today = { ...structuredClone(defaultState.today), ...(data.today || {}) };
   if (data.today.date && data.today.date !== todayDate && (data.today.meals.length || data.today.waterMl)) {
     if (!data.history.some((day) => day.date === data.today.date)) data.history.push(structuredClone(data.today));
@@ -138,6 +153,7 @@ export function userView(state, userId, admin = false) {
     measurements: data.measurements,
     favorites: data.favorites,
     activity: data.activity,
+    coachHistory: data.coachHistory.slice(-40),
     ai,
     aiUsage: admin ? state.aiUsage : [],
     foods: (state.foodCatalog || []).filter((food) => food.visibility === "shared" || food.ownerId === userId),

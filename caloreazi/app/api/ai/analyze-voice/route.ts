@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
   if (!state.ai.encryptedKey) return Response.json({ error: "מנהל המערכת טרם הגדיר שירות AI" }, { status: 409 });
   const { audioDataUrl } = await request.json();
-  if (!/^data:audio\/[\w.+-]+;base64,/.test(String(audioDataUrl || ""))) return Response.json({ error: "לא התקבלה הקלטה תקינה" }, { status: 400 });
+  if (!/^data:audio\/[^;,]+(?:;[^,]*)?;base64,/.test(String(audioDataUrl || ""))) return Response.json({ error: "לא התקבלה הקלטה תקינה" }, { status: 400 });
   if (String(audioDataUrl).length > 14_000_000) return Response.json({ error: "ההקלטה ארוכה מדי; נסה תיאור קצר יותר" }, { status: 413 });
   const month = new Date().toISOString().slice(0, 7); const spent = state.aiUsage.filter((item) => item.month === month).reduce((sum, item) => sum + Number(item.cost || 0), 0);
   if (!evaluateBudget({ spentUsd: spent, monthlyBudgetUsd: state.ai.monthlyBudget, softLimitPercent: state.ai.softLimit, hardLimitEnabled: state.ai.hardLimit }).allowed) return Response.json({ error: "תקציב ה-AI החודשי הגיע למגבלה הקשיחה" }, { status: 429 });

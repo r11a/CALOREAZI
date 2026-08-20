@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0
+
+- Added persistent, profile-aware AI coach memory with weight goals, measurements, meals, trends, activity and learned meal corrections.
+- Prevented repeated greetings and instructed the coach to avoid irrelevant, repetitive hydration reminders.
+- Added activity tracking, weekly/monthly insights, meal scores, soft-delete trash, personal export, audit log and backup APIs.
+- Improved voice recording compatibility and contextual creation of custom fruit, vegetable and drink catalog items.
+- Moved display preferences into the user profile and improved responsive navigation and gallery styling.
+
 ## 0.8.3
 
 - אייקון PWA ודפדפן חדש המבוסס על הסמל המקורי מתוך הלוגו המאושר, ללא שם המותג וללא ציור מחדש.

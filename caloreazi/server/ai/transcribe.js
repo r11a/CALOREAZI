@@ -1,5 +1,5 @@
 export async function transcribeMealAudio({ provider, apiKey, model, audioDataUrl }) {
-  const match = String(audioDataUrl || "").match(/^data:(audio\/[\w.+-]+);base64,(.+)$/);
+  const match = String(audioDataUrl || "").match(/^data:(audio\/[^;,]+)(?:;[^,]*)?;base64,(.+)$/);
   if (!match) throw new Error("פורמט ההקלטה אינו נתמך");
   const [, mimeType, encoded] = match;
   if (provider === "gemini") {

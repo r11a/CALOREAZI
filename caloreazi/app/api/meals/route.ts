@@ -1,6 +1,6 @@
 import { requireUser } from "@/server/auth.js";
-import { calculateMealFromItems } from "@/server/nutrition.js";
-import { ensureUserData, readState, updateState, userView } from "@/server/store.js";
+import { calculateMealFromItems, calculateMealScore } from "@/server/nutrition.js";
+import { addAudit, ensureUserData, readState, updateState, userView } from "@/server/store.js";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -14,7 +14,9 @@ export async function POST(request: Request) {
   const state = await updateState((latest) => {
     const data = ensureUserData(latest, session.userId);
     const source = ["photo", "voice"].includes(body.source) ? body.source : "manual";
-    data.today.meals.push({ id: crypto.randomUUID(), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), items, source, transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time: new Date().toISOString() });
+    const meal = { id: crypto.randomUUID(), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), items, source, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time: new Date().toISOString() };
+    meal.score = calculateMealScore(meal);
+    data.today.meals.push(meal);
     if (["photo", "voice"].includes(source) && items.length) {
       const original = Array.isArray(body.aiOriginalItems) ? body.aiOriginalItems : [];
       items.forEach((item, index) => {
@@ -32,6 +34,6 @@ export async function DELETE(request: Request) {
   const initial = await readState(); const session = requireUser(initial, request);
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
   const { id } = await request.json();
-  const state = await updateState((latest) => { const today = ensureUserData(latest, session.userId).today; today.meals = today.meals.filter((meal) => meal.id !== id); return latest; });
+  const state = await updateState((latest) => { const today = ensureUserData(latest, session.userId).today; const meal = today.meals.find((item) => item.id === id); if (meal) { latest.trash.push({ id: crypto.randomUUID(), userId: session.userId, type: "meal", data: meal, deletedAt: new Date().toISOString() }); today.meals = today.meals.filter((item) => item.id !== id); addAudit(latest, { userId: session.userId, action: "meal.deleted", target: id }); } return latest; });
   return Response.json(userView(state, session.userId, session.role === "admin"));
 }

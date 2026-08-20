@@ -47,3 +47,32 @@ export function calculateNutritionTargets(input) {
     formula: "Mifflin–St Jeor",
   };
 }
+
+export function calculateDayScore(day, profile, activity = []) {
+  const meals = Array.isArray(day?.meals) ? day.meals : [];
+  const totals = meals.reduce((sum, meal) => ({ kcal: sum.kcal + Number(meal.kcal || 0), protein: sum.protein + Number(meal.protein || 0) }), { kcal: 0, protein: 0 });
+  const calorieTarget = Math.max(1, Number(profile?.calories || 2000));
+  const proteinTarget = Math.max(1, Number(profile?.protein || 100));
+  const waterTarget = Math.max(1, Number(profile?.waterMl || 2000));
+  const calorieRatio = totals.kcal / calorieTarget;
+  const calorieScore = Math.max(0, 40 - Math.abs(1 - calorieRatio) * 55);
+  const proteinScore = Math.min(25, totals.protein / proteinTarget * 25);
+  const waterScore = Math.min(20, Number(day?.waterMl || 0) / waterTarget * 20);
+  const dayActivity = activity.filter((item) => item.date === day?.date);
+  const activeMinutes = dayActivity.reduce((sum, item) => sum + Number(item.minutes || 0), 0);
+  const activityScore = Math.min(10, activeMinutes / 30 * 10);
+  const consistencyScore = meals.length >= 2 ? 5 : meals.length ? 3 : 0;
+  const score = Math.round(calorieScore + proteinScore + waterScore + activityScore + consistencyScore);
+  return { score: Math.max(0, Math.min(100, score)), totals, parts: { calories: Math.round(calorieScore), protein: Math.round(proteinScore), water: Math.round(waterScore), activity: Math.round(activityScore), consistency: consistencyScore } };
+}
+
+export function calculateMealScore(meal) {
+  const kcal = Math.max(1, Number(meal?.kcal || 0));
+  const proteinCalories = Number(meal?.protein || 0) * 4;
+  const proteinRatio = proteinCalories / kcal;
+  const protein = Math.min(35, proteinRatio / .25 * 35);
+  const energy = kcal >= 200 && kcal <= 800 ? 30 : kcal < 1100 ? 20 : 10;
+  const composition = Array.isArray(meal?.items) ? Math.min(25, meal.items.length * 6) : 10;
+  const confidence = Math.round(Math.max(0, Math.min(10, Number(meal?.confidence || .7) * 10)));
+  return Math.round(Math.min(100, protein + energy + composition + confidence));
+}

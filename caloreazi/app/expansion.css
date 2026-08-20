@@ -1,0 +1,27 @@
+.category-grid img,
+.quick-food-grid button > .food-sprite,
+.quick-food-grid button > img {
+  background-color: transparent !important;
+}
+.profile-export { display:block; margin-top:10px; color:var(--orange); font-size:11px; font-weight:800; text-decoration:none; }
+.insights-more { padding:7px 10px; border:1px solid var(--line); border-radius:9px; color:var(--orange); background:var(--surface); font-weight:800; }
+.tracking-actions { padding:0 20px 18px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.tracking-actions button { padding:9px; border:1px solid var(--line); border-radius:10px; color:var(--ink); background:var(--surface); font-weight:800; }
+.insights-modal { width:min(760px,calc(100% - 28px)); }
+.trend-summary { margin-top:18px; display:grid; grid-template-columns:repeat(4,1fr); gap:9px; }
+.trend-summary article { padding:13px; border:1px solid var(--line); border-radius:13px; background:color-mix(in srgb,var(--surface) 76%,var(--canvas)); display:flex; flex-direction:column; gap:4px; }
+.trend-summary small,.trend-summary span { color:var(--muted); font-size:9px; }
+.trend-summary strong { font-size:24px; }
+.trend-narrative { padding:13px; border-radius:12px; color:var(--green); background:color-mix(in srgb,var(--green) 9%,var(--surface)); }
+.score-chart { height:190px; padding:18px 8px 0; display:flex; align-items:flex-end; gap:6px; border-bottom:1px solid var(--line); }
+.score-chart > div { height:100%; flex:1; display:flex; align-items:center; justify-content:flex-end; flex-direction:column; gap:5px; }
+.score-chart i { width:100%; max-width:24px; border-radius:6px 6px 0 0; background:linear-gradient(var(--green),#9fc7b0); }
+.score-chart small { color:var(--muted); font-size:8px; }
+.trend-legend { margin-top:12px; display:flex; gap:14px; color:var(--muted); font-size:9px; }
+.trend-legend i { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); }
+.trend-legend i.attention { background:var(--amber); }.trend-legend i.low { background:var(--orange); }
+.trash-list { margin-top:16px; display:grid; gap:8px; }
+.trash-list article { padding:11px; display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:11px; }
+.trash-list article > div { display:flex; flex:1; flex-direction:column; gap:3px; }.trash-list small { color:var(--muted); }
+.trash-list button { padding:7px 10px; border:1px solid var(--line); border-radius:8px; color:var(--green); background:var(--surface); font-weight:800; }
+@media(max-width:760px) { .topbar { flex-direction:row-reverse; }.trend-summary { grid-template-columns:1fr 1fr; } }
