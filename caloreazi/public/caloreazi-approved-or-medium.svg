@@ -9,5 +9,5 @@
        -2 -2 -2 0 5.72"/>
     </filter>
   </defs>
-  <image href="/caloreazi-approved-or-medium.png" x="0" y="0" width="2176" height="768" filter="url(#transparent-background)"/>
+  <image href="caloreazi-approved-or-medium.png" x="0" y="0" width="2176" height="768" filter="url(#transparent-background)"/>
 </svg>

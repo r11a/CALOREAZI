@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Fixed the approved logo asset resolving outside the Home Assistant Ingress path.
+
 ## 0.1.1
 
 - Fixed Home Assistant Ingress entry URL generation that produced a double slash.
