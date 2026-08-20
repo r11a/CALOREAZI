@@ -6,7 +6,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "re
 type AppState = {
   authenticated?: boolean;
   bootstrapRequired?: boolean;
-  owner: null | { name: string; email: string; role: string };
+  owner: null | { name: string; email: string; role: string; avatar?: string };
   currentUser: { id: string; name: string; role: "admin" | "user" };
   profile: any;
   today: { waterMl: number; meals: any[] };
@@ -112,12 +112,15 @@ export default function Home() {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [photoPreview, setPhotoPreview] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
-  const [weightOpen, setWeightOpen] = useState(false);
   const [weightValue, setWeightValue] = useState(0);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickCategory, setQuickCategory] = useState("");
   const [adminHealth, setAdminHealth] = useState<any>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState<any>({});
+  const [now, setNow] = useState(() => new Date());
   const photoInput = useRef<HTMLInputElement>(null);
+  const avatarInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api("/api/state")
@@ -129,6 +132,7 @@ export default function Home() {
       })
       .catch((e) => setError(e.message));
   }, []);
+  useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 60_000); return () => window.clearInterval(timer); }, []);
   const profile = state?.profile;
   const consumed = useMemo(
     () =>
@@ -161,6 +165,19 @@ export default function Home() {
   const weightEntries = state?.measurements || [];
   const latestWeight = weightEntries.at(-1)?.weight || profile?.weight || 0;
   const weightChange = weightEntries.length > 1 ? Number((weightEntries.at(-1).weight - weightEntries[0].weight).toFixed(1)) : 0;
+  const greeting = now.getHours() < 5 ? "לילה טוב" : now.getHours() < 12 ? "בוקר טוב" : now.getHours() < 17 ? "צהריים טובים" : now.getHours() < 21 ? "ערב טוב" : "לילה טוב";
+  const waterRemaining = Math.max(0, Number(profile?.waterMl || 0) - Number(state?.today?.waterMl || 0));
+  const proteinRemaining = Math.max(0, Number(profile?.protein || 0) - macros.protein);
+  const dailyInsights = useMemo(() => {
+    if (!profile) return [];
+    const items = [];
+    if (waterRemaining >= 500) items.push({ icon: "💧", title: "כדאי להשלים שתייה", text: `חסרים עוד ${waterRemaining.toLocaleString()} מ״ל ליעד היומי.` });
+    if (proteinRemaining >= 20) items.push({ icon: "◉", title: "חלבון עדיין נמוך", text: `חסרים כ־${proteinRemaining} גרם. העדף מקור חלבון בארוחה הבאה.` });
+    if (consumed > profile.calories) items.push({ icon: "↗", title: "עברת את היעד היומי", text: `נצרכו ${consumed - profile.calories} קלוריות מעל היעד. יום אחד אינו קובע מגמה.` });
+    else if (remaining > profile.calories * .55 && now.getHours() >= 16) items.push({ icon: "◷", title: "נשאר פער גדול להיום", text: `נותרו ${remaining.toLocaleString()} קלוריות. עדיף לתכנן ארוחה מאוזנת ולא להשלים בבת אחת.` });
+    if (!items.length) items.push({ icon: "✓", title: "אתה בקצב מאוזן", text: "המשך לעדכן ארוחות ושתייה כדי לקבל המלצה מדויקת יותר." });
+    return items.slice(0, 3);
+  }, [profile, waterRemaining, proteinRemaining, consumed, remaining, now]);
 
   async function login(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
@@ -266,7 +283,10 @@ export default function Home() {
   }
   async function saveFavorite(mealId: string) { try { setState(await api("/api/favorites", { method: "POST", body: JSON.stringify({ mealId }) })); } catch (e) { setError((e as Error).message); } }
   async function repeatFavorite(id: string) { try { setState(await api("/api/favorites", { method: "POST", body: JSON.stringify({ action: "repeat", id }) })); } catch (e) { setError((e as Error).message); } }
-  async function saveWeight(event: FormEvent) { event.preventDefault(); setBusy(true); try { setState(await api("/api/measurements", { method: "POST", body: JSON.stringify({ weight: weightValue }) })); setWeightOpen(false); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
+  function openProfile() { setProfileForm({ name: state?.owner?.name || "", age: profile.age, height: profile.height, targetWeight: profile.targetWeight, activity: profile.activity, diet: profile.diet, restrictions: profile.restrictions || "", avatar: profile.avatar || "" }); setWeightValue(latestWeight); setProfileOpen(true); }
+  async function saveProfile(event: FormEvent) { event.preventDefault(); setBusy(true); try { let latest = await api("/api/profile", { method: "PUT", body: JSON.stringify(profileForm) }); if (weightValue && Number(weightValue) !== Number(latestWeight)) latest = await api("/api/measurements", { method: "POST", body: JSON.stringify({ weight: weightValue }) }); setState(latest); setProfileOpen(false); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
+  async function loadAvatar(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; try { const avatar = await prepareImage(file, 512, .78); setProfileForm((current: any) => ({ ...current, avatar })); } catch (e) { setError((e as Error).message); } }
+  async function switchUser() { await api("/api/auth/session", { method: "DELETE" }); window.location.reload(); }
   async function selectQuickFood(item: any) { if (item.name === "מים") { await addWater(); setQuickAddOpen(false); return; } setMealForm({ name: `${item.name} · ${item.portion}`, kcal: item.kcal, protein: item.protein, carbs: item.carbs, fat: item.fat }); setPhotoPreview(""); setPhotoStatus("ערכים משוערים למנה המקובלת — אפשר לתקן כמות וערכים לפני השמירה."); setQuickAddOpen(false); setMealOpen(true); }
   async function saveAi(test = false) {
     setBusy(true);
@@ -302,13 +322,13 @@ export default function Home() {
     catch (e) { setAiStatus((e as Error).message); } finally { setBusy(false); }
   }
 
-  async function prepareImage(file: File) {
+  async function prepareImage(file: File, maxSize = 1600, quality = 0.82) {
     if (!file.type.match(/^image\/(jpeg|png|webp)$/)) throw new Error("יש לבחור תמונת JPG, PNG או WebP");
     const url = URL.createObjectURL(file); const image = new Image(); image.src = url; await image.decode();
-    const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+    const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
     const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale);
     canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height); URL.revokeObjectURL(url);
-    return canvas.toDataURL("image/jpeg", 0.82);
+    return canvas.toDataURL("image/jpeg", quality);
   }
   async function analyzePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
@@ -388,29 +408,21 @@ export default function Home() {
         </div>
         <div className="top-actions">
           <button
-            className="settings-button"
-            onClick={openAdmin}
-            aria-label={isAdmin ? "מרכז ניהול" : "כניסת מנהל"}
-            title={isAdmin ? "מרכז ניהול" : "כניסת ADMIN"}
-          >
-            {isAdmin ? "⚙" : "🔒"}
-          </button>
-          <button
             className="theme-toggle"
             onClick={() => setDark(!dark)}
             aria-label="החלפת ערכת צבעים"
           >
             {dark ? "☀" : "◐"}
           </button>
-          <button className="avatar" title={isAdmin ? "מנהל מערכת" : "משתמש"}>
-            {state.owner.name[0]}
+          <button className="avatar" onClick={openProfile} title="הפרופיל שלי">
+            {profile.avatar ? <img src={profile.avatar} alt="" /> : state.owner.name[0]}
           </button>
         </div>
       </header>
       <section className="welcome">
         <div>
           <p className="eyebrow">המסלול שלך · {goalLabels[profile.goal]}</p>
-          <h1>בוקר טוב, {state.owner.name}</h1>
+          <button className="welcome-name" onClick={openProfile}><h1>{greeting}, {state.owner.name}</h1><span>פרטים אישיים ›</span></button>
           <p>הנתונים נשמרים. עוד החלטה טובה אחת בכל פעם.</p>
         </div>
         <div className="streak">
@@ -516,24 +528,25 @@ export default function Home() {
           </div>
         </div>
       </section>
-      <section className="primary-actions">
+      <section className="primary-actions action-trio">
         <button className="camera-action" onClick={() => photoInput.current?.click()} disabled={busy}>
-          <span className="camera-icon">⌾</span>
+          <span className="camera-icon">📷</span>
           <span>
-            <strong>מה אכלת?</strong>
+            <strong>צילום ארוחה</strong>
             <small>צלם ארוחה וקבל ניתוח AI</small>
           </span>
           <b>{busy ? "מנתח…" : "צלם עכשיו"}</b>
         </button>
         <input ref={photoInput} className="camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={analyzePhoto} />
+        <button className="manual-action" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }}>
+          <span className="manual-icon">＋</span><span><strong>הוספה ידנית</strong><small>פרי, ירק, משקה או ארוחה</small></span>
+        </button>
         <button className="coach-action" onClick={() => setCoachOpen(true)}>
           <span className="coach-spark">✦</span>
           <span>
             <strong>שאל את המאמן</strong>
             <small>
-              {state.ai.keyConfigured
-                ? `${state.ai.provider} · ${state.ai.model}`
-                : "נדרש חיבור AI בהגדרות"}
+              {state.ai.keyConfigured ? "המלצות אישיות לפי היום שלך" : "המאמן עדיין לא זמין"}
             </small>
           </span>
           <b>←</b>
@@ -589,11 +602,7 @@ export default function Home() {
           {state.favorites?.length > 0 && <div className="favorites-strip"><strong>ארוחות מועדפות</strong><div>{state.favorites.map((favorite) => <button key={favorite.id} onClick={() => repeatFavorite(favorite.id)}><span>＋</span>{favorite.meal.name}<small>{favorite.meal.kcal} kcal</small></button>)}</div></div>}
         </div>
         <div className="side-stack">
-          <section className="panel weight-panel">
-            <header><div><p className="eyebrow">מגמת משקל</p><h2>המשקל שלי</h2></div><strong>{latestWeight}<small> ק״ג</small></strong></header>
-            <div className="weight-summary"><span className={weightChange <= 0 ? "positive" : "attention"}>{weightEntries.length > 1 ? `${weightChange > 0 ? "+" : ""}${weightChange} ק״ג בתקופה` : "נדרשות שתי מדידות להצגת מגמה"}</span><small>יעד: {profile.targetWeight} ק״ג</small></div>
-            <button onClick={() => { setWeightValue(latestWeight); setWeightOpen(true); }}>עדכן משקל</button>
-          </section>
+          <section className="panel insights-panel"><header><div><p className="eyebrow">לפי המצב היומי</p><h2>המלצות להמשך היום</h2></div><span>✦</span></header><div className="daily-insights">{dailyInsights.map((item) => <article key={item.title}><i>{item.icon}</i><div><strong>{item.title}</strong><small>{item.text}</small></div></article>)}</div></section>
           <section className="panel water-panel">
             <header>
               <div>
@@ -618,7 +627,7 @@ export default function Home() {
             </p>
             <button onClick={addWater}>＋ כוס 250ml</button>
           </section>
-          <section className="insight-card">
+          <section className="insight-card coach-insight">
             <span>✦</span>
             <div>
               <p className="eyebrow">תובנה מהמאמן</p>
@@ -658,7 +667,7 @@ export default function Home() {
         <button>
           <span>▦</span>היסטוריה
         </button>
-        <button className="nav-camera" onClick={() => photoInput.current?.click()}>⌾</button>
+        <button className="nav-camera" onClick={() => photoInput.current?.click()} aria-label="צילום ארוחה">📷</button>
         <button onClick={openAdmin}>
           <span>{isAdmin ? "⚙" : "🔒"}</span>{isAdmin ? "ניהול" : "Admin"}
         </button>
@@ -865,7 +874,7 @@ export default function Home() {
         </div>
       )}
       {quickAddOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setQuickAddOpen(false)} /><section className="settings-modal quick-add-modal"><header><div><p className="eyebrow">הוספה מהירה</p><h2>{quickCategory ? "מה להוסיף?" : "בחר קטגוריה"}</h2></div><button onClick={() => setQuickAddOpen(false)}>×</button></header>{!quickCategory ? <div className="category-grid"><button onClick={() => setQuickCategory("vegetables")}><img src="/category-vegetables-v1.png" alt="מבחר ירקות" /><strong>ירקות</strong><small>טריים, מבושלים וסלט</small></button><button onClick={() => setQuickCategory("fruits")}><img src="/category-fruits-v1.png" alt="מבחר פירות" /><strong>פירות</strong><small>מנה נפוצה בלחיצה</small></button><button onClick={() => setQuickCategory("drinks")}><img src="/category-drinks-v1.png" alt="מבחר משקאות" /><strong>משקאות</strong><small>חמים, קלים, יין ובירה</small></button></div> : <><button className="category-back" onClick={() => setQuickCategory("")}>→ חזרה לקטגוריות</button><div className="quick-food-grid">{quickFoods[quickCategory].map((item) => <button key={`${item.name}-${item.portion}`} onClick={() => selectQuickFood(item)}><span>{item.icon}</span><strong>{item.name}</strong><small>{item.portion}</small><b>{item.kcal} kcal</b></button>)}</div></>}</section></div>}
-      {weightOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setWeightOpen(false)} /><form className="settings-modal compact-modal" onSubmit={saveWeight}><header><div><p className="eyebrow">מגמה ולא תנודה</p><h2>עדכון משקל</h2></div><button type="button" onClick={() => setWeightOpen(false)}>×</button></header><p className="modal-help">מדידה עקבית באותה שעה חשובה יותר משינוי של יום בודד.</p><div className="field-stack"><label>משקל נוכחי בק״ג<input type="number" min="25" max="350" step="0.1" value={weightValue || ""} onChange={(e) => setWeightValue(Number(e.target.value))} autoFocus /></label></div><footer><button type="button" onClick={() => setWeightOpen(false)}>ביטול</button><button className="primary" disabled={busy || !weightValue}>שמור מדידה</button></footer></form></div>}
+      {profileOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setProfileOpen(false)} /><form className="settings-modal profile-modal" onSubmit={saveProfile}><header><div><p className="eyebrow">החשבון שלי</p><h2>פרטים אישיים</h2></div><button type="button" onClick={() => setProfileOpen(false)}>×</button></header><div className="profile-photo"><button type="button" onClick={() => avatarInput.current?.click()}>{profileForm.avatar ? <img src={profileForm.avatar} alt="תמונת פרופיל" /> : <span>{state.owner.name[0]}</span>}<small>החלף תמונה</small></button><input ref={avatarInput} className="camera-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={loadAvatar} /><div><strong>{state.owner.name}</strong><small>{state.owner.email}</small><button type="button" onClick={switchUser}>החלף משתמש / יציאה</button></div></div><div className="settings-grid"><label>שם<input value={profileForm.name || ""} onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })} /></label><label>גיל<input type="number" min="14" max="120" value={profileForm.age || ""} onChange={(e) => setProfileForm({ ...profileForm, age: Number(e.target.value) })} /></label><label>גובה (ס״מ)<input type="number" min="100" max="250" value={profileForm.height || ""} onChange={(e) => setProfileForm({ ...profileForm, height: Number(e.target.value) })} /></label><label>משקל נוכחי (ק״ג)<input type="number" min="25" max="350" step="0.1" value={weightValue || ""} onChange={(e) => setWeightValue(Number(e.target.value))} /></label><label>משקל יעד<input type="number" min="25" max="350" step="0.1" value={profileForm.targetWeight || ""} onChange={(e) => setProfileForm({ ...profileForm, targetWeight: Number(e.target.value) })} /></label><label>רמת פעילות<select value={profileForm.activity || "light"} onChange={(e) => setProfileForm({ ...profileForm, activity: e.target.value })}><option value="low">רוב היום בישיבה</option><option value="light">קצת בתנועה</option><option value="active">פעיל</option><option value="very">פעיל מאוד</option></select></label><label className="wide">מגבלות והעדפות<input value={profileForm.restrictions || ""} onChange={(e) => setProfileForm({ ...profileForm, restrictions: e.target.value })} placeholder="רגישויות, אלרגיות או מזונות שנמנעים מהם" /></label></div><div className="profile-metrics"><span>BMI <b>{profile.caloriePlan?.bmi}</b></span><span>משקל נוכחי <b>{latestWeight} ק״ג</b></span><span>יעד <b>{profile.targetWeight} ק״ג</b></span><span>מגמה <b>{weightEntries.length > 1 ? `${weightChange > 0 ? "+" : ""}${weightChange} ק״ג` : "אין עדיין"}</b></span></div><footer><button type="button" onClick={switchUser}>החלף משתמש</button><button className="primary" disabled={busy}>שמור ועדכן יעדים</button></footer></form></div>}
       {mealOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setMealOpen(false)} />

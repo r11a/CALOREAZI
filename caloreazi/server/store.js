@@ -116,7 +116,7 @@ export function userView(state, userId, admin = false) {
     : { keyConfigured: Boolean(state.ai?.encryptedKey), available: Boolean(state.ai?.encryptedKey) };
   return {
     version: state.version,
-    owner: { id: user.id, name: user.name, email: user.email, role: user.role },
+    owner: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: data.profile?.avatar || "" },
     currentUser: { id: user.id, name: user.name, role: user.role },
     profile: data.profile || null,
     today: { ...structuredClone(defaultState.today), ...(data.today || {}) },
