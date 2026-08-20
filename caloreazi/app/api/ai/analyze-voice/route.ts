@@ -19,14 +19,19 @@ export async function POST(request: Request) {
   const state = await readState(); const session = requireUser(state, request);
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
   if (!state.ai.encryptedKey) return Response.json({ error: "מנהל המערכת טרם הגדיר שירות AI" }, { status: 409 });
-  const { audioDataUrl } = await request.json();
-  if (!/^data:audio\/[^;,]+(?:;[^,]*)?;base64,/.test(String(audioDataUrl || ""))) return Response.json({ error: "לא התקבלה הקלטה תקינה" }, { status: 400 });
+  const contentType = request.headers.get("content-type") || "";
+  let audioDataUrl = ""; let browserTranscript = "";
+  if (contentType.includes("multipart/form-data")) { const form = await request.formData(); const audio = form.get("audio"); browserTranscript = String(form.get("browserTranscript") || "").trim(); if (audio instanceof File && audio.size) audioDataUrl = `data:${audio.type || "audio/webm"};base64,${Buffer.from(await audio.arrayBuffer()).toString("base64")}`; }
+  else { const body = await request.json(); audioDataUrl = String(body.audioDataUrl || ""); browserTranscript = String(body.browserTranscript || "").trim(); }
+  if (!/^data:audio\/(?:webm|mp4|ogg|mpeg|wav|x-m4a)(?:;[^,]*)?;base64,/i.test(String(audioDataUrl || ""))) return Response.json({ error: "פורמט ההקלטה אינו נתמך. נסה להקליט שוב או לפתוח בדפדפן חיצוני." }, { status: 400 });
   if (String(audioDataUrl).length > 14_000_000) return Response.json({ error: "ההקלטה ארוכה מדי; נסה תיאור קצר יותר" }, { status: 413 });
   const month = new Date().toISOString().slice(0, 7); const spent = state.aiUsage.filter((item) => item.month === month).reduce((sum, item) => sum + Number(item.cost || 0), 0);
   if (!evaluateBudget({ spentUsd: spent, monthlyBudgetUsd: state.ai.monthlyBudget, softLimitPercent: state.ai.softLimit, hardLimitEnabled: state.ai.hardLimit }).allowed) return Response.json({ error: "תקציב ה-AI החודשי הגיע למגבלה הקשיחה" }, { status: 429 });
   try {
     const apiKey = await decryptSecret(state.ai.encryptedKey);
-    const transcript = await transcribeMealAudio({ provider: state.ai.provider, apiKey, model: state.ai.model, audioDataUrl: String(audioDataUrl) });
+    let transcript = browserTranscript;
+    try { transcript = await transcribeMealAudio({ provider: state.ai.provider, apiKey, model: state.ai.model, audioDataUrl: String(audioDataUrl) }) || transcript; }
+    catch (error) { if (!transcript) throw error; }
     if (!transcript) throw new Error("לא נשמע תיאור ברור בהקלטה");
     const call = state.ai.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply;
     const result = await call({ apiKey, model: state.ai.model, instructions: "אתה מנתח תזונה זהיר. פרק את תיאור הארוחה לפריטים נפרדים. מספר כמו שתי חתיכות הוא quantity=2 והמשקל הוא לפריט אחד. אל תנחש ודאות כשכמות חסרה. החזר JSON תקין בלבד.", input: `תמלול: ${transcript}\nהחזר בדיוק: {"name":"שם ארוחה בעברית","items":[{"name":"שם פריט","grams":150,"quantity":1,"unit":"חתיכה","kcalPer100":100,"proteinPer100":10,"carbsPer100":12,"fatPer100":3}],"confidence":"low|medium|high","explanation":"הנחות קצרות"}` });

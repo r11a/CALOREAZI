@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+- Reused the proven PROJECTS voice-recording pattern: browser-native MediaRecorder and multipart audio upload.
+- Added Hebrew browser speech recognition as a resilient transcript fallback when provider audio decoding fails.
+- Improved mobile microphone errors, minimum recording validation and support for WebM, MP4/M4A and Ogg audio.
+
 ## 1.0.0
 
 - Added official Home Assistant `icon.png` and `logo.png` assets based on the approved CALOREAZI symbol.

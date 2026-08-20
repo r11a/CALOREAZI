@@ -12,8 +12,9 @@ export async function transcribeMealAudio({ provider, apiKey, model, audioDataUr
     if (!response.ok) throw new Error(payload?.error?.message || "תמלול Gemini נכשל");
     return (payload.candidates?.[0]?.content?.parts || []).map((part) => part.text || "").join("").trim();
   }
-  const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
-  const extension = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "m4a" : "wav";
+  const bytes = Buffer.from(encoded, "base64");
+  if (bytes.length < 800) throw new Error("ההקלטה ריקה או קצרה מדי");
+  const extension = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : mimeType.includes("mpeg") ? "mp3" : "wav";
   const form = new FormData();
   form.append("file", new Blob([bytes], { type: mimeType }), `meal.${extension}`);
   form.append("model", "gpt-4o-mini-transcribe");
