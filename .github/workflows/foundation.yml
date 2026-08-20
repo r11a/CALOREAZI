@@ -53,3 +53,15 @@ jobs:
           test "$(psql "$CALOREAZI_DATABASE_URL" -Atc "SELECT COUNT(*) FROM meals")" -ge 1
       - name: Build Home Assistant image
         run: docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.22 -t caloreazi-foundation:test .
+      - name: Boot Home Assistant image and verify runtime
+        run: |
+          docker run -d --name caloreazi-runtime -p 18686:8686 caloreazi-foundation:test
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18686/health; then
+              docker logs caloreazi-runtime
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs caloreazi-runtime
+          exit 1
