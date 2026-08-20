@@ -40,6 +40,7 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
       - run: npm ci
       - run: npm run db:migrate
       - run: npm test
