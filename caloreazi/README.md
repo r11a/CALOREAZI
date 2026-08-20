@@ -1,4 +1,4 @@
-# CALOREAZI 0.8.0
+# CALOREAZI 1.0.0
 
 Private Home Assistant nutrition coach with persistent onboarding, daily tracking, global Admin-managed AI, and AI meal-photo analysis.
 
@@ -26,11 +26,13 @@ API keys are encrypted at rest with AES-256-GCM. The key and encryption secret r
 - Editable photo, upload, and voice meal analysis; voice audio is not retained after transcription.
 - Private/shared food library with reuse of existing artwork before optional AI image generation.
 - Consent-based partner tracking with separate daily, meal-detail, and weight permissions.
-- Context-aware AI Coach using the owner profile and current day.
+- Persistent personal AI Coach using goals, current measurements, meals, activity, trends, preferences, learned corrections and recent conversation.
 - OpenAI and Gemini adapters, connection testing, token logging, estimated costs, soft warnings, and hard monthly limits.
-- Responsive Hebrew light and granite-dark interfaces.
+- Day/week/month history, scores, activity and weight trends, recycle bin and personal data export.
+- Admin health, users, encrypted AI configuration, audit log, verified backups, download and safety restore.
+- Responsive Hebrew light and granite-dark interfaces, Ingress-safe PWA and official Home Assistant icon/logo assets.
 
-Camera meal analysis, password reset, history, and backup administration are not yet complete. Home Assistant Ingress is the recommended access path. Standalone LAN access is also enabled by default on port `8686` for testing.
+Home Assistant Ingress is the recommended access path. Standalone LAN access is also enabled by default on port `8686`.
 
 ## License
 

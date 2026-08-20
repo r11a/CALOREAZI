@@ -1,5 +1,5 @@
-import { decryptSecret, encryptSecret, publicState, readState, updateState } from "@/server/store.js";
-import { requireAdmin } from "@/server/auth.js";
+import { addAudit, decryptSecret, encryptSecret, publicState, readState, updateState } from "@/server/store.js";
+import { currentSession, requireAdmin } from "@/server/auth.js";
 import { generateOpenAiCoachReply } from "@/server/ai/openai.js";
 import { generateGeminiCoachReply } from "@/server/ai/gemini.js";
 import { AI_MODELS, findModel } from "@/server/ai/models.js";
@@ -17,6 +17,7 @@ export async function PUT(request: Request) {
   const state = await updateState(async (state) => {
     state.ai = { ...state.ai, provider, model: selected.id, inputCost: selected.inputCost, outputCost: selected.outputCost, monthlyBudget: Math.max(0, Number(body.monthlyBudget) || 0), softLimit: Math.min(100, Math.max(1, Number(body.softLimit) || 80)), hardLimit: body.hardLimit !== false };
     if (String(body.apiKey || "").trim()) state.ai.encryptedKey = await encryptSecret(String(body.apiKey).trim());
+    addAudit(state, { userId: currentSession(request)?.userId, action: "ai.settings_updated", target: `${provider}/${selected.id}`, details: String(body.apiKey || "").trim() ? "API key replaced" : "Configuration updated" });
     return state;
   });
   return Response.json(publicState(state, true).ai);

@@ -1,5 +1,5 @@
 name: "CALOREAZI"
-version: "0.9.0"
+version: "1.0.0"
 slug: "caloreazi"
 description: "AI-assisted nutrition tracking, made easy"
 url: "https://github.com/r11a/CALOREAZI"
@@ -21,4 +21,7 @@ ports_description:
 webui: "http://[HOST]:[PORT:8686]"
 watchdog: "http://[HOST]:[PORT:8686]/health"
 backup: cold
-stage: experimental
+map:
+  - share:rw
+  - media:rw
+stage: stable

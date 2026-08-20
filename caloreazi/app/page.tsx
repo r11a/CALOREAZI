@@ -1,5 +1,5 @@
 "use client";
-/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/rules-of-hooks */
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/rules-of-hooks, jsx-a11y/no-autofocus */
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
@@ -16,6 +16,8 @@ type AppState = {
   measurements: any[];
   favorites: any[];
   activity: any[];
+  dailyScore: { score: number; parts: Record<string, number> };
+  streak: number;
   coachHistory: { role: "user" | "assistant"; text: string; at?: string }[];
   foods: any[];
   partnerships: any[];
@@ -129,6 +131,13 @@ export default function Home() {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickCategory, setQuickCategory] = useState("");
   const [adminHealth, setAdminHealth] = useState<any>(null);
+  const [adminBackups, setAdminBackups] = useState<any[]>([]);
+  const [adminAudit, setAdminAudit] = useState<any[]>([]);
+  const [storageForm, setStorageForm] = useState({ backupDestination: "internal", backupRelativePath: "CALOREAZI/Backups", galleryDestination: "internal", galleryRelativePath: "CALOREAZI/Gallery" });
+  const [storageStatus, setStorageStatus] = useState<any>(null);
+  const [online, setOnline] = useState(true);
+  const [waterOpen, setWaterOpen] = useState(false);
+  const [waterValue, setWaterValue] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileForm, setProfileForm] = useState<any>({});
   const [now, setNow] = useState(() => new Date());
@@ -150,6 +159,10 @@ export default function Home() {
   const [foodCategory, setFoodCategory] = useState("meals");
   const [manualAiMode, setManualAiMode] = useState(false);
   const [catalogOnly, setCatalogOnly] = useState(false);
+  const [customFoodOpen, setCustomFoodOpen] = useState(false);
+  const [customFoodName, setCustomFoodName] = useState("");
+  const [customFoodDraft, setCustomFoodDraft] = useState<any>(null);
+  const [customFoodStatus, setCustomFoodStatus] = useState("");
   const photoInput = useRef<HTMLInputElement>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
@@ -169,6 +182,13 @@ export default function Home() {
       .catch((e) => setError(e.message));
   }, []);
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 60_000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update); window.addEventListener("offline", update);
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => undefined);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
+  }, []);
   useEffect(() => { const saved = window.localStorage.getItem("caloreazi-theme"); if (saved) setDark(saved === "dark"); }, []);
   useEffect(() => { window.localStorage.setItem("caloreazi-theme", dark ? "dark" : "light"); }, [dark]);
   const profile = state?.profile;
@@ -224,13 +244,19 @@ export default function Home() {
   }
 
   async function loadAdminData() {
-    const [users, aiData, health] = await Promise.all([api("/api/admin/users"), api("/api/ai/settings"), api("/api/admin/health")]);
+    const [users, aiData, health, backups, audit, storage] = await Promise.all([api("/api/admin/users"), api("/api/ai/settings"), api("/api/admin/health"), api("/api/admin/backups"), api("/api/admin/audit"), api("/api/admin/storage")]);
     setAdminUsers(users); setModelCatalog(aiData.models);
     setAdminHealth(health);
+    setAdminBackups(backups.backups || []); setAdminAudit(audit.items || []);
+    setStorageForm(storage.settings); setStorageStatus(storage.status);
     const available = aiData.models[aiData.settings.provider] || [];
     const selected = available.find((item: any) => item.id === aiData.settings.model) || available[0];
     setAiForm((current) => ({ ...current, ...aiData.settings, ...(selected ? { model: selected.id, inputCost: selected.inputCost, outputCost: selected.outputCost } : {}), apiKey: "" }));
   }
+
+  async function createBackup() { setBusy(true); try { const data = await api("/api/admin/backups", { method: "POST" }); setAdminBackups(data.backups || []); setAiStatus("הגיבוי נוצר ואומת ✓"); await loadAdminData(); } catch (e) { setAiStatus((e as Error).message); } finally { setBusy(false); } }
+  async function restoreBackup(name: string) { if (!window.confirm("לשחזר את הגיבוי? המערכת תיצור קודם Safety Backup והמצב הנוכחי יוחלף.")) return; setBusy(true); try { await api("/api/admin/backups", { method: "PATCH", body: JSON.stringify({ name }) }); setAiStatus("השחזור הושלם. טוען מחדש…"); window.setTimeout(() => window.location.reload(), 800); } catch (e) { setAiStatus((e as Error).message); setBusy(false); } }
+  async function saveStorage() { setBusy(true); setAiStatus(""); try { await api("/api/admin/storage", { method: "PATCH", body: JSON.stringify(storageForm) }); const latest = await api("/api/admin/storage"); setStorageForm(latest.settings); setStorageStatus(latest.status); setAiStatus("יעדי האחסון נשמרו ונבדקה הרשאת כתיבה ✓"); } catch (e) { setAiStatus((e as Error).message); } finally { setBusy(false); } }
 
   async function openAdmin() {
     if (isAdmin) { setSettingsOpen(true); loadAdminData().catch((e) => setError(e.message)); }
@@ -289,6 +315,8 @@ export default function Home() {
       setError((e as Error).message);
     }
   }
+  function openWaterEditor() { setWaterValue(Number(state?.today?.waterMl || 0)); setWaterOpen(true); }
+  async function saveWater() { setBusy(true); try { setState(await api("/api/water", { method: "PUT", body: JSON.stringify({ amount: waterValue }) })); setWaterOpen(false); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
   async function openInsights() { setInsightsOpen(true); try { setInsightsData(await api("/api/insights")); } catch (e) { setError((e as Error).message); } }
   async function addActivity(event: FormEvent) { event.preventDefault(); setBusy(true); try { setState(await api("/api/activity", { method: "POST", body: JSON.stringify(activityForm) })); setActivityOpen(false); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
   async function openTrash() { setProfileOpen(false); setTrashOpen(true); try { const data = await api("/api/trash"); setTrashItems(data.items); } catch (e) { setError((e as Error).message); } }
@@ -298,7 +326,7 @@ export default function Home() {
     setBusy(true);
     try {
       const calculated = mealItems.length ? mealItems.reduce((total, item) => { const factor = Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1) / 100; return { kcal: total.kcal + Number(item.kcalPer100 || 0) * factor, protein: total.protein + Number(item.proteinPer100 || 0) * factor, carbs: total.carbs + Number(item.carbsPer100 || 0) * factor, fat: total.fat + Number(item.fatPer100 || 0) * factor }; }, { kcal: 0, protein: 0, carbs: 0, fat: 0 }) : mealForm;
-      const finalMeal = { ...mealForm, period: mealPeriod, kcal: Math.round(calculated.kcal), protein: Math.round(calculated.protein), carbs: Math.round(calculated.carbs), fat: Math.round(calculated.fat), items: mealItems, aiOriginalItems, source: mealSource, transcript: mealTranscript };
+      const finalMeal = { ...mealForm, period: mealPeriod, kcal: Math.round(calculated.kcal), protein: Math.round(calculated.protein), carbs: Math.round(calculated.carbs), fat: Math.round(calculated.fat), items: mealItems, aiOriginalItems, source: mealSource, transcript: mealTranscript, image: photoPreview };
       let latest = state;
       if (!catalogOnly) latest = await api("/api/meals", { method: "POST", body: JSON.stringify(finalMeal) });
       if (saveToLibrary || catalogOnly) {
@@ -337,7 +365,10 @@ export default function Home() {
   async function switchUser() { await api("/api/auth/session", { method: "DELETE" }); window.location.reload(); }
   async function invitePartner(event: FormEvent) { event.preventDefault(); setBusy(true); try { setState(await api("/api/partnerships", { method: "POST", body: JSON.stringify(partnerForm) })); setPartnerForm({ email: "", daily: true, meals: true, weight: false }); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
   async function updatePartnership(id: string, action: "accept" | "revoke") { try { setState(await api("/api/partnerships", { method: "PATCH", body: JSON.stringify({ id, action }) })); } catch (e) { setError((e as Error).message); } }
-  function openManualMeal(category = "meals") { const addingCatalogItem = category !== "meals"; setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems([]); setAiOriginalItems([]); setMealSource("manual"); setManualAiMode(true); setManualDescription(""); setFoodCategory(category); setCatalogOnly(addingCatalogItem); setSaveToLibrary(addingCatalogItem); setGenerateFoodArtwork(addingCatalogItem); setPhotoPreview(""); setPhotoStatus(addingCatalogItem ? `הוסף ${category === "fruits" ? "פרי" : category === "vegetables" ? "ירק" : "משקה"} חדש לגלריה. ה-AI יחשב ערכים וייצר תמונה לפני השמירה.` : "תאר את הארוחה וה-AI יחשב ויפרק אותה לפריטים לפני האישור."); setQuickAddOpen(false); setMealOpen(true); }
+  function openManualMeal(category = "meals") { if (category !== "meals") { setFoodCategory(category); openCustomFood(); return; } setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems([]); setAiOriginalItems([]); setMealSource("manual"); setManualAiMode(true); setManualDescription(""); setFoodCategory(category); setCatalogOnly(false); setSaveToLibrary(false); setGenerateFoodArtwork(false); setPhotoPreview(""); setPhotoStatus("תאר את הארוחה וה-AI יחשב ויפרק אותה לפריטים לפני האישור."); setQuickAddOpen(false); setMealOpen(true); }
+  function openCustomFood() { setCustomFoodName(""); setCustomFoodDraft(null); setCustomFoodStatus(""); setCustomFoodOpen(true); }
+  async function createCustomFoodDraft() { if (!customFoodName.trim()) return; setBusy(true); setCustomFoodStatus("יוצר תמונה ומחשב מנה טיפוסית…"); try { setCustomFoodDraft(await api("/api/ai/food-draft", { method: "POST", body: JSON.stringify({ name: customFoodName, category: quickCategory }) })); setCustomFoodStatus("אפשר לשמור או לבטל. הערכים הם הערכת AI למנה המוצגת."); } catch (e) { setCustomFoodStatus((e as Error).message); } finally { setBusy(false); } }
+  async function saveCustomFood() { if (!customFoodDraft) return; setBusy(true); try { await api("/api/foods", { method: "POST", body: JSON.stringify({ ...customFoodDraft, category: quickCategory, visibility: "private" }) }); setState(await api("/api/state")); setCustomFoodOpen(false); setCustomFoodDraft(null); setCustomFoodName(""); } catch (e) { setCustomFoodStatus((e as Error).message); } finally { setBusy(false); } }
   function selectQuickFood(item: any) { setMealPeriod("snack"); setPendingQuickFood(item); }
   function confirmQuickFood() { const item = pendingQuickFood; if (!item) return; if (item.name === "מים") { addWater(); setPendingQuickFood(null); setQuickAddOpen(false); return; } setMealForm({ name: `${item.name} · ${item.portion}`, kcal: item.kcal, protein: item.protein, carbs: item.carbs, fat: item.fat }); setMealItems([]); setAiOriginalItems([]); setMealSource("manual"); setManualAiMode(false); setPhotoPreview(""); setPhotoStatus("ערכים משוערים למנה המקובלת — אפשר לתקן לפני השמירה."); setPendingQuickFood(null); setQuickAddOpen(false); setMealOpen(true); }
   async function analyzeManualDescription() { if (!manualDescription.trim()) return; setBusy(true); setPhotoStatus("מחשב את הארוחה בעזרת AI…"); try { const result = await api("/api/ai/analyze-text", { method: "POST", body: JSON.stringify({ description: manualDescription }) }); setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems(result.items); setAiOriginalItems(structuredClone(result.items)); setPhotoStatus(`ה-AI זיהה ${result.items.length} פריטים. ${result.explanation || ""} בדוק ואשר.`); } catch (e) { setPhotoStatus((e as Error).message); } finally { setBusy(false); } }
@@ -476,6 +507,7 @@ export default function Home() {
 
   return (
     <main className={dark ? "app-shell theme-dark" : "app-shell"} dir="rtl">
+      {!online && <div className="offline-banner">אין כרגע חיבור · הנתונים הקיימים זמינים, פעולות AI יחזרו כשהחיבור יתחדש</div>}
       <header className="topbar">
         <div className="logo">
           <img
@@ -504,8 +536,8 @@ export default function Home() {
         </div>
         <div className="streak">
           <span>🔥</span>
-          <strong>1</strong>
-          <small>יום ראשון</small>
+          <strong>{state.streak || 0}</strong>
+          <small>{state.streak === 1 ? "יום ברצף" : "ימים ברצף"}</small>
         </div>
       </section>
       <section className="daily-card">
@@ -524,9 +556,7 @@ export default function Home() {
           <div className="score-row">
             <span>היום שלך</span>
             <strong>
-              {consumed
-                ? Math.min(100, Math.round((consumed / profile.calories) * 100))
-                : 0}
+              {state.dailyScore?.score || 0}
             </strong>
             <small>/ 100</small>
           </div>
@@ -688,10 +718,11 @@ export default function Home() {
                 <p className="eyebrow">שתייה</p>
                 <h2>מים היום</h2>
               </div>
-              <strong>
+              <button className="water-edit" onClick={openWaterEditor} aria-label="עריכת כמות המים">
                 {state.today.waterMl}
                 <small>ml</small>
-              </strong>
+                <span>עריכה</span>
+              </button>
             </header>
             <div className="water-progress">
               <i
@@ -830,8 +861,10 @@ export default function Home() {
             <nav className="admin-nav">
               <button className="active" onClick={() => document.getElementById("admin-ai")?.scrollIntoView({ behavior: "smooth" })}>AI וטוקנים</button>
               <button onClick={() => document.getElementById("admin-users")?.scrollIntoView({ behavior: "smooth" })}>משתמשים</button>
-              <button disabled>הרשאות</button>
               <button onClick={() => document.getElementById("admin-security")?.scrollIntoView({ behavior: "smooth" })}>אבטחה</button>
+              <button onClick={() => document.getElementById("admin-storage")?.scrollIntoView({ behavior: "smooth" })}>אחסון</button>
+              <button onClick={() => document.getElementById("admin-backups")?.scrollIntoView({ behavior: "smooth" })}>גיבויים</button>
+              <button onClick={() => document.getElementById("admin-audit")?.scrollIntoView({ behavior: "smooth" })}>Audit</button>
             </nav>
             {adminHealth && <section className="health-grid"><article><span className="health-ok">●</span><small>Application</small><strong>תקין</strong></article><article><span className="health-ok">●</span><small>Database</small><strong>{adminHealth.meals} ארוחות</strong></article><article><span className={adminHealth.ai === "configured" ? "health-ok" : "health-warn"}>●</span><small>AI</small><strong>{adminHealth.ai === "configured" ? "מחובר" : "דורש הגדרה"}</strong></article><article><span className="health-ok">●</span><small>משתמשים</small><strong>{adminHealth.activeUsers}/{adminHealth.users} פעילים</strong></article><article><span className="health-ok">●</span><small>בקשות AI החודש</small><strong>{adminHealth.aiRequests}</strong></article><article><span className="health-ok">●</span><small>עלות AI משוערת</small><strong>${Number(adminHealth.estimatedAiCost).toFixed(4)}</strong></article></section>}
             <div className="admin-intro" id="admin-ai">
@@ -936,6 +969,26 @@ export default function Home() {
               <div className="user-list">{adminUsers.map((user) => <article key={user.id}><div><strong>{user.name}</strong><small>{user.email} · {user.lastLogin ? `כניסה אחרונה ${new Date(user.lastLogin).toLocaleDateString("he-IL")}` : "טרם התחבר"}</small></div><span className={user.role === "admin" ? "admin-role" : "user-role"}>{user.disabled ? "מושבת" : user.role.toUpperCase()}</span>{user.role !== "admin" && <button className="user-toggle" onClick={async () => { try { await api("/api/admin/users", { method: "PATCH", body: JSON.stringify({ id: user.id, disabled: !user.disabled }) }); await loadAdminData(); } catch (e) { setAiStatus((e as Error).message); } }}>{user.disabled ? "הפעל" : "השבת"}</button>}</article>)}</div>
               <form className="new-user-form" onSubmit={createUser}><h4>יצירת משתמש חדש</h4><div className="settings-grid"><label>שם<input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} /></label><label>אימייל<input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} /></label><label className="wide">סיסמה זמנית<input type="password" minLength={8} value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} /></label></div><button className="primary" disabled={busy || !newUser.name || !newUser.email || newUser.password.length < 8}>צור משתמש</button></form>
             </section>
+            <section className="admin-users admin-operations" id="admin-storage">
+              <div className="admin-section-title"><div><p className="eyebrow">Storage</p><h3>יעדי שמירה</h3></div><button className="primary" onClick={saveStorage} disabled={busy}>שמור ובדוק</button></div>
+              <p className="modal-help">מטעמי אבטחה ניתן לבחור רק אחסון פנימי או תיקיות Home Assistant המורשות ל־Add-on. הנתיב בתוך Share או Media הוא יחסי.</p>
+              <div className="settings-grid">
+                <label>יעד גיבויים<select value={storageForm.backupDestination} onChange={(e) => setStorageForm({ ...storageForm, backupDestination: e.target.value })}><option value="internal">פנימי — /data</option><option value="share">Home Assistant Share</option></select></label>
+                <label>תיקיית גיבויים<input value={storageForm.backupRelativePath} disabled={storageForm.backupDestination === "internal"} onChange={(e) => setStorageForm({ ...storageForm, backupRelativePath: e.target.value })} /></label>
+                <label>יעד גלריה<select value={storageForm.galleryDestination} onChange={(e) => setStorageForm({ ...storageForm, galleryDestination: e.target.value })}><option value="internal">פנימי — /data</option><option value="media">Home Assistant Media</option><option value="share">Home Assistant Share</option></select></label>
+                <label>תיקיית גלריה<input value={storageForm.galleryRelativePath} disabled={storageForm.galleryDestination === "internal"} onChange={(e) => setStorageForm({ ...storageForm, galleryRelativePath: e.target.value })} /></label>
+              </div>
+              {storageStatus && <div className="storage-checks"><span className={storageStatus.backup?.ok ? "ok" : "fail"}>● גיבויים: {storageStatus.backup?.ok ? storageStatus.backup.path : storageStatus.backup?.error}</span><span className={storageStatus.gallery?.ok ? "ok" : "fail"}>● גלריה: {storageStatus.gallery?.ok ? storageStatus.gallery.path : storageStatus.gallery?.error}</span></div>}
+            </section>
+            <section className="admin-users admin-operations" id="admin-backups">
+              <div className="admin-section-title"><div><p className="eyebrow">הגנה והתאוששות</p><h3>גיבויים</h3></div><button className="primary" onClick={createBackup} disabled={busy}>צור גיבוי עכשיו</button></div>
+              <p className="modal-help">כל גיבוי כולל משתמשים, הגדרות ונתוני תזונה. לפני שחזור נוצר Safety Backup אוטומטי.</p>
+              <div className="backup-list">{adminBackups.length ? adminBackups.slice(0, 8).map((backup) => <article key={backup.name}><div><strong>{new Date(backup.createdAt).toLocaleString("he-IL")}</strong><small>{Math.max(1, Math.round(backup.size / 1024))} KB · {backup.verified ? "אומת" : "דורש בדיקה"}</small></div><a href={`api/admin/backups?download=${encodeURIComponent(backup.name)}`} download>הורד</a><button onClick={() => restoreBackup(backup.name)} disabled={busy}>שחזר</button></article>) : <p>עדיין לא נוצרו גיבויים ידניים.</p>}</div>
+            </section>
+            <section className="admin-users admin-operations" id="admin-audit">
+              <div className="admin-section-title"><div><p className="eyebrow">Security & Logs</p><h3>פעילות מערכת אחרונה</h3></div><span>{adminAudit.length} אירועים</span></div>
+              <div className="audit-list">{adminAudit.slice(0, 20).map((entry) => <article key={entry.id}><span className={entry.result === "success" ? "health-ok" : "health-warn"}>●</span><div><strong>{entry.action}</strong><small>{entry.actor} · {new Date(entry.at).toLocaleString("he-IL")}</small></div><code>{entry.target}</code></article>)}{!adminAudit.length && <p>אין אירועים חריגים או פעולות ניהול מתועדות.</p>}</div>
+            </section>
             {aiStatus && <p className="settings-status">{aiStatus}</p>}
             <footer>
               <button onClick={() => saveAi(false)} disabled={busy}>
@@ -962,6 +1015,8 @@ export default function Home() {
       {partnerOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setPartnerOpen(false)} /><section className="settings-modal partner-modal"><header><div><p className="eyebrow">מעקב משותף</p><h2>שותף לתהליך</h2></div><button onClick={() => setPartnerOpen(false)}>×</button></header><p className="modal-help">שלח הזמנה לחשבון קיים. השיתוף יתחיל רק לאחר אישור וניתן לביטול בכל עת.</p><form className="partner-invite" onSubmit={invitePartner}><input type="email" value={partnerForm.email} onChange={(e) => setPartnerForm({ ...partnerForm, email: e.target.value })} placeholder="האימייל של בן/בת הזוג" /><div><label><input type="checkbox" checked={partnerForm.daily} onChange={(e) => setPartnerForm({ ...partnerForm, daily: e.target.checked })} /> סיכום יומי</label><label><input type="checkbox" checked={partnerForm.meals} onChange={(e) => setPartnerForm({ ...partnerForm, meals: e.target.checked })} /> פירוט ארוחות</label><label><input type="checkbox" checked={partnerForm.weight} onChange={(e) => setPartnerForm({ ...partnerForm, weight: e.target.checked })} /> משקל ומגמה</label></div><button className="primary" disabled={busy || !partnerForm.email}>שלח הזמנה</button></form><div className="partner-links">{(state.partnerships || []).filter((link) => link.status !== "revoked").map((link) => <article key={link.id}><div><strong>{link.other?.name || link.other?.email}</strong><small>{link.status === "pending" ? "ממתין לאישור" : "שיתוף פעיל"}</small></div>{link.direction === "incoming" && link.status === "pending" && <button onClick={() => updatePartnership(link.id, "accept")}>אשר</button>}<button onClick={() => updatePartnership(link.id, "revoke")}>בטל</button></article>)}</div>{(state.sharedProfiles || []).map((shared) => <section className="shared-summary" key={shared.linkId}><header><strong>{shared.user?.name}</strong><small>סיכום משותף</small></header>{shared.today && <div><span>קלוריות היום <b>{shared.today.meals.reduce((sum: number, meal: any) => sum + Number(meal.kcal || 0), 0)}</b></span><span>מים <b>{shared.today.waterMl} מ״ל</b></span><span>ארוחות <b>{shared.today.meals.length}</b></span></div>}{shared.profile && <p>משקל יעד: {shared.profile.targetWeight} ק״ג</p>}</section>)}</section></div>}
       {cameraChoiceOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setCameraChoiceOpen(false)} /><section className="settings-modal capture-choice"><header><div><p className="eyebrow">ניתוח ארוחה</p><h2>איך להוסיף תמונה?</h2></div><button onClick={() => setCameraChoiceOpen(false)}>×</button></header><div><button onClick={() => { setCameraChoiceOpen(false); photoInput.current?.click(); }}><span>📷</span><strong>צלם עכשיו</strong><small>פתח את המצלמה האחורית</small></button><button onClick={() => { setCameraChoiceOpen(false); uploadInput.current?.click(); }}><span>▧</span><strong>בחר מהגלריה</strong><small>תמונה קיימת בטלפון או במחשב</small></button></div></section></div>}
       {pendingQuickFood && <div className="modal-layer"><button className="backdrop" onClick={() => setPendingQuickFood(null)} /><section className="settings-modal quick-confirm"><header><div><p className="eyebrow">הוספה לארוחה</p><h2>להוסיף {pendingQuickFood.name}?</h2></div><button onClick={() => setPendingQuickFood(null)}>×</button></header><div className="quick-confirm-food"><span>{pendingQuickFood.icon}</span><div><strong>{pendingQuickFood.portion}</strong><small>{pendingQuickFood.kcal} קלוריות</small></div></div><label>סוג הארוחה<select value={mealPeriod} onChange={(e) => setMealPeriod(e.target.value)}><option value="breakfast">ארוחת בוקר</option><option value="lunch">ארוחת צהריים</option><option value="dinner">ארוחת ערב</option><option value="snack">בין הארוחות</option></select></label><footer><button onClick={() => setPendingQuickFood(null)}>ביטול</button><button className="primary" onClick={confirmQuickFood}>כן, הוסף</button></footer></section></div>}
+      {customFoodOpen && <div className="modal-layer"><button className="backdrop" onClick={() => !busy && setCustomFoodOpen(false)} /><section className="settings-modal custom-food-modal"><header><div><p className="eyebrow">{quickCategory === "fruits" ? "פירות" : quickCategory === "vegetables" ? "ירקות" : "משקאות"}</p><h2>הוסף {quickCategory === "fruits" ? "פרי" : quickCategory === "vegetables" ? "ירק" : "משקה"}</h2></div><button disabled={busy} onClick={() => setCustomFoodOpen(false)}>×</button></header>{!customFoodDraft ? <div className="custom-food-create"><label>שם<input autoFocus value={customFoodName} onChange={(e) => setCustomFoodName(e.target.value)} placeholder={quickCategory === "fruits" ? "למשל: מנגו" : quickCategory === "vegetables" ? "למשל: קישוא" : "למשל: קפוצ׳ינו"} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createCustomFoodDraft(); } }} /></label><button className="primary" onClick={createCustomFoodDraft} disabled={busy || customFoodName.trim().length < 2}>{busy ? "יוצר…" : "צור תמונה וחשב קלוריות"}</button></div> : <div className="custom-food-preview"><img src={customFoodDraft.image} alt={customFoodDraft.name} /><div><strong>{customFoodDraft.name}</strong><span>{customFoodDraft.portion}</span><b>{customFoodDraft.kcal} kcal</b><small>חלבון {customFoodDraft.protein}g · פחמימות {customFoodDraft.carbs}g · שומן {customFoodDraft.fat}g</small></div></div>}{customFoodStatus && <p className="photo-status">{customFoodStatus}</p>}<footer><button onClick={() => setCustomFoodOpen(false)} disabled={busy}>ביטול</button>{customFoodDraft && <><button onClick={() => { setCustomFoodDraft(null); setCustomFoodStatus(""); }}>צור מחדש</button><button className="primary" onClick={saveCustomFood} disabled={busy}>{busy ? "שומר…" : "שמור בגלריה"}</button></>}</footer></section></div>}
+      {waterOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setWaterOpen(false)} /><section className="settings-modal compact-modal"><header><div><p className="eyebrow">שתייה</p><h2>עריכת מים להיום</h2></div><button onClick={() => setWaterOpen(false)}>×</button></header><div className="water-adjust"><button onClick={() => setWaterValue(Math.max(0, waterValue - 250))}>−</button><label>מ״ל<input type="number" min="0" max="20000" step="50" value={waterValue} onChange={(e) => setWaterValue(Number(e.target.value))} /></label><button onClick={() => setWaterValue(Math.min(20000, waterValue + 250))}>＋</button></div><footer><button onClick={() => setWaterOpen(false)}>ביטול</button><button className="primary" onClick={saveWater} disabled={busy}>שמור</button></footer></section></div>}
       {mealOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setMealOpen(false)} />

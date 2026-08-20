@@ -1,6 +1,7 @@
 import { requireUser } from "@/server/auth.js";
 import { calculateMealFromItems, calculateMealScore } from "@/server/nutrition.js";
 import { addAudit, ensureUserData, readState, updateState, userView } from "@/server/store.js";
+import { saveMediaDataUrl } from "@/server/storage.js";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -11,10 +12,11 @@ export async function POST(request: Request) {
   const calculated = items.length ? calculateMealFromItems(items) : body;
   const kcal = Math.max(0, Number(calculated.kcal) || 0);
   if (!name || !kcal) return Response.json({ error: "יש להזין שם ארוחה וקלוריות" }, { status: 400 });
-  const state = await updateState((latest) => {
+  const state = await updateState(async (latest) => {
     const data = ensureUserData(latest, session.userId);
     const source = ["photo", "voice"].includes(body.source) ? body.source : "manual";
-    const meal = { id: crypto.randomUUID(), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), items, source, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time: new Date().toISOString() };
+    const originalImage = /^data:image\/(jpeg|png|webp);base64,/.test(String(body.image || "")) && String(body.image).length <= 8_000_000 ? String(body.image) : ""; const id = crypto.randomUUID(); const media = originalImage ? await saveMediaDataUrl(latest, originalImage, id) : null;
+    const meal = { id, name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time: new Date().toISOString() };
     meal.score = calculateMealScore(meal);
     data.today.meals.push(meal);
     if (["photo", "voice"].includes(source) && items.length) {

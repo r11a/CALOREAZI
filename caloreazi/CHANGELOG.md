@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0
+
+- Added official Home Assistant `icon.png` and `logo.png` assets based on the approved CALOREAZI symbol.
+- Added a category-native three-step flow: type a fruit, vegetable or drink name, let AI create its image and nutrition estimate, then save or cancel.
+- Added persistent meal photos, real daily score and tracking streak instead of placeholder values.
+- Completed Admin backup creation, verified download, safety restore and audit-log views.
+- Added Ingress-safe PWA paths, service-worker shell caching and clear offline state handling.
+- Expanded audit coverage for users, passwords and AI configuration.
+
 ## 0.9.0
 
 - Added persistent, profile-aware AI coach memory with weight goals, measurements, meals, trends, activity and learned meal corrections.

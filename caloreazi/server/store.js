@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
+import { calculateDayScore } from "./nutrition.js";
 
 const defaultState = {
   version: 1,
@@ -16,7 +17,7 @@ const defaultState = {
   partnerships: [],
   trash: [],
   auditLog: [],
-  systemSettings: { trashRetentionDays: 30, backupRetention: 14 },
+  systemSettings: { trashRetentionDays: 30, backupRetention: 14, storage: { backupDestination: "internal", backupRelativePath: "CALOREAZI/Backups", galleryDestination: "internal", galleryRelativePath: "CALOREAZI/Gallery" } },
 };
 
 function dataDir() {
@@ -43,7 +44,7 @@ export async function readState() {
     state.partnerships = Array.isArray(saved.partnerships) ? saved.partnerships : [];
     state.trash = Array.isArray(saved.trash) ? saved.trash : [];
     state.auditLog = Array.isArray(saved.auditLog) ? saved.auditLog : [];
-    state.systemSettings = { ...defaultState.systemSettings, ...(saved.systemSettings || {}) };
+    state.systemSettings = { ...defaultState.systemSettings, ...(saved.systemSettings || {}), storage: { ...defaultState.systemSettings.storage, ...(saved.systemSettings?.storage || {}) } };
     if (state.owner && state.users.length === 0) {
       state.users = [{ ...state.owner, password: state.adminAuth || null }];
       state.userData[state.owner.id] = { profile: state.profile, today: state.today };
@@ -143,6 +144,10 @@ export function userView(state, userId, admin = false) {
     const today = link.permissions?.daily ? structuredClone(sharedData.today) : null; if (today && !link.permissions?.meals) today.meals = [];
     return { linkId: link.id, user: sharedUser ? { id: sharedUser.id, name: sharedUser.name, avatar: sharedData.profile?.avatar || "" } : null, permissions: link.permissions, today, measurements: link.permissions?.weight ? sharedData.measurements : [], profile: link.permissions?.weight ? { weight: sharedData.profile?.weight, targetWeight: sharedData.profile?.targetWeight } : null };
   });
+  const trackedDates = [...data.history, data.today].filter((day) => day.meals?.length || day.waterMl).map((day) => day.date).sort().reverse();
+  let streak = 0; const cursor = new Date();
+  if (trackedDates[0] !== cursor.toISOString().slice(0, 10)) cursor.setDate(cursor.getDate() - 1);
+  while (trackedDates.includes(cursor.toISOString().slice(0, 10))) { streak += 1; cursor.setDate(cursor.getDate() - 1); }
   return {
     version: state.version,
     owner: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: data.profile?.avatar || "" },
@@ -153,6 +158,8 @@ export function userView(state, userId, admin = false) {
     measurements: data.measurements,
     favorites: data.favorites,
     activity: data.activity,
+    dailyScore: calculateDayScore(data.today, data.profile, data.activity),
+    streak,
     coachHistory: data.coachHistory.slice(-40),
     ai,
     aiUsage: admin ? state.aiUsage : [],
