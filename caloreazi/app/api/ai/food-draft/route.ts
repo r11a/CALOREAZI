@@ -23,9 +23,11 @@ export async function POST(request: Request) {
     const number = (value: unknown, max: number) => Math.max(0, Math.min(max, Math.round(Number(value) || 0)));
     const draft = { name: String(parsed.name || foodName).trim().slice(0, 80), portion: String(parsed.portion || "מנה אחת").trim().slice(0, 80), kcal: number(parsed.kcal, 2000), protein: number(parsed.protein, 200), carbs: number(parsed.carbs, 300), fat: number(parsed.fat, 200), confidence: ["high", "medium", "low"].includes(parsed.confidence) ? parsed.confidence : "low" };
     if (!draft.kcal && category !== "drinks") throw new Error("לא התקבל ערך קלורי תקין");
-    const image = await generateFoodImage({ provider: state.ai.provider, apiKey, name: `${draft.name}, ${draft.portion}` });
+    let image = ""; let imageWarning = "";
+    try { image = await generateFoodImage({ provider: state.ai.provider, apiKey, name: `${draft.name}, ${draft.portion}` }); }
+    catch (error) { image = `./category-${category}-v1.png?v=103`; imageWarning = error instanceof Error ? error.message : "יצירת התמונה נכשלה"; }
     const textCost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: state.ai.inputCost, outputCostPerMillion: state.ai.outputCost }); const cost = textCost + .02;
     await updateState((latest) => { latest.aiUsage.push({ id: crypto.randomUUID(), month, at: new Date().toISOString(), userId: session.userId, feature: "food_catalog_draft", provider: latest.ai.provider, model: latest.ai.model, ...result.usage, cost }); return latest; });
-    return Response.json({ ...draft, image, estimatedCost: cost });
+    return Response.json({ ...draft, image, imageWarning, estimatedCost: cost });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "יצירת הפריט נכשלה" }, { status: aiErrorStatus(error) }); }
 }

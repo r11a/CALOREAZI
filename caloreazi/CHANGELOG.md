@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.3
+
+- Rebuilt the Admin Center as a focused, tabbed commercial management interface instead of one oversized scrolling form.
+- Adopted the proven PROJECTS mobile-sheet pattern for every dialog: safe-area sizing, stable headers, scrollable content and sticky actions.
+- Fixed the CSS rule that unintentionally erased all fruit, vegetable and drink sprite images.
+- Prevented optional AI artwork failures from discarding a successfully calculated food item; nutrition is returned with a clear image warning and safe visual fallback.
+
 ## 1.0.2
 
 - Fixed category and food images under Home Assistant Ingress by resolving assets relative to the active Ingress path.

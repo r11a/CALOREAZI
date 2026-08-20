@@ -133,6 +133,7 @@ export default function Home() {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickCategory, setQuickCategory] = useState("");
   const [adminHealth, setAdminHealth] = useState<any>(null);
+  const [adminTab, setAdminTab] = useState("ai");
   const [adminBackups, setAdminBackups] = useState<any[]>([]);
   const [adminAudit, setAdminAudit] = useState<any[]>([]);
   const [storageForm, setStorageForm] = useState({ backupDestination: "internal", backupRelativePath: "CALOREAZI/Backups", galleryDestination: "internal", galleryRelativePath: "CALOREAZI/Gallery" });
@@ -376,7 +377,7 @@ export default function Home() {
   async function updatePartnership(id: string, action: "accept" | "revoke") { try { setState(await api("/api/partnerships", { method: "PATCH", body: JSON.stringify({ id, action }) })); } catch (e) { setError((e as Error).message); } }
   function openManualMeal(category = "meals") { if (category !== "meals") { setFoodCategory(category); openCustomFood(); return; } setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems([]); setAiOriginalItems([]); setMealSource("manual"); setManualAiMode(true); setManualDescription(""); setFoodCategory(category); setCatalogOnly(false); setSaveToLibrary(false); setGenerateFoodArtwork(false); setPhotoPreview(""); setPhotoStatus("תאר את הארוחה וה-AI יחשב ויפרק אותה לפריטים לפני האישור."); setQuickAddOpen(false); setMealOpen(true); }
   function openCustomFood() { setCustomFoodName(""); setCustomFoodDraft(null); setCustomFoodStatus(""); setCustomFoodOpen(true); }
-  async function createCustomFoodDraft() { if (!customFoodName.trim()) return; setBusy(true); setCustomFoodStatus("יוצר תמונה ומחשב מנה טיפוסית…"); try { setCustomFoodDraft(await api("/api/ai/food-draft", { method: "POST", body: JSON.stringify({ name: customFoodName, category: quickCategory }) })); setCustomFoodStatus("אפשר לשמור או לבטל. הערכים הם הערכת AI למנה המוצגת."); } catch (e) { setCustomFoodStatus((e as Error).message); } finally { setBusy(false); } }
+  async function createCustomFoodDraft() { if (!customFoodName.trim()) return; setBusy(true); setCustomFoodStatus("מחשב מנה ויוצר תמונה…"); try { const result = await api("/api/ai/food-draft", { method: "POST", body: JSON.stringify({ name: customFoodName, category: quickCategory }) }); setCustomFoodDraft(result); setCustomFoodStatus(result.imageWarning ? `הערכים חושבו. שירות התמונות לא זמין כרגע: ${result.imageWarning}` : "אפשר לשמור או לבטל. הערכים הם הערכת AI למנה המוצגת."); } catch (e) { setCustomFoodStatus((e as Error).message); } finally { setBusy(false); } }
   async function saveCustomFood() { if (!customFoodDraft) return; setBusy(true); try { await api("/api/foods", { method: "POST", body: JSON.stringify({ ...customFoodDraft, category: quickCategory, visibility: "private" }) }); setState(await api("/api/state")); setCustomFoodOpen(false); setCustomFoodDraft(null); setCustomFoodName(""); } catch (e) { setCustomFoodStatus((e as Error).message); } finally { setBusy(false); } }
   function selectQuickFood(item: any) { setMealPeriod("snack"); setPendingQuickFood(item); }
   function confirmQuickFood() { const item = pendingQuickFood; if (!item) return; if (item.name === "מים") { addWater(); setPendingQuickFood(null); setQuickAddOpen(false); return; } setMealForm({ name: `${item.name} · ${item.portion}`, kcal: item.kcal, protein: item.protein, carbs: item.carbs, fat: item.fat }); setMealItems([]); setAiOriginalItems([]); setMealSource("manual"); setManualAiMode(false); setPhotoPreview(""); setPhotoStatus("ערכים משוערים למנה המקובלת — אפשר לתקן לפני השמירה."); setPendingQuickFood(null); setQuickAddOpen(false); setMealOpen(true); }
@@ -864,7 +865,7 @@ export default function Home() {
       {settingsOpen && isAdmin && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setSettingsOpen(false)} />
-          <section className="settings-modal admin-center">
+          <section className={`settings-modal admin-center admin-tab-${adminTab}`}>
             <header>
               <div>
                 <p className="eyebrow">CALOREAZI ADMIN</p>
@@ -874,12 +875,12 @@ export default function Home() {
               <button onClick={() => setSettingsOpen(false)}>×</button>
             </header>
             <nav className="admin-nav">
-              <button className="active" onClick={() => document.getElementById("admin-ai")?.scrollIntoView({ behavior: "smooth" })}>AI וטוקנים</button>
-              <button onClick={() => document.getElementById("admin-users")?.scrollIntoView({ behavior: "smooth" })}>משתמשים</button>
-              <button onClick={() => document.getElementById("admin-security")?.scrollIntoView({ behavior: "smooth" })}>אבטחה</button>
-              <button onClick={() => document.getElementById("admin-storage")?.scrollIntoView({ behavior: "smooth" })}>אחסון</button>
-              <button onClick={() => document.getElementById("admin-backups")?.scrollIntoView({ behavior: "smooth" })}>גיבויים</button>
-              <button onClick={() => document.getElementById("admin-audit")?.scrollIntoView({ behavior: "smooth" })}>Audit</button>
+              <button className={adminTab === "ai" ? "active" : ""} onClick={() => setAdminTab("ai")}>AI וטוקנים</button>
+              <button className={adminTab === "users" ? "active" : ""} onClick={() => setAdminTab("users")}>משתמשים</button>
+              <button className={adminTab === "security" ? "active" : ""} onClick={() => setAdminTab("security")}>אבטחה</button>
+              <button className={adminTab === "storage" ? "active" : ""} onClick={() => setAdminTab("storage")}>אחסון</button>
+              <button className={adminTab === "backups" ? "active" : ""} onClick={() => setAdminTab("backups")}>גיבויים</button>
+              <button className={adminTab === "audit" ? "active" : ""} onClick={() => setAdminTab("audit")}>Audit</button>
             </nav>
             {adminHealth && <section className="health-grid"><article><span className="health-ok">●</span><small>Application</small><strong>תקין</strong></article><article><span className="health-ok">●</span><small>Database</small><strong>{adminHealth.meals} ארוחות</strong></article><article><span className={adminHealth.ai === "configured" ? "health-ok" : "health-warn"}>●</span><small>AI</small><strong>{adminHealth.ai === "configured" ? "מחובר" : "דורש הגדרה"}</strong></article><article><span className="health-ok">●</span><small>משתמשים</small><strong>{adminHealth.activeUsers}/{adminHealth.users} פעילים</strong></article><article><span className="health-ok">●</span><small>בקשות AI החודש</small><strong>{adminHealth.aiRequests}</strong></article><article><span className="health-ok">●</span><small>עלות AI משוערת</small><strong>${Number(adminHealth.estimatedAiCost).toFixed(4)}</strong></article></section>}
             <div className="admin-intro" id="admin-ai">
