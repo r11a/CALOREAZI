@@ -107,7 +107,7 @@ export default function Home() {
   const profile = state?.profile;
   const consumed = useMemo(
     () =>
-      state?.today.meals.reduce(
+      state?.today?.meals?.reduce(
         (sum, meal) => sum + Number(meal.kcal || 0),
         0,
       ) || 0,
@@ -115,7 +115,7 @@ export default function Home() {
   );
   const macros = useMemo(
     () =>
-      state?.today.meals.reduce(
+      state?.today?.meals?.reduce(
         (totals, meal) => ({
           protein: totals.protein + Number(meal.protein || 0),
           carbs: totals.carbs + Number(meal.carbs || 0),
@@ -128,7 +128,7 @@ export default function Home() {
   const remaining = Math.max(0, Number(profile?.calories || 0) - consumed);
   const usage = useMemo(
     () =>
-      state?.aiUsage.reduce((sum, item) => sum + Number(item.cost || 0), 0) ||
+      state?.aiUsage?.reduce((sum, item) => sum + Number(item.cost || 0), 0) ||
       0,
     [state],
   );

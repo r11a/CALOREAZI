@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Fixed the unauthenticated startup screen crashing before Login or Admin setup could render.
+- Made dashboard-derived calculations safe while the session state is still incomplete.
+
 ## 0.3.0
 
 - Added password-based login and signed sessions for every CALOREAZI account.
