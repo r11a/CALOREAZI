@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const email = String(body.email || "").trim().toLowerCase();
   const name = String(body.name || "").trim();
   const password = String(body.password || "");
-  if (!name || !email.includes("@") || password.length < 8) return Response.json({ error: "נדרשים שם, אימייל תקין וסיסמה בת 8 תווים לפחות" }, { status: 400 });
+  if (!name || !email.includes("@") || password.length < 10) return Response.json({ error: "נדרשים שם, אימייל תקין וסיסמה בת 10 תווים לפחות" }, { status: 400 });
   if (state.users.some((item) => item.email?.toLowerCase() === email)) return Response.json({ error: "האימייל כבר קיים" }, { status: 409 });
   const user = { id: crypto.randomUUID(), name, email, username: email, role: "member", password: await hashPassword(password), sessionVersion: 1, createdAt: new Date().toISOString() };
   await updateState((latest) => { latest.users.push(user); latest.userData[user.id] = { profile: null, today: { date: "", waterMl: 0, meals: [] } }; addAudit(latest, { userId: currentSession(request)?.userId, action: "user.created", target: user.id, details: email }); return latest; });

@@ -1,4 +1,4 @@
-import { createSessionCookie, currentSession, hashPassword, requireUser } from "@/server/auth.js";
+import { createSessionCookie, currentSession, hashPassword, remoteUser, requireUser } from "@/server/auth.js";
 import { calculateNutritionTargets } from "@/server/nutrition.js";
 import { readState, updateState, userView } from "@/server/store.js";
 export const runtime = "nodejs";
@@ -17,8 +17,9 @@ export async function POST(request: Request) {
   const newSessionId = crypto.randomUUID();
   if (initial.users.length === 0) {
     const password = String(body.adminPassword || "");
-    if (!email.includes("@") || password.length < 8) return Response.json({ error: "נדרשים אימייל וסיסמת Admin בת 8 תווים לפחות" }, { status: 400 });
-    newAdmin = { id: crypto.randomUUID(), name, email, username: email, role: "admin", password: await hashPassword(password), createdAt: new Date().toISOString() };
+    if (!email.includes("@") || password.length < 10) return Response.json({ error: "נדרשים אימייל וסיסמת Admin בת 10 תווים לפחות" }, { status: 400 });
+    const ingressUser = remoteUser(request);
+    newAdmin = { id: crypto.randomUUID(), name, email, username: email, role: "admin", haUserId: ingressUser?.id || null, password: await hashPassword(password), createdAt: new Date().toISOString() };
     session = { userId: newAdmin.id, role: "admin" };
   } else session = requireUser(initial, request);
   if (!session || (initial.users.length > 0 && !initial.users.some((item) => item.id === session.userId))) return Response.json({ error: "יש להתחבר לפני השלמת Onboarding" }, { status: 401 });

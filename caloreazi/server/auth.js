@@ -8,6 +8,7 @@ const COOKIE = "caloreazi_session";
 const SESSION_DAYS = 30;
 
 export function remoteUser(request) {
+  if (request.headers.get("x-caloreazi-ingress") !== "1") return null;
   const id = request.headers.get("x-remote-user-id");
   return id ? { id, username: request.headers.get("x-remote-user-name") || "", displayName: request.headers.get("x-remote-user-display-name") || "" } : null;
 }

@@ -52,23 +52,38 @@ Source: `CALOREAZI_PRODUCT_MASTER_SPECIFICATION.txt`
 - `npm run lint`: zero errors; 14 pre-existing image-optimization warnings.
 - `git diff --check`: passing.
 
-## Deployment verification still required
+## Final release verification
 
-Docker and PostgreSQL executables are not installed in the current Windows
-workspace, so the Home Assistant container boot, Alpine package resolution,
-PostgreSQL migration execution and upgrade from a real `/data/caloreazi.json`
-must be verified in the add-on build environment before release. The code does
-not silently claim that local unit tests prove this external runtime path.
+The Windows workspace has no Docker or PostgreSQL executables. The release
+workflow therefore runs PostgreSQL 17 migrations, the production multi-user
+test, normalized-table assertions, `pg_dump`/restore and a Home Assistant image
+build on Linux before a release may be tagged. There is intentionally no legacy
+JSON migration test because this is a clean-install product.
 
-## Deliberate follow-up boundaries
+## Closed foundation boundaries
 
-- The normalized schema is present, while `runtime_state` remains the active
-  transactional aggregate. Moving every
-  route to normalized SQL repositories is the next database cutover, not an
-  invisible behavior change in this session.
-- The bundled nutrition catalog proves separation and provenance but is not a
-  complete national food database. Production coverage requires a licensed or
-  authoritative import and matching QA.
-- A `full` archive currently protects the complete application aggregate but
-  large external media files still follow the configured storage/HA backup
-  policy; a portable media archive needs a separate streamed format.
+- `runtime_state` has been removed. API contracts are hydrated from normalized,
+  owner-scoped PostgreSQL rows; writes use a revision gate to prevent lost
+  updates across the web process and analysis worker.
+- Nutrition first uses the versioned curated fallback and then USDA FoodData
+  Central for authoritative matches. Every result records its source and ID;
+  unmatched foods remain zero-valued until confirmation.
+- Database and safety backups contain verified PostgreSQL custom dumps.
+  Configuration is a separate type, and full backups additionally contain
+  checksum-verified gallery media up to the documented 512 MB portable limit.
+
+## Ten-step acceptance matrix
+
+1. Embedded PostgreSQL 17, clean database creation and checksum migrations.
+2. Normalized UUID-owned domain tables; no `runtime_state` table or code path.
+3. Optimistic revision protection across server and worker writes.
+4. Owner-scoped meals/media/trash, authenticated delivery and original-day restore.
+5. Unit, production integration and PostgreSQL CI isolation tests.
+6. Vision identifies only; nutrition is resolved independently with provenance.
+7. Curated fallback plus authoritative USDA adapter; unknown values are never invented.
+8. Persistent idempotent analysis jobs, retries, cancellation and confirmation.
+9. Active sessions, revocation, throttling, lockout, audit, CSRF and trusted HA Ingress SSO.
+10. Typed scheduled backups, verified database/full/configuration restore and safety backup.
+
+Additional requested gate: coach, meal-recognition and image-generation models
+are independently selectable and validated by role.
