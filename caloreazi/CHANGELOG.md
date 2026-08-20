@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+- Added a five-step progressive onboarding flow and first-value personalized targets.
+- Added persistent owner profile, daily water, meals, calories, and macros under Home Assistant `/data`.
+- Added manual meal creation and deletion with live daily totals.
+- Added encrypted OpenAI and Gemini provider settings, model selection, connection testing, and provider abstraction.
+- Added a context-aware AI Coach with token usage, estimated cost, monthly budget, soft warning, and hard limit foundations.
+- Added a focused Admin AI settings experience and usage summary.
+- Added a granite dark theme logo treatment that preserves the orange/amber mark and `CAL` / `OR` / `EAZI` hierarchy.
+- Added provider adapter tests and production API routes for onboarding, state, water, meals, AI settings, and chat.
+
 ## 0.1.3
 
 - Replaced the nested SVG logo with the approved self-contained transparent PNG.

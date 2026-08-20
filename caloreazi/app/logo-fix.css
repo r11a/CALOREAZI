@@ -4,6 +4,7 @@
   width: 310px;
   height: 88px;
   flex: 0 0 auto;
+  position: relative;
 }
 
 .logo img {
@@ -13,6 +14,10 @@
   object-fit: contain;
   object-position: center;
 }
+
+.logo .logo-dark { display: none; position: absolute; inset: 0; content: url('/caloreazi-wordmark-transparent.png'); filter: invert(1) grayscale(1) brightness(1.8); clip-path: inset(0 0 0 28%); }
+.theme-dark .logo .logo-light { display: block; }
+.theme-dark .logo .logo-dark { display: block; }
 
 @media (max-width: 760px) {
   .logo { width: 235px; height: 67px; }
