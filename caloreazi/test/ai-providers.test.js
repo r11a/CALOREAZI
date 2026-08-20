@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { generateOpenAiCoachReply } from "../server/ai/openai.js";
 import { generateGeminiCoachReply } from "../server/ai/gemini.js";
+import { aiRole } from "../server/ai/models.js";
 
 test("OpenAI adapter returns text and normalized token usage", async () => {
   const original = globalThis.fetch;
@@ -31,4 +32,11 @@ test("adapters send meal images in each provider's multimodal format", async () 
     assert.equal(bodies[0].input[0].content[1].type, "input_image");
     assert.equal(bodies[1].contents[0].parts[1].inlineData.mimeType, "image/jpeg");
   } finally { globalThis.fetch = original; }
+});
+
+test("AI roles select separate coach, vision and image models", () => {
+  const ai = { provider: "openai", model: "gpt-5.6-terra", roles: { coach: { provider: "openai", model: "gpt-5.6-sol" }, vision: { provider: "openai", model: "gpt-5.6-luna" }, image: { provider: "openai", model: "gpt-image-1-mini" } } };
+  assert.equal(aiRole(ai, "coach").model, "gpt-5.6-sol");
+  assert.equal(aiRole(ai, "vision").model, "gpt-5.6-luna");
+  assert.equal(aiRole(ai, "image").model, "gpt-image-1-mini");
 });

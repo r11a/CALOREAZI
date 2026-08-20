@@ -6,9 +6,9 @@ Reference: `r11a/PROJECTS`, commit `cc4bbeb123965c086afede9fd63e74f3ee262908`
 ## Specification authority
 
 The canonical product source is the 66-section `CALOREAZI Product Master
-Specification` supplied on 2026-08-20 in attachment
-`d76db8cb-b65a-4687-8ccc-59f9cd907291/pasted-text.txt`. It supersedes the
-earlier 31-section attachment wherever wording or scope differs.
+Specification`, now preserved in this repository as
+`docs/CALOREAZI_PRODUCT_MASTER_SPECIFICATION.txt`. It supersedes the earlier
+31-section attachment wherever wording or scope differs.
 
 Implementation decisions must be traced to this full specification first,
 then to this foundation audit, and only then to patterns found in PROJECTS.

@@ -9,13 +9,13 @@ RUN npm run build
 
 FROM ${BUILD_FROM}
 
-RUN apk add --no-cache ca-certificates nginx nodejs npm
+RUN apk add --no-cache ca-certificates nginx nodejs npm postgresql17 postgresql17-client su-exec
 
 WORKDIR /opt/caloreazi
 COPY --from=web-builder /build /opt/caloreazi
 COPY rootfs /
 
-RUN chmod +x /etc/services.d/app/run /etc/services.d/nginx/run \
+RUN chmod +x /etc/services.d/app/run /etc/services.d/nginx/run /etc/services.d/postgres/run /etc/services.d/backup/run /etc/services.d/analysis-worker/run \
     && rm -f /etc/nginx/http.d/default.conf
 
 LABEL \

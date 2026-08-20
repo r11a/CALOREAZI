@@ -2,17 +2,20 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
 import { calculateDayScore } from "./nutrition.js";
+import { compareAndSwapDatabaseState, databaseStateEnabled, readDatabaseState, replaceDatabaseState, seedDatabaseState } from "./state-database.js";
 
 const defaultState = {
   version: 1,
   owner: null,
   adminAuth: null,
   users: [],
+  sessions: [],
   userData: {},
   profile: null,
   today: { date: "", waterMl: 0, meals: [] },
-  ai: { provider: "openai", model: "gpt-5.6-terra", encryptedKey: "", inputCost: 2, outputCost: 12, monthlyBudget: 20, softLimit: 80, hardLimit: true },
+  ai: { provider: "openai", model: "gpt-5.6-terra", roles: { coach: { provider: "openai", model: "gpt-5.6-terra" }, vision: { provider: "openai", model: "gpt-5.6-terra" }, image: { provider: "openai", model: "gpt-image-1-mini" } }, encryptedKey: "", inputCost: 2, outputCost: 12, monthlyBudget: 20, softLimit: 80, hardLimit: true },
   aiUsage: [],
+  analysisJobs: [],
   foodCatalog: [],
   partnerships: [],
   trash: [],
@@ -32,7 +35,7 @@ async function paths() {
   return { state: path.join(dir, "caloreazi.json"), temp: path.join(dir, "caloreazi.tmp"), secret: path.join(dir, ".caloreazi-secret") };
 }
 
-export async function readState() {
+async function readFileState() {
   const files = await paths();
   try {
     const saved = JSON.parse(await readFile(files.state, "utf8"));
@@ -40,10 +43,12 @@ export async function readState() {
     state.ai = { ...defaultState.ai, ...(saved.ai || {}) };
     state.today = { ...defaultState.today, ...(saved.today || {}) };
     state.users = Array.isArray(saved.users) ? saved.users : [];
+    state.sessions = Array.isArray(saved.sessions) ? saved.sessions : [];
     state.userData = saved.userData || {};
     state.partnerships = Array.isArray(saved.partnerships) ? saved.partnerships : [];
     state.trash = Array.isArray(saved.trash) ? saved.trash : [];
     state.auditLog = Array.isArray(saved.auditLog) ? saved.auditLog : [];
+    state.analysisJobs = Array.isArray(saved.analysisJobs) ? saved.analysisJobs : [];
     state.systemSettings = { ...defaultState.systemSettings, ...(saved.systemSettings || {}), storage: { ...defaultState.systemSettings.storage, ...(saved.systemSettings?.storage || {}) } };
     if (state.owner && state.users.length === 0) {
       state.users = [{ ...state.owner, password: state.adminAuth || null }];
@@ -54,6 +59,13 @@ export async function readState() {
     if (error?.code === "ENOENT") return structuredClone(defaultState);
     throw error;
   }
+}
+
+export async function readState() {
+  if (!databaseStateEnabled()) { if (process.env.CALOREAZI_ALLOW_FILE_STORE === "1" || process.env.NODE_ENV !== "production") return readFileState(); throw new Error("CALOREAZI_DATABASE_URL is required in production"); }
+  const stored = await readDatabaseState();
+  if (stored) return stored.state;
+  return (await seedDatabaseState(structuredClone(defaultState))).state;
 }
 
 export function addAudit(state, { userId = null, action, target = "system", result = "success", details = "" }) {
@@ -81,6 +93,8 @@ export function ensureUserData(state, userId) {
 }
 
 export async function writeState(state) {
+  if (databaseStateEnabled()) return replaceDatabaseState(state);
+  if (process.env.CALOREAZI_ALLOW_FILE_STORE !== "1" && process.env.NODE_ENV === "production") throw new Error("CALOREAZI_DATABASE_URL is required in production");
   const files = await paths();
   await writeFile(files.temp, JSON.stringify(state, null, 2), { mode: 0o600 });
   await rename(files.temp, files.state);
@@ -88,6 +102,16 @@ export async function writeState(state) {
 }
 
 export async function updateState(updater) {
+  if (databaseStateEnabled()) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const current = await readDatabaseState();
+      const seeded = current || await seedDatabaseState(structuredClone(defaultState));
+      const draft = structuredClone(seeded.state);
+      const next = await updater(draft) || draft;
+      if (await compareAndSwapDatabaseState(seeded.revision, next)) return next;
+    }
+    throw new Error("הנתונים השתנו במקביל. יש לנסות שוב");
+  }
   const state = await readState();
   const next = await updater(state) || state;
   return writeState(next);

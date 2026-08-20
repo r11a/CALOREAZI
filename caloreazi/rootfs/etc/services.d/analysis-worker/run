@@ -1,0 +1,5 @@
+#!/usr/bin/with-contenv sh
+set -eu
+cd /opt/caloreazi
+export CALOREAZI_DATABASE_URL="${CALOREAZI_DATABASE_URL:-postgresql://postgres@127.0.0.1:5432/caloreazi}"
+exec node scripts/analysis-worker.mjs

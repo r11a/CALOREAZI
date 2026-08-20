@@ -1,0 +1,1064 @@
+CALOREAZI
+Product Master Specification
+________________________________________
+1. חזון המוצר
+CALOREAZI הוא AI Nutrition Coach אישי שמטרתו להפוך מעקב אחר תזונה, קלוריות, משקל, שתייה ופעילות גופנית לתהליך פשוט, חכם, נעים ומהנה.
+המוצר מיועד בשלב הראשון לשימוש אישי, אבל צריך להיבנות מההתחלה ברמה שמאפשרת להפוך אותו למוצר מסחרי אמיתי עם מספר משתמשים.
+CALOREAZI אינו רק Calorie Counter.
+המטרה היא ליצור מאמן אישי שמכיר את המשתמש ואת התהליך שלו לאורך זמן.
+העיקרון המרכזי:
+Smart underneath. Easy on the outside.
+המערכת יכולה להיות מורכבת וחכמה מאוד מאחורי הקלעים.
+מבחינת המשתמש היא צריכה להיות פשוטה בצורה יוצאת דופן.
+________________________________________
+2. משמעות השם
+השם CALOREAZI משלב:
+•	CAL / קל – קל, פשוט ולא מעיק.
+•	CALOR – Calories ותזונה.
+•	EAZI / Easy – להפוך את כל התהליך לקל וטבעי.
+הבטחת המותג:
+להפוך את עולם הקלוריות, התזונה והמעקב ל-Easy.
+השם הרשמי:
+Caloreazi
+ובמיתוג:
+CALOREAZI
+________________________________________
+3. Product Philosophy
+המשתמש צריך להרגיש שהמערכת:
+•	מכירה אותו.
+•	זוכרת את ההיסטוריה שלו.
+•	מבינה את המטרות שלו.
+•	לומדת את ההרגלים שלו.
+•	יודעת מה הוא אוהב ולא אוהב.
+•	מבינה מה הוא אוכל.
+•	יודעת מה כבר אכל היום.
+•	עוקבת אחרי המשקל והמגמות שלו.
+•	מכירה את הפעילות שלו.
+•	לומדת מהתיקונים שלו.
+•	ויודעת להציע את הדבר הנכון בזמן הנכון.
+העיקרון:
+Measure → Understand → Coach → Improve
+________________________________________
+4. UX – עיקרון עליון
+חוויית המשתמש היא חלק מרכזי מהמוצר.
+אדם צריך לפתוח את CALOREAZI בפעם הראשונה ולהבין מיד מה לעשות.
+בלי מדריך.
+בלי טפסים ארוכים.
+בלי תפריטים עמוקים.
+בלי צורך "ללמוד את האפליקציה".
+חוק UX
+כל פעולה יומיומית חשובה צריכה להיות אפשרית בתוך 2–3 פעולות לכל היותר.
+לדוגמה:
+פתח → צלם → קבל ניתוח
+או:
+פתח → שאל את המאמן
+או:
+פתח → + כוס מים
+המערכת צריכה להביא את הפעולה הנכונה למשתמש במקום לגרום למשתמש לחפש אותה.
+התחושה הרצויה:
+"לא הייתי צריך ללמוד להשתמש באפליקציה. פשוט פתחתי אותה והבנתי."
+________________________________________
+5. שתי שכבות שימוש
+Daily Experience
+השכבה המרכזית פשוטה מאוד.
+המשתמש צריך להבין מיד:
+•	איפה הוא עומד היום.
+•	כמה קלוריות צרך.
+•	כמה נשארו.
+•	מה הציון היומי.
+•	מה הפעולה הבאה הרלוונטית.
+•	איך לצלם ארוחה.
+•	איך לדבר עם ה-AI Coach.
+Deeper Insights
+למי שרוצה להעמיק:
+•	היסטוריה.
+•	גרפים.
+•	משקל.
+•	פעילות.
+•	מים.
+•	Calendar.
+•	מגמות.
+•	יעדים.
+•	המלצות.
+•	סיכומים שבועיים וחודשיים.
+גם השכבה העמוקה צריכה להישאר פשוטה להבנה.
+________________________________________
+6. Smart Onboarding
+יצירת משתמש חדש צריכה לכלול Onboarding קצר, ויזואלי וחכם.
+הוא לא צריך להרגיש כמו טופס.
+כל מסך מציג שאלה אחת פשוטה.
+מה היית רוצה להשיג?
+•	לרדת במשקל.
+•	לשמור על המשקל.
+•	לעלות במשקל.
+•	לאכול טוב יותר.
+•	לשפר הרגלים וכושר.
+מידע בסיסי
+•	גיל.
+•	מין כאשר רלוונטי לחישוב.
+•	גובה.
+•	משקל נוכחי.
+•	משקל יעד.
+איך נראה היום שלך?
+•	רוב היום בישיבה.
+•	קצת בתנועה.
+•	פעיל.
+•	מאוד פעיל.
+פעילות
+כמה פעמים בשבוע המשתמש מתאמן ואילו סוגי פעילות רלוונטיים.
+העדפות מזון
+מה המשתמש אוהב ולא אוהב לאכול.
+מגבלות
+צמחונות, טבעונות, אלרגיות, רגישויות ומזונות שהמשתמש בוחר להימנע מהם.
+כמעט כל שאלה שאינה הכרחית תהיה ניתנת לדילוג.
+Minimum questions → Maximum personalization
+________________________________________
+7. Progressive Onboarding
+לא לדרוש מהמשתמש למלא פרופיל שלם לפני שהוא מתחיל.
+CALOREAZI יכול ללמוד אותו בהדרגה.
+לדוגמה:
+"שמתי לב שאתה אוכל הרבה עוף. לקחת את זה בחשבון בהמלצות?"
+או:
+"רוצה לספר לי באילו ימים אתה בדרך כלל מתאמן?"
+ה-Onboarding הוא למעשה השיחה הראשונה של המשתמש עם המאמן.
+________________________________________
+8. First Value Moment
+בסיום ה-Onboarding לא להציג רק "Registration complete".
+להציג:
+המסלול שלך מוכן
+לדוגמה:
+Daily target
+~2,050 kcal
+Goal
+ירידה הדרגתית במשקל
+Current weight
+85 kg
+Target
+78 kg
+Protein
+~130g
+Water
+~2.5L
+ומתחת הסבר קצר מה-AI Coach.
+היעדים הם נקודת פתיחה ולא הבטחה רפואית או כלל קשיח.
+בתוך פחות משתי דקות המשתמש צריך להיות מסוגל:
+📷 לצלם ארוחה
+💬 לדבר עם המאמן
+➕ להזין מידע ידנית
+________________________________________
+9. Food Capture – Core Experience
+צילום אוכל הוא אחד הפיצ'רים החשובים ביותר במוצר.
+המשתמש מצלם צלחת.
+המערכת מנסה לזהות:
+•	סוגי מזון.
+•	רכיבים.
+•	כמות.
+•	נפח.
+•	משקל משוער בגרמים.
+•	קלוריות.
+•	חלבון.
+•	פחמימות.
+•	שומן.
+•	ערכים נוספים כאשר הם זמינים.
+המטרה:
+High accuracy + Minimum friction
+________________________________________
+10. Smart Camera
+כאשר אפשר, המצלמה תעזור למשתמש להשיג צילום מתאים.
+לדוגמה:
+Move closer
+Move back
+More light
+Keep the whole plate in frame
+Try a slightly higher angle
+לא להפוך את הצילום לתהליך מסובך.
+הנחיה תופיע רק כאשר היא באמת יכולה לשפר משמעותית את הניתוח.
+________________________________________
+11. Confidence Logic
+המערכת לא תעמיד פנים שהיא בטוחה כאשר היא אינה בטוחה.
+High Confidence
+להמשיך אוטומטית.
+Medium Confidence
+תיקון מהיר.
+לדוגמה:
+"זיהיתי כ־180 גרם עוף. זה נראה נכון?"
+Low Confidence
+לשאול שאלה אחת קצרה.
+לדוגמה:
+"העוף בערך 150 או 250 גרם?"
+עדיף תיקון קטן מאשר מידע שגוי.
+________________________________________
+12. Personal Calibration
+CALOREAZI צריך להשתפר ככל שהמשתמש משתמש בו.
+כאשר המשתמש מתקן:
+•	סוג מזון.
+•	רכיב.
+•	כמות.
+•	משקל.
+•	Portion size.
+המערכת שומרת את התיקון ומשתמשת בו כדי לשפר הערכות עתידיות עבור אותו משתמש.
+לא חייבים לבצע Training מחדש למודל.
+ניתן לבנות שכבת Personal Calibration מעל מודל ה-Vision.
+המטרה:
+המערכת טובה ביום הראשון וטובה יותר עבור אותו משתמש ביום ה־30.
+________________________________________
+13. Nutrition Analysis Pipeline
+יש להפריד בין שלושה תפקידים:
+Vision AI
+מזהה מזון ומעריך כמויות.
+Nutrition Engine
+מתרגם מזון + כמות לערכים תזונתיים באמצעות מקור נתונים אמין.
+AI Coach
+מבין את הנתונים בהקשר האישי ומסביר למשתמש מה המשמעות.
+Vision identifies → Nutrition Engine calculates → AI Coach explains
+אין להסתמך על מודל שפה בלבד כמקור לכל הערכים התזונתיים.
+________________________________________
+14. Meal WOW Moment
+לאחר הניתוח צריך להגיע אחד הרגעים הוויזואליים היפים ביותר במוצר.
+תמונת הארוחה מוצגת בצורה בולטת.
+Meal Score
+87 / 100
+Calories
+620 kcal
+Protein 38g · Carbs 64g · Fat 21g
+מה זיהינו?
+•	חזה עוף – כ־180g
+•	אורז – כ־160g
+•	סלט
+•	טחינה
+AI Summary
+"ארוחה מאוזנת ועשירה בחלבון. כמות הפחמימות מעט גבוהה ביחס ליעד שלך להיום."
+What next?
+"נשארו לך כ־650 קלוריות להיום. בערב כדאי לבחור ארוחה קלה ועשירה בחלבון."
+לא להציף את המשתמש.
+מידע נוסף זמין למי שרוצה להעמיק.
+________________________________________
+15. Input Methods
+המערכת תאפשר:
+•	צילום מהמצלמה.
+•	העלאת תמונה.
+•	הזנה ידנית.
+•	דיבור/הכתבה.
+•	Favorite Meals.
+•	בחירת ארוחה קודמת.
+•	Barcode בעתיד.
+משקל ופעילות ניתנים גם להזנה ידנית.
+________________________________________
+16. AI Coach
+CALOREAZI כולל Chat AI אישי.
+הוא לא צריך להרגיש כמו ChatGPT גנרי.
+הוא צריך להכיר בהתאם להרשאות:
+•	מטרות.
+•	משקל.
+•	מגמת משקל.
+•	ארוחות.
+•	קלוריות.
+•	מאקרו.
+•	פעילות.
+•	מים.
+•	היסטוריה.
+•	העדפות.
+•	דפוסים.
+•	הצלחות.
+•	קשיים.
+לדוגמה:
+"מה כדאי לי לאכול עכשיו?"
+"אכלתי הרבה בצהריים. מה כדאי בערב?"
+"איך היה השבוע שלי?"
+"למה המשקל שלי לא מתקדם?"
+"כמה קלוריות מתאימות למטרה שלי?"
+המאמן ממשיך את התהליך ולא מתחיל בכל שיחה מאפס.
+________________________________________
+17. Proactive Coaching
+ה-AI יכול להציע תובנות גם בלי שהמשתמש שאל.
+לדוגמה:
+"נשארו לך כ־480 קלוריות. רוצה רעיון לארוחת ערב?"
+"היום אכלת פחות חלבון מהרגיל."
+"היית פעיל היום יותר מהממוצע שלך."
+"השבוע אתה עקבי יותר מהשבוע שעבר."
+לא להציף.
+לא להיות שיפוטי.
+חריגה אינה כישלון.
+________________________________________
+18. Daily Tracking
+מעקב אחר:
+•	קלוריות.
+•	מאקרו.
+•	ארוחות.
+•	משקל.
+•	מים.
+•	פעילות.
+•	צעדים כאשר זמינים.
+•	Daily Score.
+________________________________________
+19. Water
+מעקב מים צריך להיות מהיר במיוחד.
+לדוגמה:
++ כוס
++ 500ml
+ללא טופס.
+________________________________________
+20. Weight
+להציג:
+•	משקל נוכחי.
+•	יעד.
+•	שינוי שבועי.
+•	שינוי חודשי.
+•	Trend.
+•	מרחק מהיעד.
+להתמקד במגמה ולא בתנודה של יום אחד.
+________________________________________
+21. Activity
+תמיכה ב:
+•	הזנה ידנית.
+•	צעדים.
+•	מרחק.
+•	קומות/מדרגות.
+•	אימונים.
+•	פעילות.
+•	Active calories כאשר זמינות.
+בשלב הראשון CALOREAZI הוא Web/PWA.
+אין לעכב את המוצר בגלל Apple Health.
+בעתיד ניתן להוסיף Client/Wrapper Native ל-iOS ו-Android ולהתחבר ל-HealthKit ולמקורות נוספים.
+________________________________________
+22. Scores
+Meal Score
+ציון ארוחה.
+Daily Score
+ציון יום.
+Weekly Score
+ציון שבוע.
+הציון יכול להתחשב ב:
+•	עמידה ביעד.
+•	איכות תזונתית.
+•	חלבון.
+•	מים.
+•	פעילות.
+•	עקביות.
+הציון צריך לעודד ולא להעניש.
+________________________________________
+23. Calendar & History
+Calendar פשוט עם:
+Day · Week · Month
+אינדיקציה ויזואלית:
+🟢 מאוזן
+🟡 דורש תשומת לב
+🔴 חריגה משמעותית
+לחיצה על יום תציג:
+•	ארוחות.
+•	קלוריות.
+•	פעילות.
+•	מים.
+•	משקל.
+•	ציון.
+•	AI Insight.
+________________________________________
+24. Graphs & Insights
+גרפים צריכים לספר סיפור.
+לדוגמה:
+"ירדת 1.6 ק"ג ב־30 הימים האחרונים."
+ומתחת גרף פשוט.
+גרפים אפשריים:
+•	משקל.
+•	קלוריות.
+•	ממוצע שבועי.
+•	צעדים.
+•	פעילות.
+•	מים.
+•	חלבון.
+•	Daily Score.
+אפשר לזהות correlations, אבל לא להציג correlation כאילו הוא causation.
+________________________________________
+25. Meal Recommendations
+המלצות ל:
+•	Breakfast.
+•	Lunch.
+•	Dinner.
+•	Snacks.
+בהתאם ל:
+•	מטרה.
+•	מה כבר נאכל.
+•	קלוריות שנותרו.
+•	מאקרו.
+•	העדפות.
+•	מאכלים אהובים.
+•	מה שיש בבית כאשר המידע קיים.
+________________________________________
+26. Menu Scan
+המשתמש מצלם תפריט במסעדה.
+המערכת קוראת אותו ומדרגת אפשרויות ביחס למשתמש וליום שלו.
+לדוגמה:
+🥇 הבחירה המתאימה ביותר
+🥈 אופציה טובה
+🥉 אם מתחשק לך להתפנק
+המטרה היא לעזור לבחור ולא להגיד "אסור".
+________________________________________
+27. Home Inventory
+בשלב מתקדם:
+צילום:
+•	מקרר.
+•	מזווה.
+•	ירקות.
+•	בשר.
+•	מוצרי חלב.
+•	מוצרים יבשים.
+המערכת בונה Inventory משוער.
+לאחר מכן ניתן לשאול:
+"מה כדאי לי להכין הערב?"
+והמערכת משלבת:
+מה יש בבית + מה אני אוהב + מה כבר אכלתי + המטרה שלי
+________________________________________
+28. Shopping & Supermarket Assistant
+בעתיד:
+•	רשימת קניות.
+•	השלמת מוצרים שחסרים.
+•	צילום מוצר בסופר.
+•	האם הוא מתאים למטרה.
+•	חלופה טובה יותר.
+•	האם כנראה כבר יש אותו בבית.
+זה אינו חלק מה-Core הראשוני.
+________________________________________
+29. Multi-user
+CALOREAZI הוא Multi-user מהבסיס.
+כל משתמש מקבל:
+•	Profile.
+•	Goals.
+•	Meals.
+•	Weight.
+•	Activity.
+•	Water.
+•	History.
+•	Preferences.
+•	AI Coach context.
+•	Personal calibration.
+כל המידע משויך ל-User ID.
+אין חשיפה בין משתמשים.
+הרשאות נאכפות ב-Backend ולא רק ב-Frontend.
+________________________________________
+30. Visual Identity
+השפה:
+Clean · Premium · Warm · Modern · Alive · Intelligent
+לא גימיקית.
+לא ילדותית.
+לא אנמית.
+להשתמש ב:
+•	Typography איכותית.
+•	Whitespace.
+•	Cards נקיים.
+•	אייקונים ברורים.
+•	תמונות כאשר הן מוסיפות ערך.
+•	Micro animations עדינות.
+•	היררכיה ברורה.
+________________________________________
+31. Light Mode
+בסיס:
+לבן נקי + אפור מאוד עדין.
+Accent colors:
+Warm Orange
+פעולה מרכזית, אנרגיה ומוטיבציה.
+Quality Blue
+AI, מידע, אמון ואינטראקציה.
+Warm Yellow
+Highlights והישגים.
+Natural Green
+הצלחה, איזון ועמידה ביעדים.
+צבעים חיים אך לא Neon ולא צעקניים.
+________________________________________
+32. Dark Mode
+Dark Mode מלא ולא inversion אוטומטי.
+בסיס:
+Charcoal / Graphite
+ולא שחור מוחלט.
+Cards מעט בהירים יותר.
+אותם צבעי מותג עם Saturation ו-Contrast מותאמים.
+Light ו-Dark צריכים להרגיש כמו אותו מוצר.
+
+כן. הנה מסמך המשך נפרד שמתחיל מסעיף 33, כדי שלא נסתכן שוב בחיתוך של המסמך הגדול. הוא ממשיך את ה-Master Spec ומרכז את החלק המערכתי, Admin, אחסון, אבטחה, AI והשלבים לבנייה.
+CALOREAZI
+Product Master Specification – Part 2
+Sections 33+
+מסמך זה הוא המשך ישיר ל־CALOREAZI Product Master Specification – Part 1.
+________________________________________
+33. System & Backend Philosophy
+CALOREAZI ייבנה בשלב הראשון כ־Home Assistant Add-on עם Web Application / PWA עצמאי.
+הפילוסופיה היא:
+Simple Frontend. Powerful Backend.
+המשתמש הרגיל לא צריך להיחשף למורכבות הטכנית של המערכת.
+יש להפריד באופן ברור בין:
+User Experience
+הממשק היומיומי של המשתמש.
+פשוט, מהיר, נקי ומינימלי.
+Administration
+ניהול מלא של:
+•	משתמשים.
+•	Database.
+•	Storage.
+•	Backups.
+•	AI.
+•	Security.
+•	Logs.
+•	System Health.
+•	Configuration.
+________________________________________
+34. שימוש ב-PROJECTS כבסיס
+לפני בניית תשתית חדשה ב-CALOREAZI יש לבדוק מה כבר קיים ועובד בפרויקט PROJECTS.
+PROJECTS ישמש כ־Reference וכבסיס כאשר הדבר הגיוני.
+ניתן ורצוי למחזר או להתאים:
+•	Home Assistant Add-on structure.
+•	Backend patterns.
+•	API patterns.
+•	Database patterns.
+•	Authentication.
+•	Users.
+•	Sessions.
+•	Permissions.
+•	Admin/settings patterns.
+•	Storage.
+•	Network folders.
+•	Backup / Restore.
+•	Trash.
+•	PWA configuration.
+•	Responsive behavior.
+•	UI components כלליים.
+•	Dialogs.
+•	Notifications.
+•	Forms.
+•	Navigation.
+•	Light/Dark mode.
+•	Animations.
+•	Logging.
+•	Health checks.
+•	Docker/build/deployment.
+•	פתרונות תשתית אחרים שכבר עובדים היטב.
+העיקרון:
+Reuse proven foundations from PROJECTS, build CALOREAZI-specific product logic on top.
+לא להעתיק את PROJECTS בצורה עיוורת.
+CALOREAZI הוא מוצר עצמאי עם:
+•	UX משלו.
+•	Branding משלו.
+•	Data Model משלו.
+•	Nutrition logic משלו.
+•	AI logic משלו.
+•	Screens משלו.
+כאשר CALOREAZI דורש פתרון שונה או טוב יותר, אין להיות מוגבלים על ידי PROJECTS.
+המטרה היא לחסוך זמן ועבודה באמצעות מה שכבר הוכח, בלי לפגוע בחזון של CALOREAZI.
+________________________________________
+35. Admin Center
+צריך להיות Admin Center נפרד שרק Administrator יכול להיכנס אליו.
+הוא יהיה מרכז השליטה של המערכת.
+הוא יכלול לפחות:
+•	System Health.
+•	Users.
+•	Storage.
+•	Database.
+•	Backups.
+•	Trash.
+•	Security.
+•	AI Services.
+•	AI Usage.
+•	Logs.
+•	Maintenance.
+•	Application Settings.
+הממשק צריך להיות ברור וויזואלי.
+לא לבנות אותו כמו כלי DBA או Linux Administration.
+המנהל צריך להבין את מצב המערכת תוך שניות.
+________________________________________
+36. User Management
+המנהל צריך להיות מסוגל:
+•	ליצור משתמש.
+•	לערוך משתמש.
+•	להשבית משתמש.
+•	למחוק משתמש.
+•	לאפס סיסמה.
+•	להגדיר Role.
+•	לראות Last Login.
+•	לראות Sessions פעילים.
+•	לראות שימוש בסיסי.
+•	לנהל הרשאות.
+Roles בסיסיים:
+Administrator
+גישה מלאה לניהול המערכת.
+User
+גישה למידע האישי שלו בלבד.
+המבנה צריך לאפשר בעתיד Roles נוספים כגון:
+Coach
+Family Manager
+בלי צורך לבנות מחדש את מערכת ההרשאות.
+________________________________________
+37. Multi-user Data Isolation
+הפרדת המידע בין משתמשים היא דרישה קריטית.
+כל מידע אישי צריך להיות משויך באופן ברור ל־User ID.
+לדוגמה:
+•	Meals.
+•	Images.
+•	Weight.
+•	Water.
+•	Activity.
+•	Goals.
+•	Preferences.
+•	AI conversations.
+•	Personal calibration.
+•	Documents.
+•	Voice recordings.
+•	History.
+משתמש רגיל לעולם לא צריך להיות מסוגל לגשת למידע של משתמש אחר באמצעות:
+•	שינוי URL.
+•	שינוי Request.
+•	API manipulation.
+•	Client-side manipulation.
+ההרשאות חייבות להיאכף ב־Backend ולא רק ב־Frontend.
+________________________________________
+38. Database Management
+ב־Admin Center יהיה אזור Database פשוט ובטוח.
+אין צורך ב־SQL Console למנהל.
+יש להציג:
+Database Status
+•	DB size.
+•	מספר משתמשים.
+•	מספר ארוחות.
+•	מספר רשומות.
+•	כמות מידע לאורך זמן.
+•	Last backup.
+•	Database health.
+פעולות אפשריות:
+•	Backup database.
+•	Restore.
+•	Integrity check.
+•	Optimize / Maintenance.
+•	Download backup.
+•	Data cleanup לפי מדיניות.
+פעולות מסוכנות צריכות לדרוש Confirmation ברור.
+________________________________________
+39. Storage Management
+המערכת צריכה לתמוך גם ב:
+Local Storage
+וגם:
+Network Storage
+לדוגמה SMB/NAS.
+המנהל יוכל להגדיר Storage Location נפרד עבור סוגי מידע שונים.
+לדוגמה:
+Meal Images → NAS
+Menu Images → NAS
+Voice Recordings → Local
+Documents → NAS
+Backups → NAS
+Exports → Local
+סוגי מידע אפשריים:
+•	Meal photos.
+•	Menu photos.
+•	Refrigerator/pantry photos.
+•	Documents.
+•	Voice recordings.
+•	Exports.
+•	Backups.
+שינוי Storage Location לא צריך לדרוש שינוי בקוד האפליקציה.
+________________________________________
+40. Storage Reliability
+יש להציג:
+•	Total storage.
+•	Used storage.
+•	Free storage.
+•	חלוקה משוערת לפי סוג מידע.
+לדוגמה:
+Storage: 124 GB / 1 TB
+קטגוריות:
+•	Meal Photos.
+•	Other Images.
+•	Voice.
+•	Documents.
+•	Database.
+•	Backups.
+•	Trash.
+אם Network Storage אינו זמין:
+Network Storage unavailable
+המערכת צריכה להתמודד עם המצב בצורה בטוחה.
+אין לאבד מידע רק מכיוון שה־NAS אינו זמין זמנית.
+ניתן להשתמש ב־local pending storage ולנסות לסנכרן מאוחר יותר כאשר הדבר מתאים.
+________________________________________
+41. Backup System
+אני רוצה מערכת גיבוי מובנית.
+אפשרויות:
+•	Manual Backup.
+•	Daily Automatic Backup.
+•	בחירת שעה.
+•	בחירת Destination.
+•	Retention Policy.
+•	מספר גיבויים לשמירה.
+לדוגמה:
+Daily Backup: 03:00
+Keep: 14 daily backups
+בעתיד ניתן לתמוך גם ב:
+•	Weekly backups.
+•	Monthly backups.
+________________________________________
+42. Backup Types
+צריך להפריד בין סוגי גיבויים.
+Database Backup
+כולל בעיקר את מסד הנתונים.
+Configuration Backup
+כולל:
+•	System settings.
+•	AI configuration.
+•	Storage configuration.
+•	Application configuration.
+Full Backup
+יכול לכלול:
+•	Database.
+•	Users.
+•	Settings.
+•	Preferences.
+•	Meal history.
+•	AI configuration.
+•	Application configuration.
+•	Media/files בהתאם למדיניות.
+כמות התמונות יכולה להיות גדולה מאוד ולכן אין להניח שכל Database Backup חייב לכלול את כל ה-Media.
+________________________________________
+43. Configuration Export / Import
+בנוסף ל־Backup מלא, אני רוצה אפשרות ל:
+Export Configuration
+ו־
+Import Configuration
+כך שניתן יהיה להתקין מחדש את CALOREAZI ולהחזיר את הגדרות המערכת בלי בהכרח לשחזר:
+•	Meal images.
+•	Media.
+•	History.
+•	Database מלא.
+ה־Configuration Export יכול לכלול:
+•	General settings.
+•	Storage mappings.
+•	AI provider configuration ללא חשיפת secrets כאשר לא בטוח לייצא אותם.
+•	Feature settings.
+•	Backup policy.
+•	UI preferences מערכתיות.
+________________________________________
+44. Restore
+Restore צריך להיות פשוט ובטוח.
+לדוגמה:
+Created: 18/08/2026 03:00
+Size: 1.8 GB
+Type: Full Backup
+Status: Verified
+לפני Restore משמעותי, המערכת יכולה ליצור:
+Safety Backup
+אוטומטי של המצב הנוכחי.
+פעולת Restore צריכה לדרוש אישור ברור.
+________________________________________
+45. Trash / Recycle Bin
+CALOREAZI צריך לכלול Recycle Bin אמיתי.
+מחיקת מידע משמעותי לא חייבת למחוק אותו מיד מהדיסק.
+לדוגמה:
+•	Meal.
+•	Image.
+•	Document.
+•	Voice recording.
+•	משמעותית אחרת.
+הפריט יעבור ל־Trash.
+ברירת מחדל אפשרית:
+Deleted items are kept for 30 days.
+פעולות:
+•	Restore.
+•	Delete permanently.
+•	Empty Trash.
+ניתן להגדיר Retention Policy.
+________________________________________
+46. Security
+אבטחה צריכה להיות חלק מהמערכת מהבסיס.
+לפחות:
+•	Authentication.
+•	Session Management.
+•	Role Based Access Control.
+•	Backend authorization.
+•	API protection.
+•	Rate limiting בנקודות רגישות.
+•	Password policy.
+•	Active sessions.
+•	Logout from all devices.
+•	Secrets protection.
+•	Audit Log.
+•	User data isolation.
+API Keys ו-Secrets לעולם לא צריכים להגיע ל־Frontend.
+________________________________________
+47. Audit Log
+יש לשמור Audit Log לפעולות משמעותיות.
+לדוגמה:
+•	User created.
+•	User disabled.
+•	User deleted.
+•	Role changed.
+•	Password reset.
+•	Backup created.
+•	Restore performed.
+•	Storage configuration changed.
+•	AI provider changed.
+•	API key replaced.
+•	Security setting changed.
+•	Data permanently deleted.
+ה־Audit Log צריך לכלול ככל האפשר:
+•	Who.
+•	What.
+•	When.
+•	Result.
+לא לשמור בו Secrets.
+________________________________________
+48. Privacy & User Data
+המידע שייך למשתמש.
+יש לתכנן מראש יכולות כגון:
+Download My Data
+ו־
+Delete My Data
+הדבר כולל לפי הצורך:
+•	Meals.
+•	Images.
+•	Weight.
+•	Activity.
+•	AI conversations.
+•	Preferences.
+•	Voice recordings.
+•	Personal calibration data.
+מחיקה צריכה להתחשב גם ב־Trash ובמדיניות הגיבויים.
+________________________________________
+49. AI Provider Configuration
+ב־Admin Center יהיה אזור ייעודי להגדרת AI.
+בשלב הראשון לפחות:
+OpenAI
+Google Gemini
+המנהל יוכל להזין API Key / Token לכל Provider.
+לדוגמה:
+OpenAI API Key
+••••••••••••••••
+Gemini API Key
+••••••••••••••••
+פעולות:
+•	Save.
+•	Test Connection.
+•	Replace Key.
+•	Disable Provider.
+המפתחות נשמרים ב־Backend בלבד.
+________________________________________
+50. AI Model Selection
+לא לקבע את כל המוצר למודל AI יחיד.
+ניתן לבחור Provider/Model לפי תפקיד.
+לדוגמה:
+Vision / Food Analysis
+מודל המתאים לזיהוי תמונות.
+AI Coach
+מודל המתאים לשיחה והמלצות.
+Menu / OCR Analysis
+מודל לקריאת תפריטים.
+Speech
+מודל לתמלול.
+המטרה היא לאפשר להשתמש במודל חזק יותר במקום שבו דיוק חשוב, ובמודל חסכוני יותר לפעולות פשוטות.
+________________________________________
+51. AI Provider Abstraction
+הלוגיקה העסקית של CALOREAZI לא צריכה להיות קשורה ישירות ל־OpenAI או Gemini.
+צריך להיות Layer ברור שמאפשר להחליף Provider.
+לדוגמה:
+CALOREAZI → AI Service Layer → OpenAI / Gemini
+כך ניתן בעתיד להוסיף Provider נוסף בלי לשנות את כל המוצר.
+________________________________________
+52. AI Fallback
+ניתן לאפשר:
+Primary AI: OpenAI
+Fallback AI: Gemini
+אם ה־Primary:
+•	אינו זמין.
+•	מחזיר Error.
+•	מגיע למכסה.
+•	אינו מסוגל לבצע פעולה.
+ניתן לעבור ל־Fallback בהתאם להגדרה.
+המנהל יוכל לבחור גם:
+Automatic Fallback
+או:
+Manual Only
+________________________________________
+53. AI Budget Control
+ב־Admin Center תהיה שליטה בעלויות AI.
+לדוגמה:
+Monthly AI Budget
+$20 / month
+המערכת תציג:
+Current Month
+$12.40 / $20
+62% used
+________________________________________
+54. AI Budget Alerts
+ניתן להגדיר Thresholds.
+לדוגמה:
+•	50%.
+•	75%.
+•	90%.
+•	100%.
+כאשר מגיעים לרמה מסוימת:
+AI usage reached 90% of the monthly budget.
+________________________________________
+55. Soft & Hard AI Limits
+Soft Limit
+המערכת מתריעה אך ממשיכה לעבוד.
+Hard Limit
+כאשר מגיעים לתקרה, פעולות AI חדשות נעצרות בהתאם למדיניות.
+פעולות שאינן דורשות AI צריכות להמשיך לעבוד.
+________________________________________
+56. Estimated AI Cost
+כאשר ספק ה-AI אינו מספק Billing API מדויק בזמן אמת, CALOREAZI יציג:
+Estimated AI Cost
+ולא יציג את המספר כאילו הוא בהכרח החשבון הסופי של הספק.
+ניתן לחשב את ההערכה לפי:
+•	Tokens.
+•	Requests.
+•	Image processing.
+•	Audio processing.
+•	Model pricing configuration.
+יש לתכנן את מנגנון ה־Hard Limit כך שלא יסתמך בצורה מסוכנת על נתון שאינו מדויק.
+________________________________________
+57. AI Usage Per User
+בעתיד ניתן לאפשר Limits גם לפי משתמש.
+לדוגמה:
+System Budget: $50/month
+User A: $20/month
+User B: $10/month
+או לפי:
+•	Image analyses per day.
+•	AI Coach messages.
+•	Voice transcriptions.
+•	Monthly estimated cost.
+לא חייב להיות מופעל בגרסה הראשונה, אך המבנה צריך לאפשר זאת.
+________________________________________
+58. AI Usage Analytics
+ב־Admin Center ניתן להציג:
+AI Usage This Month
+•	Food analyses.
+•	AI Coach messages.
+•	Menu analyses.
+•	Voice transcriptions.
+•	Tokens.
+•	Estimated cost.
+וגם חלוקה לפי:
+•	User.
+•	Feature.
+•	Provider.
+•	Model.
+המטרה היא להבין לא רק כמה AI עולה אלא:
+איזה Feature צורך את העלות.
+________________________________________
+59. Nutrition Data Independence
+ה-AI לא יהיה המקור היחיד לערכי תזונה.
+ה-AI יכול לזהות:
+•	Food.
+•	Ingredients.
+•	Portion.
+•	Context.
+לאחר מכן Nutrition Engine יכול להשתמש ב־Nutrition Database מובנה או חיצוני כדי לחשב:
+•	Calories.
+•	Protein.
+•	Carbs.
+•	Fat.
+•	ערכים נוספים.
+כך ניתן להחליף AI Provider בלי לשנות את בסיס החישובים התזונתיים.
+________________________________________
+60. System Health
+מסך ה־Admin הראשי יציג System Health פשוט.
+לדוגמה:
+🟢 Application
+🟢 Database
+🟢 Local Storage
+🟢 Network Storage
+🟢 AI
+🟢 Backup
+🟢 Internet
+ומתחת:
+Last Backup: Today 03:00
+Users: 4
+Storage: 18%
+AI: Operational
+המטרה:
+Administrator צריך להבין תוך 5 שניות אם הכול תקין.
+________________________________________
+61. Logs
+יהיה Log Viewer פשוט.
+קטגוריות:
+•	System.
+•	Authentication.
+•	AI.
+•	Storage.
+•	Backup.
+•	Database.
+•	Errors.
+ברירת המחדל לא צריכה להציף Logs טכניים.
+עדיף להציג:
+Everything OK
+או:
+2 issues require attention
+ומי שרוצה יכול לפתוח את הפרטים.
+________________________________________
+62. Offline / Connectivity Handling
+מכיוון שהמוצר הוא Mobile-first PWA, יש לחשוב מראש על חיבור אינטרנט לא יציב.
+כאשר ניתן, פעולות בסיסיות לא צריכות להיעלם רק בגלל שאין אינטרנט.
+לדוגמה:
+המשתמש מצלם ארוחה ללא חיבור.
+התמונה והפעולה נשמרות כ:
+Pending Analysis
+וכאשר החיבור חוזר ניתן לבצע את הניתוח.
+אין חובה לממש Offline מלא בגרסה הראשונה, אך אין לבנות את המערכת בצורה שחוסמת אפשרות כזאת בעתיד.
+________________________________________
+63. Wellness & Safety
+CALOREAZI הוא מוצר ל־Nutrition & Wellness Coaching.
+הוא אינו מערכת לאבחון רפואי.
+המערכת לא צריכה להציג המלצות תזונתיות כאבחנה רפואית או כוודאות רפואית.
+כאשר חסר מידע משמעותי, עדיף:
+•	להציג uncertainty.
+•	לבקש מידע נוסף.
+•	להימנע מהמלצה קיצונית.
+•	להציג המלצות כנקודת פתיחה ולא כאמת מוחלטת.
+במיוחד בחישובי:
+•	ירידה במשקל.
+•	עלייה במשקל.
+•	Calorie deficit.
+•	Activity recommendations.
+________________________________________
+64. PWA & Future Native Apps
+הגרסה הראשונה היא:
+Web Application / PWA
+אבל המבנה צריך להיות מוכן לכך שבעתיד יהיו:
+iOS Client
+Android Client
+אין לבנות מחדש את ה־Business Logic עבור האפליקציות.
+יש לשמור על הפרדה בין:
+Frontend Client
+לבין:
+Backend / API / Business Logic / AI / Database
+כך אפליקציה עתידית תוכל להשתמש באותו Backend.
+________________________________________
+65. Apple Health / HealthKit
+PWA רגיל לא צריך להיות תלוי ב־HealthKit.
+בשלב מאוחר יותר ניתן להוסיף iOS Client או Native Wrapper שיאפשר גישה, בהרשאת המשתמש, לנתונים כגון:
+•	Steps.
+•	Walking distance.
+•	Floors climbed.
+•	Workouts.
+•	Active energy.
+הצורך ב־HealthKit לא יעכב את Core Product.
+________________________________________
+66. Branding & Logo Assets
+יש ליצור מערכת מיתוג מלאה ל־CALOREAZI.
+נדרשים:
+Full Logo
+Symbol + CALOREAZI.
+Symbol Only
+לשימוש במקומות קטנים.
+Light Version
+Dark Version
+Monochrome Version
+PWA / Maskable Version
+הלוגו צריך לעבוד ב:
+•	Header.
+•	Login.
+•	Onboarding.
+•	Browser tab.
+•	Favicon.
+•	Bookmark.
+•	PWA icon.
+•	Add to Home Screen.
+•	Splash Screen.
+•	Notifications.
+•	בעתיד iOS/Android App Icon.
+לא להשתמש בקלישאות ברורות

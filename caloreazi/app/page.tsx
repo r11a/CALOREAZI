@@ -105,6 +105,7 @@ export default function Home() {
   const [aiOriginalItems, setAiOriginalItems] = useState<any[]>([]);
   const [mealSource, setMealSource] = useState<"manual" | "photo" | "voice">("manual");
   const [mealTranscript, setMealTranscript] = useState("");
+  const [analysisJobId, setAnalysisJobId] = useState("");
   const [saveToLibrary, setSaveToLibrary] = useState(false);
   const [foodVisibility, setFoodVisibility] = useState<"private" | "shared">("private");
   const [generateFoodArtwork, setGenerateFoodArtwork] = useState(false);
@@ -117,6 +118,9 @@ export default function Home() {
   const [aiForm, setAiForm] = useState({
     provider: "openai",
     model: "gpt-5-mini",
+    coachModel: "gpt-5-mini",
+    visionModel: "gpt-5-mini",
+    imageModel: "gpt-image-1-mini",
     apiKey: "",
     inputCost: 0.25,
     outputCost: 2,
@@ -126,6 +130,7 @@ export default function Home() {
   });
   const [aiStatus, setAiStatus] = useState("");
   const [modelCatalog, setModelCatalog] = useState<Record<string, any[]>>({ openai: [], gemini: [] });
+  const [imageModelCatalog, setImageModelCatalog] = useState<Record<string, any[]>>({ openai: [], gemini: [] });
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [photoPreview, setPhotoPreview] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
@@ -255,13 +260,13 @@ export default function Home() {
 
   async function loadAdminData() {
     const [users, aiData, health, backups, audit, storage] = await Promise.all([api("/api/admin/users"), api("/api/ai/settings"), api("/api/admin/health"), api("/api/admin/backups"), api("/api/admin/audit"), api("/api/admin/storage")]);
-    setAdminUsers(users); setModelCatalog(aiData.models);
+    setAdminUsers(users); setModelCatalog(aiData.models); setImageModelCatalog(aiData.imageModels || { openai: [], gemini: [] });
     setAdminHealth(health);
     setAdminBackups(backups.backups || []); setAdminAudit(audit.items || []);
     setStorageForm(storage.settings); setStorageStatus(storage.status);
     const available = aiData.models[aiData.settings.provider] || [];
     const selected = available.find((item: any) => item.id === aiData.settings.model) || available[0];
-    setAiForm((current) => ({ ...current, ...aiData.settings, ...(selected ? { model: selected.id, inputCost: selected.inputCost, outputCost: selected.outputCost } : {}), apiKey: "" }));
+    setAiForm((current) => ({ ...current, ...aiData.settings, coachModel: aiData.settings.roles?.coach?.model || selected?.id, visionModel: aiData.settings.roles?.vision?.model || selected?.id, imageModel: aiData.settings.roles?.image?.model || aiData.imageModels?.[aiData.settings.provider]?.[0]?.id, ...(selected ? { model: selected.id, inputCost: selected.inputCost, outputCost: selected.outputCost } : {}), apiKey: "" }));
   }
 
   async function createBackup() { setBusy(true); try { const data = await api("/api/admin/backups", { method: "POST" }); setAdminBackups(data.backups || []); setAiStatus("הגיבוי נוצר ואומת ✓"); await loadAdminData(); } catch (e) { setAiStatus((e as Error).message); } finally { setBusy(false); } }
@@ -336,7 +341,7 @@ export default function Home() {
     setBusy(true);
     try {
       const calculated = mealItems.length ? mealItems.reduce((total, item) => { const factor = Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1) / 100; return { kcal: total.kcal + Number(item.kcalPer100 || 0) * factor, protein: total.protein + Number(item.proteinPer100 || 0) * factor, carbs: total.carbs + Number(item.carbsPer100 || 0) * factor, fat: total.fat + Number(item.fatPer100 || 0) * factor }; }, { kcal: 0, protein: 0, carbs: 0, fat: 0 }) : mealForm;
-      const finalMeal = { ...mealForm, period: mealPeriod, occurredAt: new Date(mealDateTime).toISOString(), kcal: Math.round(calculated.kcal), protein: Math.round(calculated.protein), carbs: Math.round(calculated.carbs), fat: Math.round(calculated.fat), items: mealItems, aiOriginalItems, source: mealSource, transcript: mealTranscript, image: photoPreview };
+      const finalMeal = { ...mealForm, period: mealPeriod, occurredAt: new Date(mealDateTime).toISOString(), kcal: Math.round(calculated.kcal), protein: Math.round(calculated.protein), carbs: Math.round(calculated.carbs), fat: Math.round(calculated.fat), items: mealItems, aiOriginalItems, source: mealSource, transcript: mealTranscript, image: photoPreview, analysisJobId };
       let latest = state;
       if (!catalogOnly) latest = await api("/api/meals", { method: "POST", body: JSON.stringify(finalMeal) });
       if (saveToLibrary || catalogOnly) {
@@ -346,7 +351,7 @@ export default function Home() {
       setState(latest);
       setMealOpen(false);
       setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 });
-      setMealItems([]); setAiOriginalItems([]); setMealSource("manual"); setMealTranscript(""); setPhotoPreview(""); setPhotoStatus("");
+      setMealItems([]); setAiOriginalItems([]); setMealSource("manual"); setMealTranscript(""); setAnalysisJobId(""); setPhotoPreview(""); setPhotoStatus("");
       setSaveToLibrary(false); setFoodVisibility("private"); setGenerateFoodArtwork(false);
       setMealPeriod("snack"); setManualDescription(""); setFoodCategory("meals"); setManualAiMode(false); setCatalogOnly(false);
     } catch (e) {
@@ -430,7 +435,7 @@ export default function Home() {
   async function analyzePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
     setBusy(true); setPhotoStatus("מנתח את הארוחה בעזרת AI…");
-    try { const imageDataUrl = await prepareImage(file); setPhotoPreview(imageDataUrl); setMealSource("photo"); setMealItems([]); setMealOpen(true); const result = await api("/api/ai/analyze-meal", { method: "POST", body: JSON.stringify({ imageDataUrl }) }); setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems(result.items); setAiOriginalItems(structuredClone(result.items)); setPhotoStatus(`זוהו ${result.items.length} פריטים (${result.confidence === "high" ? "ביטחון גבוה" : result.confidence === "medium" ? "ביטחון בינוני" : "ביטחון נמוך"}). בדוק משקל וכמות; החישוב יתבצע רק לאחר אישור. ${result.explanation || ""}`); }
+    try { const imageDataUrl = await prepareImage(file); const clientId = crypto.randomUUID(); setPhotoPreview(imageDataUrl); setMealSource("photo"); setMealItems([]); setMealOpen(true); let result = await api("/api/ai/analyze-meal", { method: "POST", headers: { "Idempotency-Key": clientId }, body: JSON.stringify({ imageDataUrl, clientId }) }); const jobId = result.jobId; setAnalysisJobId(jobId || ""); for (let attempt = 0; !result.items && attempt < 90; attempt += 1) { setPhotoStatus(result.status === "processing" ? "מזהה פריטים וכמויות…" : "הצילום נשמר וממתין לניתוח…"); await new Promise((resolve) => window.setTimeout(resolve, 1000)); result = await api(`/api/ai/analyze-meal?id=${encodeURIComponent(jobId)}`); if (result.status === "failed" && !result.nextAttemptAt) throw new Error(result.errorMessage || "ניתוח התמונה נכשל"); if (result.status === "cancelled") throw new Error("ניתוח התמונה בוטל"); result = result.result ? { ...result.result, jobId } : result; } if (!result.items) throw new Error("הניתוח עדיין לא הסתיים. הוא נשמר וניתן לנסות שוב בעוד רגע."); setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems(result.items); setAiOriginalItems(structuredClone(result.items)); setPhotoStatus(`זוהו ${result.items.length} פריטים (${result.confidence === "high" ? "ביטחון גבוה" : result.confidence === "medium" ? "ביטחון בינוני" : "ביטחון נמוך"}). בדוק משקל וכמות; החישוב יתבצע רק לאחר אישור. ${result.explanation || ""}`); }
     catch (e) { setPhotoStatus((e as Error).message); setMealOpen(true); } finally { setBusy(false); }
   }
   async function loadFoodImage(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; try { setPhotoPreview(await prepareImage(file, 900, .8)); setGenerateFoodArtwork(false); } catch (e) { setError((e as Error).message); } }
@@ -895,20 +900,22 @@ export default function Home() {
                 ספק
                 <select
                   value={aiForm.provider}
-                  onChange={(e) => { const first = modelCatalog[e.target.value]?.[0]; setAiForm({ ...aiForm, provider: e.target.value, ...(first ? { model: first.id, inputCost: first.inputCost, outputCost: first.outputCost } : {}) }); }}
+                  onChange={(e) => { const first = modelCatalog[e.target.value]?.[0]; const firstImage = imageModelCatalog[e.target.value]?.[0]; setAiForm({ ...aiForm, provider: e.target.value, ...(first ? { model: first.id, coachModel: first.id, visionModel: first.id, inputCost: first.inputCost, outputCost: first.outputCost } : {}), ...(firstImage ? { imageModel: firstImage.id } : {}) }); }}
                 >
                   <option value="openai">OpenAI</option>
                   <option value="gemini">Google Gemini</option>
                 </select>
               </label>
               <label>
-                מודל
+                מודל המאמן האישי
                 <select
-                  value={aiForm.model}
-                  onChange={(e) => { const selected = modelCatalog[aiForm.provider]?.find((item) => item.id === e.target.value); if (selected) setAiForm({ ...aiForm, model: selected.id, inputCost: selected.inputCost, outputCost: selected.outputCost }); }}
+                  value={aiForm.coachModel}
+                  onChange={(e) => { const selected = modelCatalog[aiForm.provider]?.find((item) => item.id === e.target.value); if (selected) setAiForm({ ...aiForm, model: selected.id, coachModel: selected.id, inputCost: selected.inputCost, outputCost: selected.outputCost }); }}
                 >{modelCatalog[aiForm.provider]?.map((model) => <option key={model.id} value={model.id}>{model.recommended ? "★ מומלץ · " : ""}{model.label}</option>)}</select>
               </label>
-              {modelCatalog[aiForm.provider]?.find((model) => model.id === aiForm.model) && (() => { const model = modelCatalog[aiForm.provider].find((item) => item.id === aiForm.model); return <div className="model-explanation wide"><strong>{model.recommended ? "★ הבחירה המומלצת" : model.label}</strong><span>{model.description}</span><small>עלות משוערת: ${model.inputCost} לקלט ו־${model.outputCost} לפלט לכל מיליון tokens · {model.vision ? "תומך בניתוח תמונות" : "טקסט בלבד"}</small><small>בתמונה העלות בפועל משתנה לפי הרזולוציה וכמות הטוקנים שהספק מחשב.</small></div>; })()}
+              <label>מודל זיהוי ארוחה<select value={aiForm.visionModel} onChange={(e) => setAiForm({ ...aiForm, visionModel: e.target.value })}>{modelCatalog[aiForm.provider]?.filter((model) => model.vision).map((model) => <option key={model.id} value={model.id}>{model.recommended ? "★ מומלץ · " : ""}{model.label}</option>)}</select></label>
+              <label>מודל יצירת תמונות<select value={aiForm.imageModel} onChange={(e) => setAiForm({ ...aiForm, imageModel: e.target.value })}>{imageModelCatalog[aiForm.provider]?.map((model) => <option key={model.id} value={model.id}>{model.recommended ? "★ מומלץ · " : ""}{model.label}</option>)}</select></label>
+              <div className="model-explanation wide"><strong>שלושה תפקידים נפרדים</strong><span>המאמן משמש לשיחה והמלצות, מודל הזיהוי מנתח תמונות ארוחה, ומודל התמונה יוצר איורים לקטלוג.</span><small>השימוש והעלות נרשמים לפי התפקיד והמודל שביצע את הפעולה.</small></div>
               <label className="wide">
                 API Key
                 <input
