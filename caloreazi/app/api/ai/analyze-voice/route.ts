@@ -6,7 +6,6 @@ import { transcribeMealAudio } from "@/server/ai/transcribe.js";
 import { estimateCost, evaluateBudget } from "@/server/ai/usage.js";
 import { aiErrorStatus } from "@/server/ai/http.js";
 import { decryptSecret, readState, updateState } from "@/server/store.js";
-import { aiRole, findModel } from "@/server/ai/models.js";
 export const runtime = "nodejs";
 
 function parseItems(text: string) {
@@ -31,15 +30,14 @@ export async function POST(request: Request) {
   if (!evaluateBudget({ spentUsd: spent, monthlyBudgetUsd: state.ai.monthlyBudget, softLimitPercent: state.ai.softLimit, hardLimitEnabled: state.ai.hardLimit }).allowed) return Response.json({ error: "תקציב ה-AI החודשי הגיע למגבלה הקשיחה" }, { status: 429 });
   try {
     const apiKey = await decryptSecret(state.ai.encryptedKey);
-    const role = aiRole(state.ai, "vision"); const selectedModel = findModel(role.provider, role.model);
     let transcript = browserTranscript;
     try { if (!transcript) transcript = await transcribeMealAudio({ provider: state.ai.provider, apiKey, model: state.ai.model, audioDataUrl: String(audioDataUrl) }) || transcript; }
     catch (error) { if (!transcript) throw error; }
     if (!transcript) throw new Error("לא נשמע תיאור ברור בהקלטה");
-    const call = role.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply;
-    const result = await call({ apiKey, model: role.model, instructions: "אתה מנתח תזונה זהיר. פרק את תיאור הארוחה לפריטים נפרדים. מספר כמו שתי חתיכות הוא quantity=2 והמשקל הוא לפריט אחד. אל תנחש ודאות כשכמות חסרה. החזר JSON תקין בלבד.", input: `תמלול: ${transcript}\nהחזר בדיוק: {"name":"שם ארוחה בעברית","items":[{"name":"שם פריט","grams":150,"quantity":1,"unit":"חתיכה","kcalPer100":100,"proteinPer100":10,"carbsPer100":12,"fatPer100":3}],"confidence":"low|medium|high","explanation":"הנחות קצרות"}` });
-    const analysis = parseItems(result.text); const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: selectedModel?.inputCost || state.ai.inputCost, outputCostPerMillion: selectedModel?.outputCost || state.ai.outputCost });
-    await updateState((latest) => { latest.aiUsage.push({ id: crypto.randomUUID(), month, at: new Date().toISOString(), userId: session.userId, feature: "meal_voice", provider: role.provider, model: role.model, ...result.usage, cost }); return latest; });
+    const call = state.ai.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply;
+    const result = await call({ apiKey, model: state.ai.model, instructions: "אתה מנתח תזונה זהיר. פרק את תיאור הארוחה לפריטים נפרדים. מספר כמו שתי חתיכות הוא quantity=2 והמשקל הוא לפריט אחד. אל תנחש ודאות כשכמות חסרה. החזר JSON תקין בלבד.", input: `תמלול: ${transcript}\nהחזר בדיוק: {"name":"שם ארוחה בעברית","items":[{"name":"שם פריט","grams":150,"quantity":1,"unit":"חתיכה","kcalPer100":100,"proteinPer100":10,"carbsPer100":12,"fatPer100":3}],"confidence":"low|medium|high","explanation":"הנחות קצרות"}` });
+    const analysis = parseItems(result.text); const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: state.ai.inputCost, outputCostPerMillion: state.ai.outputCost });
+    await updateState((latest) => { latest.aiUsage.push({ id: crypto.randomUUID(), month, at: new Date().toISOString(), userId: session.userId, feature: "meal_voice", provider: latest.ai.provider, model: latest.ai.model, ...result.usage, cost }); return latest; });
     return Response.json({ transcript, ...analysis, usage: { ...result.usage, estimatedCost: cost } });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "ניתוח ההקלטה נכשל" }, { status: aiErrorStatus(error) }); }
 }

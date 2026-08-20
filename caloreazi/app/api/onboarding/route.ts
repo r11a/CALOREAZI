@@ -14,7 +14,6 @@ export async function POST(request: Request) {
   const initial = await readState();
   let session = currentSession(request);
   let newAdmin = null;
-  const newSessionId = crypto.randomUUID();
   if (initial.users.length === 0) {
     const password = String(body.adminPassword || "");
     if (!email.includes("@") || password.length < 8) return Response.json({ error: "נדרשים אימייל וסיסמת Admin בת 8 תווים לפחות" }, { status: 400 });
@@ -27,10 +26,10 @@ export async function POST(request: Request) {
   const calories = caloriePlan.calories;
   const profile = { goal: body.goal, sex: body.sex, age, height, weight, targetWeight: Number(body.targetWeight) || weight, activity: body.activity, workouts: Number(body.workouts) || 0, diet: body.diet || "none", restrictions: String(body.restrictions || ""), calories, caloriePlan, protein: Math.round(weight * (body.goal === "gain" ? 1.8 : 1.6)), carbs: Math.round((calories * .45) / 4), fat: Math.round((calories * .3) / 9), waterMl: Math.round(weight * 32 / 250) * 250, completedAt: new Date().toISOString() };
   const state = await updateState((latest) => {
-    if (newAdmin) { latest.users.push(newAdmin); latest.owner = { ...newAdmin, password: undefined }; latest.adminAuth = newAdmin.password; latest.sessions = latest.sessions || []; latest.sessions.push({ id: newSessionId, userId: newAdmin.id, createdAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(), userAgent: String(request.headers.get("user-agent") || "").slice(0, 200) }); }
+    if (newAdmin) { latest.users.push(newAdmin); latest.owner = { ...newAdmin, password: undefined }; latest.adminAuth = newAdmin.password; }
     latest.userData[session.userId] = { profile, today: { date: new Date().toISOString().slice(0, 10), waterMl: 0, meals: [] } };
     return latest;
   });
   const user = state.users.find((item) => item.id === session.userId);
-  return Response.json({ authenticated: true, ...userView(state, session.userId, session.role === "admin") }, newAdmin ? { headers: { "Set-Cookie": createSessionCookie(request, user, newSessionId) } } : undefined);
+  return Response.json({ authenticated: true, ...userView(state, session.userId, session.role === "admin") }, newAdmin ? { headers: { "Set-Cookie": createSessionCookie(request, user) } } : undefined);
 }

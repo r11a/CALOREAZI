@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id BIGSERIAL PRIMARY KEY,
   username TEXT UNIQUE,
   display_name TEXT NOT NULL,
   password_hash TEXT,
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS user_profiles (
-  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   onboarding_completed_at TIMESTAMPTZ,
   goal TEXT CHECK (goal IN ('lose', 'maintain', 'gain', 'nutrition', 'fitness')),
   birth_date DATE,
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
   value JSONB NOT NULL DEFAULT '{}'::jsonb,
-  updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -44,13 +44,13 @@ CREATE TABLE IF NOT EXISTS ai_provider_settings (
   last_tested_at TIMESTAMPTZ,
   last_test_status TEXT CHECK (last_test_status IN ('success', 'error') OR last_test_status IS NULL),
   last_test_error TEXT,
-  updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS ai_usage_log (
   id BIGSERIAL PRIMARY KEY,
-  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
   provider TEXT NOT NULL,
   model TEXT NOT NULL,
   feature TEXT NOT NULL CHECK (feature IN ('coach', 'meal_vision', 'menu_scan', 'insight')),
@@ -76,7 +76,7 @@ ON CONFLICT(key) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS audit_log (
   id BIGSERIAL PRIMARY KEY,
-  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
   action TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   entity_id TEXT,

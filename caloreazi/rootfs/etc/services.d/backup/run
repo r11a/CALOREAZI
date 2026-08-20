@@ -1,8 +1,0 @@
-#!/usr/bin/with-contenv sh
-set -eu
-cd /opt/caloreazi
-export CALOREAZI_DATABASE_URL="${CALOREAZI_DATABASE_URL:-postgresql://postgres@127.0.0.1:5432/caloreazi}"
-while true; do
-  node scripts/scheduled-backup.mjs || echo "Scheduled backup check failed" >&2
-  sleep 300
-done

@@ -21,10 +21,9 @@ export async function POST(request: Request) {
   }
 
   const loggedInAt = new Date().toISOString();
-  const sessionId = crypto.randomUUID();
-  await updateState((latest) => { const account = latest.users.find((item) => item.id === admin.id); account.lastLogin = loggedInAt; latest.sessions = latest.sessions || []; latest.sessions.push({ id: sessionId, userId: admin.id, createdAt: loggedInAt, lastSeenAt: loggedInAt, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(), userAgent: String(request.headers.get("user-agent") || "").slice(0, 200) }); return latest; });
+  await updateState((latest) => { const account = latest.users.find((item) => item.id === admin.id); account.lastLogin = loggedInAt; return latest; });
 
-  return Response.json({ ok: true, role: "admin", rememberedDays: 30 }, { headers: { "Set-Cookie": createSessionCookie(request, admin, sessionId), "Cache-Control": "no-store" } });
+  return Response.json({ ok: true, role: "admin", rememberedDays: 30 }, { headers: { "Set-Cookie": createSessionCookie(request, admin), "Cache-Control": "no-store" } });
 }
 
 export async function DELETE(request: Request) {

@@ -1,8 +1,13 @@
-// The Home Assistant runtime uses the migration runner and database-backed
-// repositories in server/. This module intentionally exposes configuration
-// only; it no longer pretends that a Cloudflare D1 binding is the product DB.
-export function databaseUrl() {
-  const value = process.env.CALOREAZI_DATABASE_URL;
-  if (!value) throw new Error("CALOREAZI_DATABASE_URL is required");
-  return value;
+import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "./schema";
+
+export function getDb() {
+  if (!env.DB) {
+    throw new Error(
+      "Cloudflare D1 binding `DB` is unavailable. Set the `d1` field in .openai/hosting.json to `DB` or let your control plane inject the real binding values before using the database."
+    );
+  }
+
+  return drizzle(env.DB, { schema });
 }

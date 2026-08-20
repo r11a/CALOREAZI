@@ -2,7 +2,6 @@ import { requireUser } from "@/server/auth.js";
 import { generateFoodImage } from "@/server/ai/images.js";
 import { decryptSecret, readState, updateState } from "@/server/store.js";
 import { saveMediaDataUrl } from "@/server/storage.js";
-import { aiRole } from "@/server/ai/models.js";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
@@ -23,7 +22,7 @@ export async function POST(request: Request) {
   }
   if (body.generateImage && !image) {
     if (!state.ai.encryptedKey) return Response.json({ error: "לא הוגדר שירות AI ליצירת תמונה" }, { status: 409 });
-    const imageRole = aiRole(state.ai, "image"); image = await generateFoodImage({ provider: imageRole.provider, model: imageRole.model, apiKey: await decryptSecret(state.ai.encryptedKey), name });
+    image = await generateFoodImage({ provider: state.ai.provider, apiKey: await decryptSecret(state.ai.encryptedKey), name });
   }
   if (image && !/^data:image\/(jpeg|png|webp);base64,/.test(image)) return Response.json({ error: "פורמט התמונה אינו תקין" }, { status: 400 });
   const id = crypto.randomUUID(); const media = image ? await saveMediaDataUrl(state, image, id) : null;

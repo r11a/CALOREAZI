@@ -4,7 +4,6 @@ import { generateOpenAiCoachReply } from "@/server/ai/openai.js";
 import { aiErrorStatus } from "@/server/ai/http.js";
 import { estimateCost, evaluateBudget } from "@/server/ai/usage.js";
 import { decryptSecret, readState, updateState } from "@/server/store.js";
-import { aiRole, findModel } from "@/server/ai/models.js";
 export const runtime = "nodejs";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -23,11 +22,11 @@ export async function POST(request: Request) {
   const month = new Date().toISOString().slice(0, 7); const spent = state.aiUsage.filter((item) => item.month === month).reduce((sum, item) => sum + Number(item.cost || 0), 0);
   if (!evaluateBudget({ spentUsd: spent, monthlyBudgetUsd: state.ai.monthlyBudget, softLimitPercent: state.ai.softLimit, hardLimitEnabled: state.ai.hardLimit }).allowed) return Response.json({ error: "תקציב ה-AI החודשי הגיע למגבלה" }, { status: 429 });
   try {
-    const role = aiRole(state.ai, "vision"); const selectedModel = findModel(role.provider, role.model); const call = role.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply; const userData = state.userData[session.userId];
+    const call = state.ai.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply; const userData = state.userData[session.userId];
     const calibration = (userData?.foodCalibration || []).slice(-40).map((item: any) => `${item.originalName || item.name}=>${item.name}, ${item.grams}g x ${item.quantity || 1}`).join("; ");
-    const result = await call({ apiKey: await decryptSecret(state.ai.encryptedKey), model: role.model, instructions: `אתה מנוע רישום תזונה מדויק. פרק כל מזון לפריט נפרד. quantity הוא מספר היחידות ו-grams הוא משקל יחידה אחת. אם הכמות לא נמסרה, השתמש במנה ישראלית טיפוסית אך סמן ביטחון נמוך והסבר את ההנחה. אל תמציא מרכיבים. תיקוני עבר: ${calibration || "אין"}. החזר JSON בלבד.`, input: `תיאור המשתמש: ${text}\nהחזר בדיוק: {"name":"שם הארוחה","items":[{"name":"פריט","grams":100,"quantity":1,"unit":"מנה","kcalPer100":100,"proteinPer100":10,"carbsPer100":10,"fatPer100":3}],"confidence":"low|medium|high","explanation":"הנחות כמות קצרות בעברית"}` });
-    const analysis = parseItems(result.text); const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: selectedModel?.inputCost || state.ai.inputCost, outputCostPerMillion: selectedModel?.outputCost || state.ai.outputCost });
-    await updateState((latest) => { latest.aiUsage.push({ id: crypto.randomUUID(), month, at: new Date().toISOString(), userId: session.userId, feature: "meal_manual_ai", provider: role.provider, model: role.model, ...result.usage, cost }); return latest; });
+    const result = await call({ apiKey: await decryptSecret(state.ai.encryptedKey), model: state.ai.model, instructions: `אתה מנוע רישום תזונה מדויק. פרק כל מזון לפריט נפרד. quantity הוא מספר היחידות ו-grams הוא משקל יחידה אחת. אם הכמות לא נמסרה, השתמש במנה ישראלית טיפוסית אך סמן ביטחון נמוך והסבר את ההנחה. אל תמציא מרכיבים. תיקוני עבר: ${calibration || "אין"}. החזר JSON בלבד.`, input: `תיאור המשתמש: ${text}\nהחזר בדיוק: {"name":"שם הארוחה","items":[{"name":"פריט","grams":100,"quantity":1,"unit":"מנה","kcalPer100":100,"proteinPer100":10,"carbsPer100":10,"fatPer100":3}],"confidence":"low|medium|high","explanation":"הנחות כמות קצרות בעברית"}` });
+    const analysis = parseItems(result.text); const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: state.ai.inputCost, outputCostPerMillion: state.ai.outputCost });
+    await updateState((latest) => { latest.aiUsage.push({ id: crypto.randomUUID(), month, at: new Date().toISOString(), userId: session.userId, feature: "meal_manual_ai", provider: latest.ai.provider, model: latest.ai.model, ...result.usage, cost }); return latest; });
     return Response.json({ ...analysis, usage: { ...result.usage, estimatedCost: cost } });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "חישוב הארוחה נכשל" }, { status: aiErrorStatus(error) }); }
 }

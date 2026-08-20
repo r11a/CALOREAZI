@@ -37,13 +37,12 @@ function signingSecret() {
 }
 
 function signature(payload) { return createHmac("sha256", signingSecret()).update(payload).digest("base64url"); }
-function validSignature(payload, sentSignature) { const expected = Buffer.from(signature(payload)); const actual = Buffer.from(String(sentSignature || "")); return expected.length === actual.length && timingSafeEqual(expected, actual); }
 
 function cookiePath(request) { return request?.headers.get("x-ingress-path") || "/"; }
 
-export function createSessionCookie(request, user, sessionId = randomBytes(18).toString("base64url")) {
+export function createSessionCookie(request, user) {
   const maxAge = SESSION_DAYS * 24 * 60 * 60;
-  const payload = Buffer.from(JSON.stringify({ sid: sessionId, userId: user.id, role: user.role, sessionVersion: Number(user.sessionVersion || 1), exp: Date.now() + maxAge * 1000 })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ userId: user.id, role: user.role, sessionVersion: Number(user.sessionVersion || 1), exp: Date.now() + maxAge * 1000 })).toString("base64url");
   const secure = request?.headers.get("x-forwarded-proto") === "https" || new URL(request?.url || "http://localhost").protocol === "https:" ? "; Secure" : "";
   return `${COOKIE}=${payload}.${signature(payload)}; Path=${cookiePath(request)}; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure}`;
 }
@@ -54,12 +53,12 @@ export function currentSession(request) {
   const value = request.headers.get("cookie")?.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1);
   if (!value) return null;
   const [payload, sentSignature] = value.split(".");
-  if (!payload || !sentSignature || !validSignature(payload, sentSignature)) return null;
+  if (!payload || !sentSignature || signature(payload) !== sentSignature) return null;
   try { const session = JSON.parse(Buffer.from(payload, "base64url").toString()); return session.userId && session.exp > Date.now() ? session : null; }
   catch { return null; }
 }
 
-function sessionUser(state, session) { if (!session) return null; if (Array.isArray(state.sessions)) { const active = state.sessions.find((item) => item.id === session.sid && item.userId === session.userId && !item.revokedAt && new Date(item.expiresAt).getTime() > Date.now()); if (!active) return null; } return state.users.find((item) => item.id === session.userId && item.disabled !== true && Number(item.sessionVersion || 1) === Number(session.sessionVersion || 1)); }
+function sessionUser(state, session) { return session && state.users.find((item) => item.id === session.userId && item.disabled !== true && Number(item.sessionVersion || 1) === Number(session.sessionVersion || 1)); }
 export function isAdmin(state, request) { const session = currentSession(request); const user = sessionUser(state, session); return Boolean(session?.role === "admin" && user?.role === "admin"); }
 export function requireAdmin(state, request) { return isAdmin(state, request) ? null : Response.json({ error: "נדרשת התחברות מנהל" }, { status: 403 }); }
 export function requireUser(state, request) { const session = currentSession(request); return sessionUser(state, session) ? session : null; }

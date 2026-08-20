@@ -5,7 +5,6 @@ import { aiErrorStatus } from "@/server/ai/http.js";
 import { generateGeminiCoachReply } from "@/server/ai/gemini.js";
 import { estimateCost, evaluateBudget } from "@/server/ai/usage.js";
 import { requireUser } from "@/server/auth.js";
-import { aiRole, findModel } from "@/server/ai/models.js";
 export const runtime = "nodejs";
 
 function dayTotals(day: any) {
@@ -68,13 +67,13 @@ export async function POST(request: Request) {
 - אם המידע סותר, העדף מדידה חדשה על פרופיל ישן והסבר את הסתירה בקצרה.`;
   const input = `USER_CONTEXT:\n${JSON.stringify(context, null, 2)}\n\nRECENT_CONVERSATION:\n${recentConversation.map((item: any) => `${item.role === "user" ? "משתמש" : "מאמן"}: ${item.text}`).join("\n") || "אין עדיין"}\n\nCURRENT_USER_MESSAGE:\n${String(message).trim()}`;
   try {
-    const role = aiRole(state.ai, "coach"); const selectedModel = findModel(role.provider, role.model); const call = role.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply;
-    const result = await call({ apiKey: await decryptSecret(state.ai.encryptedKey), model: role.model, instructions, input });
+    const call = state.ai.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply;
+    const result = await call({ apiKey: await decryptSecret(state.ai.encryptedKey), model: state.ai.model, instructions, input });
     const reply = recentConversation.length > 0
       ? result.text.replace(/^\s*(?:היי|שלום|אהלן)(?:\s+[^,!:.]{1,24})?\s*[,!:.—-]*\s*/u, "")
       : result.text;
-    const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: selectedModel?.inputCost || state.ai.inputCost, outputCostPerMillion: selectedModel?.outputCost || state.ai.outputCost });
-    await updateState((latest) => { const data = ensureUserData(latest, session.userId); const at = new Date().toISOString(); data.coachHistory.push({ role: "user", text: String(message).trim(), at }, { role: "assistant", text: reply, at }); data.coachHistory = data.coachHistory.slice(-40); latest.aiUsage.push({ id: crypto.randomUUID(), month, at, userId: session.userId, feature: "coach", provider: role.provider, model: role.model, ...result.usage, cost }); return latest; });
+    const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: state.ai.inputCost, outputCostPerMillion: state.ai.outputCost });
+    await updateState((latest) => { const data = ensureUserData(latest, session.userId); const at = new Date().toISOString(); data.coachHistory.push({ role: "user", text: String(message).trim(), at }, { role: "assistant", text: reply, at }); data.coachHistory = data.coachHistory.slice(-40); latest.aiUsage.push({ id: crypto.randomUUID(), month, at, userId: session.userId, feature: "coach", provider: latest.ai.provider, model: latest.ai.model, ...result.usage, cost }); return latest; });
     return Response.json({ reply, usage: { ...result.usage, estimatedCost: cost, budgetState: budget.state } });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "AI request failed" }, { status: aiErrorStatus(error) }); }
 }
