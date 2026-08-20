@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Adds AI meal-photo analysis with camera/gallery capture and editable nutrition estimates.
+- Adds a curated model catalog with recommendations, descriptions, vision support, and estimated token pricing.
+- Adds secure Admin password rotation and invalidates older sessions.
+- Keeps the approved full-color logo in both light and granite dark themes.
+
 ## 0.3.1
 
 - Fixed the unauthenticated startup screen crashing before Login or Admin setup could render.

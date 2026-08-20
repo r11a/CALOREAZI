@@ -31,7 +31,7 @@ function signature(payload) { return createHmac("sha256", signingSecret()).updat
 function cookiePath(request) { return request?.headers.get("x-ingress-path") || "/"; }
 
 export function createSessionCookie(request, user) {
-  const payload = Buffer.from(JSON.stringify({ userId: user.id, role: user.role, exp: Date.now() + 12 * 60 * 60 * 1000 })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ userId: user.id, role: user.role, sessionVersion: Number(user.sessionVersion || 1), exp: Date.now() + 12 * 60 * 60 * 1000 })).toString("base64url");
   return `${COOKIE}=${payload}.${signature(payload)}; Path=${cookiePath(request)}; HttpOnly; SameSite=Strict; Max-Age=43200`;
 }
 
@@ -46,6 +46,7 @@ export function currentSession(request) {
   catch { return null; }
 }
 
-export function isAdmin(state, request) { const session = currentSession(request); return Boolean(session?.role === "admin" && state.users.some((item) => item.id === session.userId && item.role === "admin")); }
+function sessionUser(state, session) { return session && state.users.find((item) => item.id === session.userId && Number(item.sessionVersion || 1) === Number(session.sessionVersion || 1)); }
+export function isAdmin(state, request) { const session = currentSession(request); const user = sessionUser(state, session); return Boolean(session?.role === "admin" && user?.role === "admin"); }
 export function requireAdmin(state, request) { return isAdmin(state, request) ? null : Response.json({ error: "נדרשת התחברות מנהל" }, { status: 403 }); }
-export function requireUser(state, request) { const session = currentSession(request); return session && state.users.some((item) => item.id === session.userId) ? session : null; }
+export function requireUser(state, request) { const session = currentSession(request); return sessionUser(state, session) ? session : null; }

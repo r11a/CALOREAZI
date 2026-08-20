@@ -20,3 +20,15 @@ test("Gemini adapter returns text and normalized token usage", async () => {
     assert.equal(result.text, "תקין"); assert.deepEqual(result.usage, { inputTokens: 9, outputTokens: 4, totalTokens: 13 });
   } finally { globalThis.fetch = original; }
 });
+
+test("adapters send meal images in each provider's multimodal format", async () => {
+  const original = globalThis.fetch; const bodies = [];
+  globalThis.fetch = async (_url, options) => { bodies.push(JSON.parse(options.body)); return bodies.length === 1 ? new Response(JSON.stringify({ output_text: "{}", usage: {} })) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "{}" }] } }], usageMetadata: {} })); };
+  try {
+    const imageDataUrl = "data:image/jpeg;base64,YQ==";
+    await generateOpenAiCoachReply({ apiKey: "test", model: "model", instructions: "test", input: "meal", imageDataUrl });
+    await generateGeminiCoachReply({ apiKey: "test", model: "model", instructions: "test", input: "meal", imageDataUrl });
+    assert.equal(bodies[0].input[0].content[1].type, "input_image");
+    assert.equal(bodies[1].contents[0].parts[1].inlineData.mimeType, "image/jpeg");
+  } finally { globalThis.fetch = original; }
+});

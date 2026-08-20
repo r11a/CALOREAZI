@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type AppState = {
   authenticated?: boolean;
@@ -93,6 +93,11 @@ export default function Home() {
     hardLimit: true,
   });
   const [aiStatus, setAiStatus] = useState("");
+  const [modelCatalog, setModelCatalog] = useState<Record<string, any[]>>({ openai: [], gemini: [] });
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [photoStatus, setPhotoStatus] = useState("");
+  const photoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api("/api/state")
@@ -140,8 +145,16 @@ export default function Home() {
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
 
+  async function loadAdminData() {
+    const [users, aiData] = await Promise.all([api("/api/admin/users"), api("/api/ai/settings")]);
+    setAdminUsers(users); setModelCatalog(aiData.models);
+    const available = aiData.models[aiData.settings.provider] || [];
+    const selected = available.find((item: any) => item.id === aiData.settings.model) || available[0];
+    setAiForm((current) => ({ ...current, ...aiData.settings, ...(selected ? { model: selected.id, inputCost: selected.inputCost, outputCost: selected.outputCost } : {}), apiKey: "" }));
+  }
+
   async function openAdmin() {
-    if (isAdmin) { setSettingsOpen(true); api("/api/admin/users").then(setAdminUsers).catch((e) => setError(e.message)); }
+    if (isAdmin) { setSettingsOpen(true); loadAdminData().catch((e) => setError(e.message)); }
     else setAdminLoginOpen(true);
   }
 
@@ -157,7 +170,7 @@ export default function Home() {
       setAdminPassword("");
       setAdminLoginOpen(false);
       setSettingsOpen(true);
-      setAdminUsers(await api("/api/admin/users"));
+      await loadAdminData();
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
@@ -253,6 +266,27 @@ export default function Home() {
     } finally {
       setBusy(false);
     }
+  }
+  async function changeAdminPassword(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setAiStatus("");
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) { setAiStatus("אימות הסיסמה החדשה אינו תואם"); setBusy(false); return; }
+    try { await api("/api/auth/password", { method: "PUT", body: JSON.stringify(passwordForm) }); setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" }); setAiStatus("סיסמת המנהל הוחלפה וכל החיבורים האחרים נותקו ✓"); }
+    catch (e) { setAiStatus((e as Error).message); } finally { setBusy(false); }
+  }
+
+  async function prepareImage(file: File) {
+    if (!file.type.match(/^image\/(jpeg|png|webp)$/)) throw new Error("יש לבחור תמונת JPG, PNG או WebP");
+    const url = URL.createObjectURL(file); const image = new Image(); image.src = url; await image.decode();
+    const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+    const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale);
+    canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height); URL.revokeObjectURL(url);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  }
+  async function analyzePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
+    setBusy(true); setPhotoStatus("מנתח את הארוחה בעזרת AI…");
+    try { const imageDataUrl = await prepareImage(file); setPhotoPreview(imageDataUrl); setMealOpen(true); const result = await api("/api/ai/analyze-meal", { method: "POST", body: JSON.stringify({ imageDataUrl }) }); setMealForm({ name: result.name, kcal: result.kcal, protein: result.protein, carbs: result.carbs, fat: result.fat }); setPhotoStatus(`הערכת AI (${result.confidence === "high" ? "ביטחון גבוה" : result.confidence === "medium" ? "ביטחון בינוני" : "ביטחון נמוך"}): ${result.explanation || "יש לבדוק את הכמויות לפני השמירה."}`); }
+    catch (e) { setPhotoStatus((e as Error).message); setMealOpen(true); } finally { setBusy(false); }
   }
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
@@ -455,14 +489,15 @@ export default function Home() {
         </div>
       </section>
       <section className="primary-actions">
-        <button className="camera-action" onClick={() => setMealOpen(true)}>
-          <span className="camera-icon">＋</span>
+        <button className="camera-action" onClick={() => photoInput.current?.click()} disabled={busy}>
+          <span className="camera-icon">⌾</span>
           <span>
             <strong>מה אכלת?</strong>
-            <small>הוסף ארוחה וערכים תזונתיים</small>
+            <small>צלם ארוחה וקבל ניתוח AI</small>
           </span>
-          <b>הוסף עכשיו</b>
+          <b>{busy ? "מנתח…" : "צלם עכשיו"}</b>
         </button>
+        <input ref={photoInput} className="camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={analyzePhoto} />
         <button className="coach-action" onClick={() => setCoachOpen(true)}>
           <span className="coach-spark">✦</span>
           <span>
@@ -588,7 +623,7 @@ export default function Home() {
         <button>
           <span>▦</span>היסטוריה
         </button>
-        <button className="nav-camera">⌾</button>
+        <button className="nav-camera" onClick={() => photoInput.current?.click()}>⌾</button>
         <button onClick={openAdmin}>
           <span>{isAdmin ? "⚙" : "🔒"}</span>{isAdmin ? "ניהול" : "Admin"}
         </button>
@@ -673,7 +708,7 @@ export default function Home() {
               <button className="active" onClick={() => document.getElementById("admin-ai")?.scrollIntoView({ behavior: "smooth" })}>AI וטוקנים</button>
               <button onClick={() => document.getElementById("admin-users")?.scrollIntoView({ behavior: "smooth" })}>משתמשים</button>
               <button disabled>הרשאות</button>
-              <button disabled>מערכת</button>
+              <button onClick={() => document.getElementById("admin-security")?.scrollIntoView({ behavior: "smooth" })}>אבטחה</button>
             </nav>
             <div className="admin-intro" id="admin-ai">
               <strong>הגדרת AI גלובלית</strong>
@@ -687,16 +722,7 @@ export default function Home() {
                 ספק
                 <select
                   value={aiForm.provider}
-                  onChange={(e) =>
-                    setAiForm({
-                      ...aiForm,
-                      provider: e.target.value,
-                      model:
-                        e.target.value === "gemini"
-                          ? "gemini-3.6-flash"
-                          : "gpt-5-mini",
-                    })
-                  }
+                  onChange={(e) => { const first = modelCatalog[e.target.value]?.[0]; setAiForm({ ...aiForm, provider: e.target.value, ...(first ? { model: first.id, inputCost: first.inputCost, outputCost: first.outputCost } : {}) }); }}
                 >
                   <option value="openai">OpenAI</option>
                   <option value="gemini">Google Gemini</option>
@@ -704,13 +730,12 @@ export default function Home() {
               </label>
               <label>
                 מודל
-                <input
+                <select
                   value={aiForm.model}
-                  onChange={(e) =>
-                    setAiForm({ ...aiForm, model: e.target.value })
-                  }
-                />
+                  onChange={(e) => { const selected = modelCatalog[aiForm.provider]?.find((item) => item.id === e.target.value); if (selected) setAiForm({ ...aiForm, model: selected.id, inputCost: selected.inputCost, outputCost: selected.outputCost }); }}
+                >{modelCatalog[aiForm.provider]?.map((model) => <option key={model.id} value={model.id}>{model.recommended ? "★ מומלץ · " : ""}{model.label}</option>)}</select>
               </label>
+              {modelCatalog[aiForm.provider]?.find((model) => model.id === aiForm.model) && (() => { const model = modelCatalog[aiForm.provider].find((item) => item.id === aiForm.model); return <div className="model-explanation wide"><strong>{model.recommended ? "★ הבחירה המומלצת" : model.label}</strong><span>{model.description}</span><small>עלות משוערת: ${model.inputCost} לקלט ו־${model.outputCost} לפלט לכל מיליון tokens · {model.vision ? "תומך בניתוח תמונות" : "טקסט בלבד"}</small><small>בתמונה העלות בפועל משתנה לפי הרזולוציה וכמות הטוקנים שהספק מחשב.</small></div>; })()}
               <label className="wide">
                 API Key
                 <input
@@ -732,9 +757,7 @@ export default function Home() {
                   type="number"
                   step="0.01"
                   value={aiForm.inputCost}
-                  onChange={(e) =>
-                    setAiForm({ ...aiForm, inputCost: Number(e.target.value) })
-                  }
+                  readOnly
                 />
               </label>
               <label>
@@ -743,9 +766,7 @@ export default function Home() {
                   type="number"
                   step="0.01"
                   value={aiForm.outputCost}
-                  onChange={(e) =>
-                    setAiForm({ ...aiForm, outputCost: Number(e.target.value) })
-                  }
+                  readOnly
                 />
               </label>
               <label>
@@ -772,6 +793,10 @@ export default function Home() {
                 />
               </label>
             </div>
+            <section className="admin-users" id="admin-security">
+              <div className="admin-section-title"><div><p className="eyebrow">אבטחה</p><h3>החלפת סיסמת ADMIN</h3></div></div>
+              <form className="new-user-form" onSubmit={changeAdminPassword}><div className="settings-grid"><label>סיסמה נוכחית<input type="password" autoComplete="current-password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} /></label><label>סיסמה חדשה<input type="password" minLength={10} autoComplete="new-password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} /></label><label className="wide">אימות סיסמה חדשה<input type="password" minLength={10} autoComplete="new-password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} /></label></div><button className="primary" disabled={busy || !passwordForm.currentPassword || passwordForm.newPassword.length < 10 || !passwordForm.confirmPassword}>החלף סיסמה</button></form>
+            </section>
             <div className="usage-summary">
               <span>שימוש גלובלי משוער החודש</span>
               <strong>
@@ -817,6 +842,8 @@ export default function Home() {
               </button>
             </header>
             <div className="settings-grid">
+              {photoPreview && <img className="meal-photo-preview wide" src={photoPreview} alt="התמונה שנבחרה לניתוח" />}
+              {photoStatus && <p className="photo-status wide">{photoStatus}</p>}
               <label className="wide">
                 שם הארוחה
                 <input

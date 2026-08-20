@@ -1,6 +1,6 @@
-# CALOREAZI 0.2.0
+# CALOREAZI 0.4.0
 
-Private Home Assistant nutrition coach with persistent onboarding, daily tracking, and configurable AI.
+Private Home Assistant nutrition coach with persistent onboarding, daily tracking, global Admin-managed AI, and AI meal-photo analysis.
 
 ## First run
 
@@ -11,8 +11,8 @@ Open the Home Assistant Ingress panel and complete the five onboarding steps. CA
 Open **Settings → AI** in CALOREAZI:
 
 1. Select OpenAI or Google Gemini.
-2. Enter a model and API key.
-3. Configure estimated input/output token prices and the monthly budget.
+2. Choose a curated model and enter its API key. The recommended price/performance option appears first with its estimated token rates.
+3. Configure the monthly budget. Provider prices are estimates and image cost varies with resolution/tokenization.
 4. Select **Save and test connection**.
 
 API keys are encrypted at rest with AES-256-GCM. The key and encryption secret remain in the backend and are never returned to the browser. Provider costs are estimates based on the configured token rates, not provider billing records.

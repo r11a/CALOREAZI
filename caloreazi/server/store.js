@@ -10,7 +10,7 @@ const defaultState = {
   userData: {},
   profile: null,
   today: { date: "", waterMl: 0, meals: [] },
-  ai: { provider: "openai", model: "gpt-5-mini", encryptedKey: "", inputCost: 0.25, outputCost: 2, monthlyBudget: 20, softLimit: 80, hardLimit: true },
+  ai: { provider: "openai", model: "gpt-5.6-terra", encryptedKey: "", inputCost: 2, outputCost: 12, monthlyBudget: 20, softLimit: 80, hardLimit: true },
   aiUsage: [],
 };
 

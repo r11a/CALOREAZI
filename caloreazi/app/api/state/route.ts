@@ -1,12 +1,12 @@
-import { currentSession } from "@/server/auth.js";
+import { requireUser } from "@/server/auth.js";
 import { readState, updateState, userView } from "@/server/store.js";
 import { calculateNutritionTargets } from "@/server/nutrition.js";
 export const runtime = "nodejs";
 export async function GET(request: Request) {
   let state = await readState();
   if (state.users.length === 0) return Response.json({ authenticated: false, bootstrapRequired: true }, { headers: { "Cache-Control": "no-store" } });
-  const session = currentSession(request);
-  if (!session || !state.users.some((item) => item.id === session.userId)) return Response.json({ authenticated: false, bootstrapRequired: false, adminConfigured: state.users.some((item) => item.role === "admin" && item.password?.hash) }, { headers: { "Cache-Control": "no-store" } });
+  const session = requireUser(state, request);
+  if (!session) return Response.json({ authenticated: false, bootstrapRequired: false, adminConfigured: state.users.some((item) => item.role === "admin" && item.password?.hash) }, { headers: { "Cache-Control": "no-store" } });
   const data = state.userData[session.userId];
   if (data?.profile && !data.profile.caloriePlan) {
     state = await updateState((latest) => {
