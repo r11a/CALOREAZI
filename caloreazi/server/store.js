@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
 import { calculateDayScore } from "./nutrition.js";
-import { compareAndSwapDatabaseState, databaseStateEnabled, readDatabaseState, replaceDatabaseState, seedDatabaseState } from "./state-database.js";
+import { databaseStateEnabled, readDatabaseState, replaceDatabaseState, updateDatabaseState } from "./state-database.js";
 
 const defaultState = {
   version: 1,
@@ -64,8 +64,9 @@ async function readFileState() {
 export async function readState() {
   if (!databaseStateEnabled()) { if (process.env.CALOREAZI_ALLOW_FILE_STORE === "1" || process.env.NODE_ENV !== "production") return readFileState(); throw new Error("CALOREAZI_DATABASE_URL is required in production"); }
   const stored = await readDatabaseState();
-  if (stored) return stored.state;
-  return (await seedDatabaseState(structuredClone(defaultState))).state;
+  if (stored) return { ...structuredClone(defaultState), ...stored };
+  await replaceDatabaseState(structuredClone(defaultState));
+  return structuredClone(defaultState);
 }
 
 export function addAudit(state, { userId = null, action, target = "system", result = "success", details = "" }) {
@@ -103,14 +104,7 @@ export async function writeState(state) {
 
 export async function updateState(updater) {
   if (databaseStateEnabled()) {
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const current = await readDatabaseState();
-      const seeded = current || await seedDatabaseState(structuredClone(defaultState));
-      const draft = structuredClone(seeded.state);
-      const next = await updater(draft) || draft;
-      if (await compareAndSwapDatabaseState(seeded.revision, next)) return next;
-    }
-    throw new Error("הנתונים השתנו במקביל. יש לנסות שוב");
+    return updateDatabaseState(updater, structuredClone(defaultState));
   }
   const state = await readState();
   const next = await updater(state) || state;

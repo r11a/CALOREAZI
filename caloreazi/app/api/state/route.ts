@@ -1,11 +1,12 @@
-import { requireUser } from "@/server/auth.js";
+import { createSessionCookie, remoteUser, requireUser } from "@/server/auth.js";
 import { readState, updateState, userView } from "@/server/store.js";
 import { calculateNutritionTargets } from "@/server/nutrition.js";
 export const runtime = "nodejs";
 export async function GET(request: Request) {
   let state = await readState();
   if (state.users.length === 0) return Response.json({ authenticated: false, bootstrapRequired: true }, { headers: { "Cache-Control": "no-store" } });
-  const session = requireUser(state, request);
+  let session = requireUser(state, request); let ingressCookie = "";
+  if (!session) { const ingress = remoteUser(request); const user = ingress && state.users.find((item) => item.haUserId === ingress.id && !item.disabled); if (user) { const sid = crypto.randomUUID(); const createdAt = new Date().toISOString(); state = await updateState((latest) => { latest.sessions.push({ id: sid, userId: user.id, createdAt, lastSeenAt: createdAt, expiresAt: new Date(Date.now() + 30 * 86400000).toISOString(), userAgent: "Home Assistant Ingress" }); return latest; }); session = { sid, userId: user.id, role: user.role, sessionVersion: Number(user.sessionVersion || 1) }; ingressCookie = createSessionCookie(request, user, sid); } }
   if (!session) return Response.json({ authenticated: false, bootstrapRequired: false, adminConfigured: state.users.some((item) => item.role === "admin" && item.password?.hash) }, { headers: { "Cache-Control": "no-store" } });
   const data = state.userData[session.userId];
   if (data?.profile && !data.profile.caloriePlan) {
@@ -19,5 +20,5 @@ export async function GET(request: Request) {
       return latest;
     });
   }
-  return Response.json({ authenticated: true, ...userView(state, session.userId, session.role === "admin") }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ authenticated: true, ...userView(state, session.userId, session.role === "admin") }, { headers: { "Cache-Control": "no-store", ...(ingressCookie ? { "Set-Cookie": ingressCookie } : {}) } });
 }

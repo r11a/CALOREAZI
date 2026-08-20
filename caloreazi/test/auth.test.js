@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSessionCookie, hashPassword, isAdmin, requireUser, verifyPassword } from "../server/auth.js";
+import { createSessionCookie, hashPassword, isAdmin, remoteUser, requireUser, verifyPassword } from "../server/auth.js";
 
 test("stores and verifies an admin password using scrypt", async () => {
   const record = await hashPassword("strong-password");
@@ -30,4 +30,11 @@ test("persists login for 30 days and rejects a disabled account", () => {
   const request = new Request("http://localhost", { headers: { cookie } });
   assert.ok(requireUser({ users: [user] }, request));
   assert.equal(requireUser({ users: [{ ...user, disabled: true }] }, request), null);
+});
+
+test("trusts Home Assistant identity only through the protected ingress marker", () => {
+  const spoofed = new Request("http://localhost", { headers: { "x-remote-user-id": "ha-user" } });
+  const ingress = new Request("http://localhost", { headers: { "x-caloreazi-ingress": "1", "x-remote-user-id": "ha-user", "x-remote-user-name": "ronen" } });
+  assert.equal(remoteUser(spoofed), null);
+  assert.deepEqual(remoteUser(ingress), { id: "ha-user", username: "ronen", displayName: "" });
 });

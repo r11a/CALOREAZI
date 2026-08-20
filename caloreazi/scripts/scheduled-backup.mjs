@@ -4,6 +4,7 @@ import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { probeStorage } from "../server/storage.js";
 import { addAudit, readState, updateState } from "../server/store.js";
+import { exportDatabase } from "../server/state-database.js";
 
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const state = await readState();
@@ -13,8 +14,8 @@ const localHour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: process.en
 const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: process.env.TZ || "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 if (localHour !== policy.hour || state.systemSettings?.lastAutomaticBackupDate === localDate) process.exit(0);
 
-const serialized = JSON.stringify(state); const archive = { format: "caloreazi-backup-v2", type: "database", createdAt: new Date().toISOString(), schemaVersion: state.version, payloadSha256: digest(serialized), payload: state };
 const dir = (await probeStorage(state, "backup")).resolved; const name = `caloreazi-database-auto-${new Date().toISOString().replace(/[:.]/g, "-")}.json.gz`; const file = path.join(dir, name);
+const temporary = path.join(dir, `.automatic-${crypto.randomUUID()}.dump`); await exportDatabase(temporary); const dump = await readFile(temporary); await unlink(temporary); const payload = { engine: "postgresql", format: "pg_dump-custom", dumpSha256: digest(dump), dumpBase64: dump.toString("base64") }; const serialized = JSON.stringify(payload); const archive = { format: "caloreazi-backup-v2", type: "database", createdAt: new Date().toISOString(), schemaVersion: state.version, payloadSha256: digest(serialized), payload };
 await writeFile(file, gzipSync(JSON.stringify(archive)), { mode: 0o600 });
 const verified = JSON.parse(gunzipSync(await readFile(file)).toString("utf8"));
 if (digest(JSON.stringify(verified.payload)) !== verified.payloadSha256) { await unlink(file); throw new Error("automatic backup verification failed"); }

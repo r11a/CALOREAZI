@@ -57,7 +57,8 @@ treated as requirements for the same release:
 
 ### P0 — trustworthy multi-user core
 
-- Database-backed domain model and migration from JSON.
+- Database-backed domain model for clean installation. There is no legacy JSON
+  migration requirement because no prior production installation exists.
 - Backend ownership enforcement with cross-user tests.
 - Vision → nutrition database → coach pipeline.
 - Reliable media ownership and authenticated delivery.

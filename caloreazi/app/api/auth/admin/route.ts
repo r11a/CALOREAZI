@@ -1,28 +1,25 @@
-import { clearSessionCookie, createSessionCookie, hashPassword, isAdmin, remoteUser, verifyPassword } from "@/server/auth.js";
-import { readState, updateState } from "@/server/store.js";
+import { clearSessionCookie, createSessionCookie, isAdmin, verifyPassword } from "@/server/auth.js";
+import { addAudit, readState, updateState } from "@/server/store.js";
+import { checkRateLimit, clientAddress, requireSameOrigin } from "@/server/security.js";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const originDenied = requireSameOrigin(request); if (originDenied) return originDenied;
   const body = await request.json();
   const password = String(body.password || "");
   const state = await readState();
-  if (!state.owner) return Response.json({ error: "יש להשלים Onboarding" }, { status: 409 });
-  if (password.length < 8) return Response.json({ error: "סיסמת מנהל חייבת להכיל לפחות 8 תווים" }, { status: 400 });
-
-  let admin = state.users.find((item) => item.role === "admin");
-  if (!admin?.password?.hash) {
-    const ingressUser = remoteUser(request);
-    if (state.owner.haUserId && ingressUser?.id !== state.owner.haUserId) return Response.json({ error: "רק בעל החשבון יכול להגדיר סיסמת מנהל" }, { status: 403 });
-    const passwordRecord = await hashPassword(password);
-    const updated = await updateState((latest) => { const account = latest.users.find((item) => item.role === "admin"); account.password = passwordRecord; latest.adminAuth = passwordRecord; return latest; });
-    admin = updated.users.find((item) => item.role === "admin");
-  } else if (!(await verifyPassword(password, admin.password))) {
+  if (!state.users.some((item) => item.role === "admin")) return Response.json({ error: "יש להשלים Onboarding" }, { status: 409 });
+  if (password.length < 10) return Response.json({ error: "סיסמת מנהל חייבת להכיל לפחות 10 תווים" }, { status: 400 });
+  const limited = checkRateLimit(`admin-login:${clientAddress(request)}`, { limit: 8, windowMs: 15 * 60_000 }); if (limited) return limited;
+  const admin = state.users.find((item) => item.role === "admin" && !item.disabled);
+  if (!admin?.password?.hash || (admin.lockedUntil && new Date(admin.lockedUntil).getTime() > Date.now()) || !(await verifyPassword(password, admin.password))) {
+    await updateState((latest) => { const account = latest.users.find((item) => item.id === admin?.id); if (account) { account.failedLoginCount = Number(account.failedLoginCount || 0) + 1; if (account.failedLoginCount >= 8) account.lockedUntil = new Date(Date.now() + 15 * 60_000).toISOString(); } addAudit(latest, { userId: admin?.id || null, action: "auth.admin_login_failed", result: "failure", details: clientAddress(request) }); return latest; });
     return Response.json({ error: "סיסמת מנהל שגויה" }, { status: 401 });
   }
 
   const loggedInAt = new Date().toISOString();
   const sessionId = crypto.randomUUID();
-  await updateState((latest) => { const account = latest.users.find((item) => item.id === admin.id); account.lastLogin = loggedInAt; latest.sessions = latest.sessions || []; latest.sessions.push({ id: sessionId, userId: admin.id, createdAt: loggedInAt, lastSeenAt: loggedInAt, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(), userAgent: String(request.headers.get("user-agent") || "").slice(0, 200) }); return latest; });
+  await updateState((latest) => { const account = latest.users.find((item) => item.id === admin.id); account.lastLogin = loggedInAt; account.failedLoginCount = 0; account.lockedUntil = null; latest.sessions = latest.sessions || []; latest.sessions.push({ id: sessionId, userId: admin.id, createdAt: loggedInAt, lastSeenAt: loggedInAt, expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(), userAgent: String(request.headers.get("user-agent") || "").slice(0, 200) }); addAudit(latest, { userId: admin.id, action: "auth.admin_login_succeeded", target: sessionId }); return latest; });
 
   return Response.json({ ok: true, role: "admin", rememberedDays: 30 }, { headers: { "Set-Cookie": createSessionCookie(request, admin, sessionId), "Cache-Control": "no-store" } });
 }
