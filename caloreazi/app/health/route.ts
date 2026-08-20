@@ -1,3 +1,3 @@
 export function GET() {
-  return Response.json({ status: "ok", service: "caloreazi", version: "0.6.0" });
+  return Response.json({ status: "ok", service: "caloreazi", version: "0.7.0" });
 }

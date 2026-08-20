@@ -1,4 +1,4 @@
-# CALOREAZI 0.6.0
+# CALOREAZI 0.7.0
 
 Private Home Assistant nutrition coach with persistent onboarding, daily tracking, global Admin-managed AI, and AI meal-photo analysis.
 
@@ -23,6 +23,9 @@ API keys are encrypted at rest with AES-256-GCM. The key and encryption secret r
 - Password-based user accounts, signed sessions, isolated nutrition data, and a protected Admin Center.
 - Closed registration: administrators create additional user accounts and temporary passwords.
 - Persistent daily water and manual meal/macronutrient tracking.
+- Editable photo, upload, and voice meal analysis; voice audio is not retained after transcription.
+- Private/shared food library with reuse of existing artwork before optional AI image generation.
+- Consent-based partner tracking with separate daily, meal-detail, and weight permissions.
 - Context-aware AI Coach using the owner profile and current day.
 - OpenAI and Gemini adapters, connection testing, token logging, estimated costs, soft warnings, and hard monthly limits.
 - Responsive Hebrew light and granite-dark interfaces.

@@ -1,5 +1,5 @@
 "use client";
-/* eslint-disable @typescript-eslint/no-explicit-any, jsx-a11y/no-autofocus */
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/rules-of-hooks */
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
@@ -16,6 +16,9 @@ type AppState = {
   measurements: any[];
   favorites: any[];
   activity: any[];
+  foods: any[];
+  partnerships: any[];
+  sharedProfiles: any[];
   adminConfigured: boolean;
 };
 const emptyOnboarding = {
@@ -39,6 +42,7 @@ const goalLabels: Record<string, string> = {
   gain: "עלייה מבוקרת במשקל",
   healthy: "אכילה בריאה יותר",
 };
+const periodLabels: Record<string, string> = { breakfast: "ארוחת בוקר", lunch: "ארוחת צהריים", dinner: "ארוחת ערב", snack: "בין הארוחות" };
 const quickFoods: Record<string, { name: string; icon: string; portion: string; kcal: number; protein: number; carbs: number; fat: number }[]> = {
   vegetables: [
     { name: "עגבנייה", icon: "🍅", portion: "עגבנייה בינונית", kcal: 22, protein: 1, carbs: 5, fat: 0 }, { name: "מלפפון", icon: "🥒", portion: "מלפפון בינוני", kcal: 24, protein: 1, carbs: 5, fat: 0 }, { name: "גזר", icon: "🥕", portion: "גזר בינוני", kcal: 30, protein: 1, carbs: 7, fat: 0 }, { name: "פלפל", icon: "🫑", portion: "פלפל בינוני", kcal: 31, protein: 1, carbs: 6, fat: 0 }, { name: "ברוקולי", icon: "🥦", portion: "כוס מבושלת", kcal: 55, protein: 4, carbs: 11, fat: 1 }, { name: "סלט ירקות", icon: "🥗", portion: "קערה, ללא רוטב", kcal: 80, protein: 3, carbs: 15, fat: 1 },
@@ -93,6 +97,14 @@ export default function Home() {
     carbs: 0,
     fat: 0,
   });
+  const [mealItems, setMealItems] = useState<any[]>([]);
+  const [aiOriginalItems, setAiOriginalItems] = useState<any[]>([]);
+  const [mealSource, setMealSource] = useState<"manual" | "photo" | "voice">("manual");
+  const [mealTranscript, setMealTranscript] = useState("");
+  const [saveToLibrary, setSaveToLibrary] = useState(false);
+  const [foodVisibility, setFoodVisibility] = useState<"private" | "shared">("private");
+  const [generateFoodArtwork, setGenerateFoodArtwork] = useState(false);
+  const [mealPeriod, setMealPeriod] = useState("snack");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string; usage?: string }[]
@@ -119,8 +131,17 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileForm, setProfileForm] = useState<any>({});
   const [now, setNow] = useState(() => new Date());
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("לחץ על המיקרופון ותאר מה אכלת ובאיזו כמות.");
+  const [partnerForm, setPartnerForm] = useState({ email: "", daily: true, meals: true, weight: false });
+  const [partnerOpen, setPartnerOpen] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
+  const uploadInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
+  const mediaRecorder = useRef<MediaRecorder | null>(null);
+  const audioChunks = useRef<Blob[]>([]);
 
   useEffect(() => {
     api("/api/state")
@@ -255,14 +276,22 @@ export default function Home() {
     event.preventDefault();
     setBusy(true);
     try {
-      setState(
-        await api("/api/meals", {
+      const calculated = mealItems.length ? mealItems.reduce((total, item) => { const factor = Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1) / 100; return { kcal: total.kcal + Number(item.kcalPer100 || 0) * factor, protein: total.protein + Number(item.proteinPer100 || 0) * factor, carbs: total.carbs + Number(item.carbsPer100 || 0) * factor, fat: total.fat + Number(item.fatPer100 || 0) * factor }; }, { kcal: 0, protein: 0, carbs: 0, fat: 0 }) : mealForm;
+      const finalMeal = { ...mealForm, period: mealPeriod, kcal: Math.round(calculated.kcal), protein: Math.round(calculated.protein), carbs: Math.round(calculated.carbs), fat: Math.round(calculated.fat), items: mealItems, aiOriginalItems, source: mealSource, transcript: mealTranscript };
+      let latest = await api("/api/meals", {
           method: "POST",
-          body: JSON.stringify(mealForm),
-        }),
-      );
+          body: JSON.stringify(finalMeal),
+        });
+      if (saveToLibrary) {
+        await api("/api/foods", { method: "POST", body: JSON.stringify({ ...finalMeal, visibility: foodVisibility, image: generateFoodArtwork ? "" : photoPreview, generateImage: generateFoodArtwork }) });
+        latest = await api("/api/state");
+      }
+      setState(latest);
       setMealOpen(false);
       setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 });
+      setMealItems([]); setAiOriginalItems([]); setMealSource("manual"); setMealTranscript(""); setPhotoPreview(""); setPhotoStatus("");
+      setSaveToLibrary(false); setFoodVisibility("private"); setGenerateFoodArtwork(false);
+      setMealPeriod("snack");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -287,7 +316,13 @@ export default function Home() {
   async function saveProfile(event: FormEvent) { event.preventDefault(); setBusy(true); try { let latest = await api("/api/profile", { method: "PUT", body: JSON.stringify(profileForm) }); if (weightValue && Number(weightValue) !== Number(latestWeight)) latest = await api("/api/measurements", { method: "POST", body: JSON.stringify({ weight: weightValue }) }); setState(latest); setProfileOpen(false); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
   async function loadAvatar(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; try { const avatar = await prepareImage(file, 512, .78); setProfileForm((current: any) => ({ ...current, avatar })); } catch (e) { setError((e as Error).message); } }
   async function switchUser() { await api("/api/auth/session", { method: "DELETE" }); window.location.reload(); }
-  async function selectQuickFood(item: any) { if (item.name === "מים") { await addWater(); setQuickAddOpen(false); return; } setMealForm({ name: `${item.name} · ${item.portion}`, kcal: item.kcal, protein: item.protein, carbs: item.carbs, fat: item.fat }); setPhotoPreview(""); setPhotoStatus("ערכים משוערים למנה המקובלת — אפשר לתקן כמות וערכים לפני השמירה."); setQuickAddOpen(false); setMealOpen(true); }
+  async function invitePartner(event: FormEvent) { event.preventDefault(); setBusy(true); try { setState(await api("/api/partnerships", { method: "POST", body: JSON.stringify(partnerForm) })); setPartnerForm({ email: "", daily: true, meals: true, weight: false }); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }
+  async function updatePartnership(id: string, action: "accept" | "revoke") { try { setState(await api("/api/partnerships", { method: "PATCH", body: JSON.stringify({ id, action }) })); } catch (e) { setError((e as Error).message); } }
+  function openManualMeal() { setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems([]); setAiOriginalItems([]); setMealSource("manual"); setPhotoPreview(""); setPhotoStatus("הזן ארוחה וערכים ידנית, או הוסף רכיבים לחישוב לפי משקל."); setQuickAddOpen(false); setMealOpen(true); }
+  async function selectQuickFood(item: any) { if (item.name === "מים") { await addWater(); setQuickAddOpen(false); return; } setMealForm({ name: `${item.name} · ${item.portion}`, kcal: item.kcal, protein: item.protein, carbs: item.carbs, fat: item.fat }); setMealItems([]); setAiOriginalItems([]); setMealSource("manual"); setPhotoPreview(""); setPhotoStatus("ערכים משוערים למנה המקובלת — אפשר לתקן את הערכים לפני השמירה."); setQuickAddOpen(false); setMealOpen(true); }
+  function updateMealItem(index: number, field: string, value: string | number) { setMealItems((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item)); }
+  function addCustomMealItem() { setMealItems((items) => [...items, { name: "", grams: 100, quantity: 1, unit: "מנה", kcalPer100: 0, proteinPer100: 0, carbsPer100: 0, fatPer100: 0 }]); }
+  function useCatalogFood(food: any) { setMealForm({ name: food.name, kcal: food.kcal, protein: food.protein, carbs: food.carbs, fat: food.fat }); setMealItems(food.items || []); setMealSource("manual"); setPhotoPreview(food.image || ""); setPhotoStatus(`מהספרייה ${food.visibility === "shared" ? "המשותפת" : "הפרטית"} · נוצר על ידי ${food.ownerName || "המשתמש"}`); setMealOpen(true); }
   async function saveAi(test = false) {
     setBusy(true);
     setAiStatus("");
@@ -333,9 +368,34 @@ export default function Home() {
   async function analyzePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
     setBusy(true); setPhotoStatus("מנתח את הארוחה בעזרת AI…");
-    try { const imageDataUrl = await prepareImage(file); setPhotoPreview(imageDataUrl); setMealOpen(true); const result = await api("/api/ai/analyze-meal", { method: "POST", body: JSON.stringify({ imageDataUrl }) }); setMealForm({ name: result.name, kcal: result.kcal, protein: result.protein, carbs: result.carbs, fat: result.fat }); setPhotoStatus(`הערכת AI (${result.confidence === "high" ? "ביטחון גבוה" : result.confidence === "medium" ? "ביטחון בינוני" : "ביטחון נמוך"}): ${result.explanation || "יש לבדוק את הכמויות לפני השמירה."}`); }
+    try { const imageDataUrl = await prepareImage(file); setPhotoPreview(imageDataUrl); setMealSource("photo"); setMealItems([]); setMealOpen(true); const result = await api("/api/ai/analyze-meal", { method: "POST", body: JSON.stringify({ imageDataUrl }) }); setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems(result.items); setAiOriginalItems(structuredClone(result.items)); setPhotoStatus(`זוהו ${result.items.length} פריטים (${result.confidence === "high" ? "ביטחון גבוה" : result.confidence === "medium" ? "ביטחון בינוני" : "ביטחון נמוך"}). בדוק משקל וכמות; החישוב יתבצע רק לאחר אישור. ${result.explanation || ""}`); }
     catch (e) { setPhotoStatus((e as Error).message); setMealOpen(true); } finally { setBusy(false); }
   }
+  async function startVoiceRecording() {
+    setError("");
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { setVoiceStatus("הדפדפן הזה אינו תומך בהקלטה. אפשר להשתמש בהוספה הידנית."); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream); mediaRecorder.current = recorder; audioChunks.current = [];
+      recorder.ondataavailable = (event) => { if (event.data.size) audioChunks.current.push(event.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(audioChunks.current, { type: recorder.mimeType || "audio/webm" });
+        const reader = new FileReader(); reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          setBusy(true); setVoiceStatus("מתמלל ומפרק את הארוחה לפריטים…");
+          try {
+            const result = await api("/api/ai/analyze-voice", { method: "POST", body: JSON.stringify({ audioDataUrl: reader.result }) });
+            setMealSource("voice"); setMealTranscript(result.transcript); setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems(result.items); setAiOriginalItems(structuredClone(result.items));
+            setPhotoPreview(""); setPhotoStatus(`תמלול: “${result.transcript}”\nזוהו ${result.items.length} פריטים. בדוק שמות, משקל וכמות; החישוב יתבצע רק באישור.`);
+            setSaveToLibrary(true); setFoodVisibility("private"); setGenerateFoodArtwork(true); setVoiceOpen(false); setQuickAddOpen(false); setMealOpen(true);
+          } catch (e) { setVoiceStatus((e as Error).message); } finally { setBusy(false); }
+        };
+      };
+      recorder.start(); setRecording(true); setVoiceStatus("מקליט… אמור למשל: שתי חתיכות פרגית ושתי חתיכות חזה עוף.");
+    } catch { setVoiceStatus("לא ניתנה הרשאה למיקרופון. אשר גישה בדפדפן ונסה שוב."); }
+  }
+  function stopVoiceRecording() { if (mediaRecorder.current?.state === "recording") mediaRecorder.current.stop(); setRecording(false); }
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
     const text = message.trim();
@@ -407,6 +467,7 @@ export default function Home() {
           />
         </div>
         <div className="top-actions">
+          <button className="partner-button" onClick={() => setPartnerOpen(true)} aria-label="שותף מעקב">♡</button>
           <button
             className="theme-toggle"
             onClick={() => setDark(!dark)}
@@ -538,6 +599,10 @@ export default function Home() {
           <b>{busy ? "מנתח…" : "צלם עכשיו"}</b>
         </button>
         <input ref={photoInput} className="camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={analyzePhoto} />
+        <button className="upload-action" onClick={() => uploadInput.current?.click()} disabled={busy}>
+          <span className="upload-icon">▧</span><span><strong>טען תמונה</strong><small>בחר תמונה מהגלריה או מהמחשב</small></span>
+        </button>
+        <input ref={uploadInput} className="camera-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={analyzePhoto} />
         <button className="manual-action" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }}>
           <span className="manual-icon">＋</span><span><strong>הוספה ידנית</strong><small>פרי, ירק, משקה או ארוחה</small></span>
         </button>
@@ -600,6 +665,7 @@ export default function Home() {
             </div>
           )}
           {state.favorites?.length > 0 && <div className="favorites-strip"><strong>ארוחות מועדפות</strong><div>{state.favorites.map((favorite) => <button key={favorite.id} onClick={() => repeatFavorite(favorite.id)}><span>＋</span>{favorite.meal.name}<small>{favorite.meal.kcal} kcal</small></button>)}</div></div>}
+          {state.foods?.length > 0 && <div className="food-library"><div><strong>ספריית המאכלים</strong><small>פרטיים ומשותפים</small></div><section>{state.foods.map((food) => <button key={food.id} onClick={() => useCatalogFood(food)}>{food.image ? <img src={food.image} alt="" /> : <span>🍽</span>}<div><strong>{food.name}</strong><small>{food.kcal} kcal · {food.visibility === "shared" ? "משותף" : "פרטי"}</small></div><b>＋</b></button>)}</section></div>}
         </div>
         <div className="side-stack">
           <section className="panel insights-panel"><header><div><p className="eyebrow">לפי המצב היומי</p><h2>המלצות להמשך היום</h2></div><span>✦</span></header><div className="daily-insights">{dailyInsights.map((item) => <article key={item.title}><i>{item.icon}</i><div><strong>{item.title}</strong><small>{item.text}</small></div></article>)}</div></section>
@@ -664,7 +730,7 @@ export default function Home() {
         <button className="active">
           <span>⌂</span>היום
         </button>
-        <button>
+        <button onClick={() => setHistoryOpen(true)}>
           <span>▦</span>היסטוריה
         </button>
         <button className="nav-camera" onClick={() => photoInput.current?.click()} aria-label="צילום ארוחה">📷</button>
@@ -873,8 +939,11 @@ export default function Home() {
           </section>
         </div>
       )}
-      {quickAddOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setQuickAddOpen(false)} /><section className="settings-modal quick-add-modal"><header><div><p className="eyebrow">הוספה מהירה</p><h2>{quickCategory ? "מה להוסיף?" : "בחר קטגוריה"}</h2></div><button onClick={() => setQuickAddOpen(false)}>×</button></header>{!quickCategory ? <div className="category-grid"><button onClick={() => setQuickCategory("vegetables")}><img src="/category-vegetables-v1.png" alt="מבחר ירקות" /><strong>ירקות</strong><small>טריים, מבושלים וסלט</small></button><button onClick={() => setQuickCategory("fruits")}><img src="/category-fruits-v1.png" alt="מבחר פירות" /><strong>פירות</strong><small>מנה נפוצה בלחיצה</small></button><button onClick={() => setQuickCategory("drinks")}><img src="/category-drinks-v1.png" alt="מבחר משקאות" /><strong>משקאות</strong><small>חמים, קלים, יין ובירה</small></button></div> : <><button className="category-back" onClick={() => setQuickCategory("")}>→ חזרה לקטגוריות</button><div className="quick-food-grid">{quickFoods[quickCategory].map((item) => <button key={`${item.name}-${item.portion}`} onClick={() => selectQuickFood(item)}><span>{item.icon}</span><strong>{item.name}</strong><small>{item.portion}</small><b>{item.kcal} kcal</b></button>)}</div></>}</section></div>}
+      {quickAddOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setQuickAddOpen(false)} /><section className="settings-modal quick-add-modal"><header><div><p className="eyebrow">הוספה מהירה</p><h2>{quickCategory ? "מה להוסיף?" : "בחר קטגוריה"}</h2></div><button onClick={() => setQuickAddOpen(false)}>×</button></header>{!quickCategory ? <div className="category-grid"><button onClick={openManualMeal}><span className="manual-meal-art">🍽</span><strong>ארוחה ידנית</strong><small>שם, קלוריות או רכיבים ומשקל</small></button><button onClick={() => setVoiceOpen(true)}><span className="manual-meal-art">🎙️</span><strong>הקלט ארוחה</strong><small>AI יתמלל ויציג לאישור</small></button><button onClick={() => setQuickCategory("vegetables")}><img src="/category-vegetables-v1.png" alt="מבחר ירקות" /><strong>ירקות</strong><small>טריים, מבושלים וסלט</small></button><button onClick={() => setQuickCategory("fruits")}><img src="/category-fruits-v1.png" alt="מבחר פירות" /><strong>פירות</strong><small>מנה נפוצה בלחיצה</small></button><button onClick={() => setQuickCategory("drinks")}><img src="/category-drinks-v1.png" alt="מבחר משקאות" /><strong>משקאות</strong><small>חמים, קלים, יין ובירה</small></button></div> : <><button className="category-back" onClick={() => setQuickCategory("")}>→ חזרה לקטגוריות</button><div className="quick-food-grid">{quickFoods[quickCategory].map((item) => <button key={`${item.name}-${item.portion}`} onClick={() => selectQuickFood(item)}><span>{item.icon}</span><strong>{item.name}</strong><small>{item.portion}</small><b>{item.kcal} kcal</b></button>)}</div></>}</section></div>}
+      {voiceOpen && <div className="modal-layer"><button className="backdrop" onClick={() => !recording && setVoiceOpen(false)} /><section className="settings-modal voice-modal"><header><div><p className="eyebrow">הוספה ידנית בקול</p><h2>ספר לי מה אכלת</h2></div><button disabled={recording} onClick={() => setVoiceOpen(false)}>×</button></header><button className={recording ? "voice-record recording" : "voice-record"} onClick={recording ? stopVoiceRecording : startVoiceRecording} disabled={busy}><span>{recording ? "■" : "🎙️"}</span><strong>{recording ? "עצור ושלח לניתוח" : "התחל הקלטה"}</strong></button><p className="voice-status">{voiceStatus}</p><small className="voice-privacy">קובץ הקול משמש לתמלול בלבד ואינו נשמר. לפני הוספה תוכל לערוך כל פריט וכמות.</small></section></div>}
       {profileOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setProfileOpen(false)} /><form className="settings-modal profile-modal" onSubmit={saveProfile}><header><div><p className="eyebrow">החשבון שלי</p><h2>פרטים אישיים</h2></div><button type="button" onClick={() => setProfileOpen(false)}>×</button></header><div className="profile-photo"><button type="button" onClick={() => avatarInput.current?.click()}>{profileForm.avatar ? <img src={profileForm.avatar} alt="תמונת פרופיל" /> : <span>{state.owner.name[0]}</span>}<small>החלף תמונה</small></button><input ref={avatarInput} className="camera-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={loadAvatar} /><div><strong>{state.owner.name}</strong><small>{state.owner.email}</small><button type="button" onClick={switchUser}>החלף משתמש / יציאה</button></div></div><div className="settings-grid"><label>שם<input value={profileForm.name || ""} onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })} /></label><label>גיל<input type="number" min="14" max="120" value={profileForm.age || ""} onChange={(e) => setProfileForm({ ...profileForm, age: Number(e.target.value) })} /></label><label>גובה (ס״מ)<input type="number" min="100" max="250" value={profileForm.height || ""} onChange={(e) => setProfileForm({ ...profileForm, height: Number(e.target.value) })} /></label><label>משקל נוכחי (ק״ג)<input type="number" min="25" max="350" step="0.1" value={weightValue || ""} onChange={(e) => setWeightValue(Number(e.target.value))} /></label><label>משקל יעד<input type="number" min="25" max="350" step="0.1" value={profileForm.targetWeight || ""} onChange={(e) => setProfileForm({ ...profileForm, targetWeight: Number(e.target.value) })} /></label><label>רמת פעילות<select value={profileForm.activity || "light"} onChange={(e) => setProfileForm({ ...profileForm, activity: e.target.value })}><option value="low">רוב היום בישיבה</option><option value="light">קצת בתנועה</option><option value="active">פעיל</option><option value="very">פעיל מאוד</option></select></label><label className="wide">מגבלות והעדפות<input value={profileForm.restrictions || ""} onChange={(e) => setProfileForm({ ...profileForm, restrictions: e.target.value })} placeholder="רגישויות, אלרגיות או מזונות שנמנעים מהם" /></label></div><div className="profile-metrics"><span>BMI <b>{profile.caloriePlan?.bmi}</b></span><span>משקל נוכחי <b>{latestWeight} ק״ג</b></span><span>יעד <b>{profile.targetWeight} ק״ג</b></span><span>מגמה <b>{weightEntries.length > 1 ? `${weightChange > 0 ? "+" : ""}${weightChange} ק״ג` : "אין עדיין"}</b></span></div><footer><button type="button" onClick={switchUser}>החלף משתמש</button><button className="primary" disabled={busy}>שמור ועדכן יעדים</button></footer></form></div>}
+      {historyOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setHistoryOpen(false)} /><section className="settings-modal history-modal"><header><div><p className="eyebrow">יומן תזונה</p><h2>היסטוריה יומית</h2></div><button onClick={() => setHistoryOpen(false)}>×</button></header><div className="history-days">{[...(state.history || []), state.today].sort((a, b) => b.date.localeCompare(a.date)).map((day) => { const totals = day.meals.reduce((sum: any, meal: any) => ({ kcal: sum.kcal + Number(meal.kcal || 0), protein: sum.protein + Number(meal.protein || 0), carbs: sum.carbs + Number(meal.carbs || 0), fat: sum.fat + Number(meal.fat || 0) }), { kcal: 0, protein: 0, carbs: 0, fat: 0 }); return <details key={day.date} open={day.date === state.today.date}><summary><div><strong>{new Date(`${day.date}T12:00:00`).toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" })}</strong><small>{day.meals.length} ארוחות · {day.waterMl || 0} מ״ל מים</small></div><b>{totals.kcal.toLocaleString()} kcal</b></summary><div className="history-summary"><span>חלבון <b>{totals.protein}g</b></span><span>פחמימות <b>{totals.carbs}g</b></span><span>שומן <b>{totals.fat}g</b></span></div>{Object.entries(periodLabels).map(([period, label]) => { const meals = day.meals.filter((meal: any) => (meal.period || "snack") === period).sort((a: any, b: any) => String(a.time).localeCompare(String(b.time))); return meals.length ? <section className="history-period" key={period}><h3>{label}</h3>{meals.map((meal: any) => <article key={meal.id}><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><div><strong>{meal.name}</strong><small>{meal.protein}g חלבון · {meal.carbs}g פחמימות · {meal.fat}g שומן</small></div><b>{meal.kcal} kcal</b></article>)}</section> : null; })}</details>; })}</div></section></div>}
+      {partnerOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setPartnerOpen(false)} /><section className="settings-modal partner-modal"><header><div><p className="eyebrow">מעקב משותף</p><h2>שותף לתהליך</h2></div><button onClick={() => setPartnerOpen(false)}>×</button></header><p className="modal-help">שלח הזמנה לחשבון קיים. השיתוף יתחיל רק לאחר אישור וניתן לביטול בכל עת.</p><form className="partner-invite" onSubmit={invitePartner}><input type="email" value={partnerForm.email} onChange={(e) => setPartnerForm({ ...partnerForm, email: e.target.value })} placeholder="האימייל של בן/בת הזוג" /><div><label><input type="checkbox" checked={partnerForm.daily} onChange={(e) => setPartnerForm({ ...partnerForm, daily: e.target.checked })} /> סיכום יומי</label><label><input type="checkbox" checked={partnerForm.meals} onChange={(e) => setPartnerForm({ ...partnerForm, meals: e.target.checked })} /> פירוט ארוחות</label><label><input type="checkbox" checked={partnerForm.weight} onChange={(e) => setPartnerForm({ ...partnerForm, weight: e.target.checked })} /> משקל ומגמה</label></div><button className="primary" disabled={busy || !partnerForm.email}>שלח הזמנה</button></form><div className="partner-links">{(state.partnerships || []).filter((link) => link.status !== "revoked").map((link) => <article key={link.id}><div><strong>{link.other?.name || link.other?.email}</strong><small>{link.status === "pending" ? "ממתין לאישור" : "שיתוף פעיל"}</small></div>{link.direction === "incoming" && link.status === "pending" && <button onClick={() => updatePartnership(link.id, "accept")}>אשר</button>}<button onClick={() => updatePartnership(link.id, "revoke")}>בטל</button></article>)}</div>{(state.sharedProfiles || []).map((shared) => <section className="shared-summary" key={shared.linkId}><header><strong>{shared.user?.name}</strong><small>סיכום משותף</small></header>{shared.today && <div><span>קלוריות היום <b>{shared.today.meals.reduce((sum: number, meal: any) => sum + Number(meal.kcal || 0), 0)}</b></span><span>מים <b>{shared.today.waterMl} מ״ל</b></span><span>ארוחות <b>{shared.today.meals.length}</b></span></div>}{shared.profile && <p>משקל יעד: {shared.profile.targetWeight} ק״ג</p>}</section>)}</section></div>}
       {mealOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setMealOpen(false)} />
@@ -901,63 +970,19 @@ export default function Home() {
                   placeholder="למשל: יוגורט, גרנולה ופירות"
                 />
               </label>
-              <label>
-                קלוריות
-                <input
-                  type="number"
-                  min="1"
-                  value={mealForm.kcal || ""}
-                  onChange={(e) =>
-                    setMealForm({ ...mealForm, kcal: Number(e.target.value) })
-                  }
-                />
-              </label>
-              <label>
-                חלבון (גרם)
-                <input
-                  type="number"
-                  min="0"
-                  value={mealForm.protein || ""}
-                  onChange={(e) =>
-                    setMealForm({
-                      ...mealForm,
-                      protein: Number(e.target.value),
-                    })
-                  }
-                />
-              </label>
-              <label>
-                פחמימות (גרם)
-                <input
-                  type="number"
-                  min="0"
-                  value={mealForm.carbs || ""}
-                  onChange={(e) =>
-                    setMealForm({ ...mealForm, carbs: Number(e.target.value) })
-                  }
-                />
-              </label>
-              <label>
-                שומן (גרם)
-                <input
-                  type="number"
-                  min="0"
-                  value={mealForm.fat || ""}
-                  onChange={(e) =>
-                    setMealForm({ ...mealForm, fat: Number(e.target.value) })
-                  }
-                />
-              </label>
+              <label className="wide">סוג הארוחה<select value={mealPeriod} onChange={(e) => setMealPeriod(e.target.value)}><option value="breakfast">ארוחת בוקר</option><option value="lunch">ארוחת צהריים</option><option value="dinner">ארוחת ערב</option><option value="snack">בין הארוחות</option></select></label>
+              {mealItems.length > 0 ? <div className="meal-items-editor wide"><div className="meal-items-heading"><div><strong>רכיבי הארוחה</strong><small>המשקל הוא לפריט אחד; הכמות מכפילה אותו.</small></div><button type="button" onClick={addCustomMealItem}>＋ שדה מותאם</button></div>{mealItems.map((item, index) => <article key={index}><input className="item-name" value={item.name} onChange={(e) => updateMealItem(index, "name", e.target.value)} placeholder="שם הפריט" aria-label={`שם פריט ${index + 1}`} /><label>משקל בגרם<input type="number" min="1" max="3000" value={item.grams || ""} onChange={(e) => updateMealItem(index, "grams", Number(e.target.value))} /></label><label>כמות<input type="number" min="0.1" max="50" step="0.1" value={item.quantity || ""} onChange={(e) => updateMealItem(index, "quantity", Number(e.target.value))} /></label><label>קל׳ ל־100 גרם<input type="number" min="0" max="1000" value={item.kcalPer100 || ""} onChange={(e) => updateMealItem(index, "kcalPer100", Number(e.target.value))} /></label><button className="remove-item" type="button" onClick={() => setMealItems((items) => items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`הסרת ${item.name || "פריט"}`}>×</button></article>)}</div> : <><label>קלוריות<input type="number" min="1" value={mealForm.kcal || ""} onChange={(e) => setMealForm({ ...mealForm, kcal: Number(e.target.value) })} /></label><label>חלבון (גרם)<input type="number" min="0" value={mealForm.protein || ""} onChange={(e) => setMealForm({ ...mealForm, protein: Number(e.target.value) })} /></label><label>פחמימות (גרם)<input type="number" min="0" value={mealForm.carbs || ""} onChange={(e) => setMealForm({ ...mealForm, carbs: Number(e.target.value) })} /></label><label>שומן (גרם)<input type="number" min="0" value={mealForm.fat || ""} onChange={(e) => setMealForm({ ...mealForm, fat: Number(e.target.value) })} /></label><button className="add-components wide" type="button" onClick={addCustomMealItem}>＋ חשב ארוחה ידנית לפי רכיבים ומשקל</button></>}
             </div>
+            <section className="library-options"><label><input type="checkbox" checked={saveToLibrary} onChange={(e) => setSaveToLibrary(e.target.checked)} /> שמור בספריית המאכלים שלי</label>{saveToLibrary && <div><label><input type="radio" name="food-visibility" checked={foodVisibility === "private"} onChange={() => setFoodVisibility("private")} /> פרטי — רק אני</label><label><input type="radio" name="food-visibility" checked={foodVisibility === "shared"} onChange={() => setFoodVisibility("shared")} /> משותף — כל המשתמשים</label><label><input type="checkbox" checked={generateFoodArtwork} onChange={(e) => setGenerateFoodArtwork(e.target.checked)} /> צור תמונה מותאמת באמצעות AI</label></div>}</section>
             <footer>
               <button type="button" onClick={() => setMealOpen(false)}>
                 ביטול
               </button>
               <button
                 className="primary"
-                disabled={busy || !mealForm.name || !mealForm.kcal}
+                disabled={busy || !mealForm.name || (mealItems.length ? mealItems.some((item) => !item.name || !item.grams || !item.kcalPer100) : !mealForm.kcal)}
               >
-                שמור ארוחה
+                {mealItems.length ? "אישור, חישוב והוספה" : "שמור ארוחה"}
               </button>
             </footer>
           </form>

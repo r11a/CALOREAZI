@@ -1,4 +1,5 @@
 import { requireUser } from "@/server/auth.js";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { generateGeminiCoachReply } from "@/server/ai/gemini.js";
 import { generateOpenAiCoachReply } from "@/server/ai/openai.js";
 import { findModel } from "@/server/ai/models.js";
@@ -9,9 +10,12 @@ export const runtime = "nodejs";
 function parseResult(text: string) {
   const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   const data = JSON.parse(cleaned);
-  const number = (value: unknown) => Math.max(0, Math.round(Number(value) || 0));
-  if (!String(data.name || "").trim() || number(data.kcal) < 1) throw new Error("ה-AI לא החזיר הערכת ארוחה מלאה");
-  return { name: String(data.name).trim().slice(0, 120), kcal: number(data.kcal), protein: number(data.protein), carbs: number(data.carbs), fat: number(data.fat), confidence: ["low", "medium", "high"].includes(data.confidence) ? data.confidence : "low", explanation: String(data.explanation || "").trim().slice(0, 300) };
+  const number = (value: unknown, max = 5000) => Math.min(max, Math.max(0, Math.round(Number(value) || 0)));
+  const items = Array.isArray(data.items) ? data.items.slice(0, 20).map((item: any) => ({
+    name: String(item.name || "").trim().slice(0, 80), grams: number(item.grams, 3000), quantity: Math.max(.1, Math.min(50, Number(item.quantity) || 1)), unit: String(item.unit || "מנה").trim().slice(0, 30), kcalPer100: number(item.kcalPer100, 1000), proteinPer100: number(item.proteinPer100, 200), carbsPer100: number(item.carbsPer100, 200), fatPer100: number(item.fatPer100, 200),
+  })).filter((item: any) => item.name && item.grams > 0) : [];
+  if (!String(data.name || "").trim() || !items.length) throw new Error("ה-AI לא החזיר פירוט פריטים מלא");
+  return { name: String(data.name).trim().slice(0, 120), items, confidence: ["low", "medium", "high"].includes(data.confidence) ? data.confidence : "low", explanation: String(data.explanation || "").trim().slice(0, 300) };
 }
 
 export async function POST(request: Request) {
@@ -29,7 +33,8 @@ export async function POST(request: Request) {
   if (!budget.allowed) return Response.json({ error: "תקציב ה-AI החודשי הגיע למגבלה הקשיחה" }, { status: 429 });
   try {
     const call = state.ai.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply;
-    const result = await call({ apiKey: await decryptSecret(state.ai.encryptedKey), model: state.ai.model, instructions: "אתה מנתח תזונה זהיר. הערך רק מזון שנראה בתמונה. כאשר הכמות אינה ברורה ציין זאת ואל תציג ודאות מזויפת. החזר JSON תקין בלבד, ללא markdown.", input: 'החזר בדיוק: {"name":"שם ארוחה בעברית","kcal":0,"protein":0,"carbs":0,"fat":0,"confidence":"low|medium|high","explanation":"הסבר קצר בעברית כולל הנחות לגבי גודל המנה"}', imageDataUrl: String(imageDataUrl) });
+    const calibration = (state.userData[session.userId]?.foodCalibration || []).slice(-30).map((item: any) => `${item.originalName ? `זוהה ${item.originalName} ותוקן ל-${item.name}` : item.name}: ${item.quantity || 1} יחידות, ${item.grams} גרם ליחידה`).join("; ");
+    const result = await call({ apiKey: await decryptSecret(state.ai.encryptedKey), model: state.ai.model, instructions: `אתה מנתח תזונה זהיר. פרק את הארוחה לפריטים נפרדים. הערך רק מזון שנראה בתמונה. לכל פריט החזר משקל משוער וערכים ל-100 גרם, כדי שהמשתמש יוכל לתקן את הכמות בלי לנחש מחדש. כאשר הכמות אינה ברורה ציין זאת. תיקוני עבר של המשתמש, אם הם רלוונטיים: ${calibration || "אין עדיין"}. החזר JSON תקין בלבד, ללא markdown.`, input: 'החזר בדיוק: {"name":"שם ארוחה בעברית","items":[{"name":"שם פריט","grams":150,"quantity":1,"unit":"מנה","kcalPer100":100,"proteinPer100":10,"carbsPer100":12,"fatPer100":3}],"confidence":"low|medium|high","explanation":"הסבר קצר בעברית כולל הנחות לגבי הכמויות"}', imageDataUrl: String(imageDataUrl) });
     const analysis = parseResult(result.text);
     const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: state.ai.inputCost, outputCostPerMillion: state.ai.outputCost });
     await updateState((latest) => { latest.aiUsage.push({ id: crypto.randomUUID(), month, at: new Date().toISOString(), userId: session.userId, feature: "meal_photo", provider: latest.ai.provider, model: latest.ai.model, ...result.usage, cost }); return latest; });

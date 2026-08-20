@@ -12,6 +12,8 @@ const defaultState = {
   today: { date: "", waterMl: 0, meals: [] },
   ai: { provider: "openai", model: "gpt-5.6-terra", encryptedKey: "", inputCost: 2, outputCost: 12, monthlyBudget: 20, softLimit: 80, hardLimit: true },
   aiUsage: [],
+  foodCatalog: [],
+  partnerships: [],
 };
 
 function dataDir() {
@@ -33,6 +35,7 @@ export async function readState() {
     state.today = { ...defaultState.today, ...(saved.today || {}) };
     state.users = Array.isArray(saved.users) ? saved.users : [];
     state.userData = saved.userData || {};
+    state.partnerships = Array.isArray(saved.partnerships) ? saved.partnerships : [];
     if (state.owner && state.users.length === 0) {
       state.users = [{ ...state.owner, password: state.adminAuth || null }];
       state.userData[state.owner.id] = { profile: state.profile, today: state.today };
@@ -51,6 +54,7 @@ export function ensureUserData(state, userId) {
   data.measurements = Array.isArray(data.measurements) ? data.measurements : [];
   data.favorites = Array.isArray(data.favorites) ? data.favorites : [];
   data.activity = Array.isArray(data.activity) ? data.activity : [];
+  data.foodCalibration = Array.isArray(data.foodCalibration) ? data.foodCalibration : [];
   data.today = { ...structuredClone(defaultState.today), ...(data.today || {}) };
   if (data.today.date && data.today.date !== todayDate && (data.today.meals.length || data.today.waterMl)) {
     if (!data.history.some((day) => day.date === data.today.date)) data.history.push(structuredClone(data.today));
@@ -114,6 +118,16 @@ export function userView(state, userId, admin = false) {
   const ai = admin
     ? { ...state.ai, encryptedKey: undefined, keyConfigured: Boolean(state.ai?.encryptedKey) }
     : { keyConfigured: Boolean(state.ai?.encryptedKey), available: Boolean(state.ai?.encryptedKey) };
+  const partnerships = (state.partnerships || []).filter((link) => link.ownerId === userId || link.partnerId === userId).map((link) => {
+    const otherId = link.ownerId === userId ? link.partnerId : link.ownerId;
+    const other = state.users.find((item) => item.id === otherId);
+    return { ...link, other: other ? { id: other.id, name: other.name, email: other.email } : null, direction: link.ownerId === userId ? "outgoing" : "incoming" };
+  });
+  const sharedProfiles = (state.partnerships || []).filter((link) => link.partnerId === userId && link.status === "accepted").map((link) => {
+    const sharedUser = state.users.find((item) => item.id === link.ownerId); const sharedData = ensureUserData(state, link.ownerId);
+    const today = link.permissions?.daily ? structuredClone(sharedData.today) : null; if (today && !link.permissions?.meals) today.meals = [];
+    return { linkId: link.id, user: sharedUser ? { id: sharedUser.id, name: sharedUser.name, avatar: sharedData.profile?.avatar || "" } : null, permissions: link.permissions, today, measurements: link.permissions?.weight ? sharedData.measurements : [], profile: link.permissions?.weight ? { weight: sharedData.profile?.weight, targetWeight: sharedData.profile?.targetWeight } : null };
+  });
   return {
     version: state.version,
     owner: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: data.profile?.avatar || "" },
@@ -126,6 +140,9 @@ export function userView(state, userId, admin = false) {
     activity: data.activity,
     ai,
     aiUsage: admin ? state.aiUsage : [],
+    foods: (state.foodCatalog || []).filter((food) => food.visibility === "shared" || food.ownerId === userId),
+    partnerships,
+    sharedProfiles,
     adminConfigured: state.users.some((item) => item.role === "admin" && item.password?.hash),
   };
 }
