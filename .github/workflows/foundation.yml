@@ -25,6 +25,7 @@ jobs:
     env:
       CALOREAZI_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/caloreazi_test
       CALOREAZI_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/caloreazi_test
+      CALOREAZI_DATA_DIR: ${{ runner.temp }}/caloreazi-data
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
