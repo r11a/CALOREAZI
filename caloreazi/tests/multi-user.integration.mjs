@@ -13,7 +13,7 @@ const base = `http://127.0.0.1:${port}`;
 
 async function waitForServer() { for (let attempt = 0; attempt < 60; attempt += 1) { try { if ((await fetch(`${base}/health`)).ok) return; } catch { /* booting */ } await new Promise((resolve) => setTimeout(resolve, 250)); } throw new Error(`server did not start\n${output}`); }
 function cookie(response) { return response.headers.get("set-cookie")?.split(";")[0] || ""; }
-async function json(url, options = {}) { const response = await fetch(`${base}${url}`, options); const body = await response.json(); return { response, body }; }
+async function json(url, options = {}) { const response = await fetch(`${base}${url}`, options); const text = await response.text(); if (!text) throw new Error(`empty response from ${url} (${response.status})\n${output}`); try { return { response, body: JSON.parse(text) }; } catch { throw new Error(`invalid JSON from ${url} (${response.status}): ${text.slice(0, 500)}\n${output}`); } }
 
 try {
   await waitForServer();
