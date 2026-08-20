@@ -11,10 +11,10 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
-      { url: "/caloreazi-pwa-logo-192-v2.png", sizes: "192x192", type: "image/png" },
+      { url: "/caloreazi-pwa-mark-192-v3.png", sizes: "192x192", type: "image/png" },
     ],
-    shortcut: "/caloreazi-pwa-logo-192-v2.png",
-    apple: [{ url: "/caloreazi-apple-touch-logo-v2.png", sizes: "180x180", type: "image/png" }],
+    shortcut: "/caloreazi-pwa-mark-192-v3.png",
+    apple: [{ url: "/caloreazi-apple-touch-mark-v3.png", sizes: "180x180", type: "image/png" }],
   },
 };
 
