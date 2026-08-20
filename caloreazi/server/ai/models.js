@@ -11,6 +11,19 @@ export const AI_MODELS = {
   ],
 };
 
+export const IMAGE_MODELS = {
+  openai: [
+    { id: "gpt-image-1-mini", label: "GPT Image 1 Mini", description: "יצירת תמונות חסכונית ומהירה לקטלוג מזון.", recommended: true },
+    { id: "gpt-image-1", label: "GPT Image 1", description: "איכות תמונה גבוהה יותר בעלות גבוהה יותר." },
+  ],
+  gemini: [
+    { id: "gemini-3.1-flash-image", label: "Gemini 3.1 Flash Image", description: "מודל תמונה מהיר ליצירת תמונות מזון.", recommended: true },
+  ],
+};
+
 export function modelsFor(provider) { return AI_MODELS[provider === "gemini" ? "gemini" : "openai"]; }
 export function findModel(provider, id) { return modelsFor(provider).find((model) => model.id === id); }
 export function recommendedModel(provider) { return modelsFor(provider).find((model) => model.recommended) || modelsFor(provider)[0]; }
+export function imageModelsFor(provider) { return IMAGE_MODELS[provider === "gemini" ? "gemini" : "openai"]; }
+export function findImageModel(provider, id) { return imageModelsFor(provider).find((model) => model.id === id); }
+export function aiRole(ai, role) { const fallback = { provider: ai.provider, model: ai.model }; const configured = ai.roles?.[role] || {}; return { provider: configured.provider || fallback.provider, model: configured.model || (role === "image" ? imageModelsFor(configured.provider || fallback.provider)[0].id : fallback.model) }; }
