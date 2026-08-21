@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   let audioDataUrl = ""; let browserTranscript = "";
   if (contentType.includes("multipart/form-data")) { const form = await request.formData(); const audio = form.get("audio"); browserTranscript = String(form.get("browserTranscript") || "").trim(); if (audio instanceof File && audio.size) audioDataUrl = `data:${audio.type || "audio/webm"};base64,${Buffer.from(await audio.arrayBuffer()).toString("base64")}`; }
   else { const body = await request.json(); audioDataUrl = String(body.audioDataUrl || ""); browserTranscript = String(body.browserTranscript || "").trim(); }
-  if (!/^data:audio\/(?:webm|mp4|ogg|mpeg|wav|x-m4a)(?:;[^,]*)?;base64,/i.test(String(audioDataUrl || ""))) return Response.json({ error: "פורמט ההקלטה אינו נתמך. נסה להקליט שוב או לפתוח בדפדפן חיצוני." }, { status: 400 });
+  if (!browserTranscript && !/^data:audio\/(?:webm|mp4|ogg|mpeg|wav|x-m4a)(?:;[^,]*)?;base64,/i.test(String(audioDataUrl || ""))) return Response.json({ error: "פורמט ההקלטה אינו נתמך. נסה להקליט שוב או לפתוח בדפדפן חיצוני." }, { status: 400 });
   if (String(audioDataUrl).length > 14_000_000) return Response.json({ error: "ההקלטה ארוכה מדי; נסה תיאור קצר יותר" }, { status: 413 });
   const month = new Date().toISOString().slice(0, 7); const spent = state.aiUsage.filter((item) => item.month === month).reduce((sum, item) => sum + Number(item.cost || 0), 0);
   if (!evaluateBudget({ spentUsd: spent, monthlyBudgetUsd: state.ai.monthlyBudget, softLimitPercent: state.ai.softLimit, hardLimitEnabled: state.ai.hardLimit }).allowed) return Response.json({ error: "תקציב ה-AI החודשי הגיע למגבלה הקשיחה" }, { status: 429 });

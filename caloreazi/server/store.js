@@ -173,7 +173,7 @@ export function userView(state, userId, admin = false) {
     currentUser: { id: user.id, name: user.name, role: user.role },
     profile: data.profile || null,
     today: { ...structuredClone(defaultState.today), ...(data.today || {}) },
-    history: data.history,
+    history: data.history.map((day) => ({ ...day, dailyScore: calculateDayScore(day, data.profile, data.activity) })),
     measurements: data.measurements,
     favorites: data.favorites,
     activity: data.activity,

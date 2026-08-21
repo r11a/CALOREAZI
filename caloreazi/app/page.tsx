@@ -526,6 +526,8 @@ export default function Home() {
   const [profileForm, setProfileForm] = useState<any>({});
   const [now, setNow] = useState(() => new Date());
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [historySelectedDate, setHistorySelectedDate] = useState("");
+  const [historyCalendarMonth, setHistoryCalendarMonth] = useState("");
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [insightsData, setInsightsData] = useState<any>(null);
   const [activityOpen, setActivityOpen] = useState(false);
@@ -677,6 +679,34 @@ export default function Home() {
   const isTrainingDay = Boolean(state?.activity?.some((item) => item.date === state?.today?.date && Number(item.minutes || 0) > 0));
   const dailyCalorieTarget = Number(profile?.calories || 0) + (isTrainingDay ? Number(profile?.trainingDayBonus || 0) : 0);
   const remaining = Math.max(0, dailyCalorieTarget - consumed);
+  const dailyScore = Math.max(0, Math.min(100, Number(state?.dailyScore?.score || 0)));
+  const scoreToneFor = (score: number) => score < 20 ? "red" : score < 40 ? "orange" : score < 60 ? "yellow" : score < 80 ? "blue" : "green";
+  const scoreTone = scoreToneFor(dailyScore);
+  const scoreParts = state?.dailyScore?.parts || {};
+  const scoreGuidance = [
+    { label: "מאזן קלורי", value: Number(scoreParts.calories || 0), max: 40, tip: "תעד ארוחות והתקרב לטווח הקלוריות היומי." },
+    { label: "חלבון", value: Number(scoreParts.protein || 0), max: 25, tip: "הוסף מקור חלבון איכותי לארוחה הבאה." },
+    { label: "מים", value: Number(scoreParts.water || 0), max: 20, tip: "השלם בהדרגה את יעד השתייה היומי." },
+    { label: "פעילות", value: Number(scoreParts.activity || 0), max: 10, tip: "הוסף הליכה או פעילות של לפחות 30 דקות." },
+    { label: "עקביות", value: Number(scoreParts.consistency || 0), max: 5, tip: "תעד לפחות שתי ארוחות כדי לקבל תמונת יום מלאה." },
+  ];
+  const scoreImprovement = [...scoreGuidance].sort((a, b) => (b.max - b.value) - (a.max - a.value))[0];
+  const historyDays = useMemo(() => [...(state?.history || []), ...(state?.today ? [{ ...state.today, dailyScore: state.dailyScore }] : [])], [state?.history, state?.today, state?.dailyScore]);
+  const activeHistoryDate = historySelectedDate || state?.today?.date || "";
+  const activeHistoryDay = historyDays.find((day) => day.date === activeHistoryDate) || historyDays[0];
+  const activeCalendarMonth = historyCalendarMonth || activeHistoryDate.slice(0, 7);
+  const calendarCells = useMemo(() => {
+    if (!/^\d{4}-\d{2}$/.test(activeCalendarMonth)) return [];
+    const [year, month] = activeCalendarMonth.split("-").map(Number);
+    const firstWeekday = new Date(year, month - 1, 1).getDay();
+    const daysInMonth = new Date(year, month, 0).getDate();
+    return [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => `${activeCalendarMonth}-${String(index + 1).padStart(2, "0")}`)];
+  }, [activeCalendarMonth]);
+  const moveHistoryMonth = (amount: number) => {
+    const [year, month] = activeCalendarMonth.split("-").map(Number);
+    const next = new Date(year, month - 1 + amount, 1);
+    setHistoryCalendarMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`);
+  };
   const usage = useMemo(
     () =>
       state?.aiUsage?.reduce((sum, item) => sum + Number(item.cost || 0), 0) ||
@@ -1582,7 +1612,7 @@ export default function Home() {
     }
   }
 
-  async function prepareImage(file: File, maxSize = 1600, quality = 0.82) {
+  async function prepareImage(file: File, maxSize = 1280, quality = 0.76) {
     if (!file.type.match(/^image\/(jpeg|png|webp)$/))
       throw new Error("יש לבחור תמונת JPG, PNG או WebP");
     const url = URL.createObjectURL(file);
@@ -1680,7 +1710,8 @@ export default function Home() {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const preferredMimeType = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(stream, { ...(preferredMimeType ? { mimeType: preferredMimeType } : {}), audioBitsPerSecond: 32_000 });
       mediaRecorder.current = recorder;
       audioChunks.current = [];
       browserTranscript.current = "";
@@ -1736,13 +1767,14 @@ export default function Home() {
           );
           return;
         }
-        const form = new FormData();
-        form.set(
-          "audio",
-          blob,
-          `meal-recording.${mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : "webm"}`,
-        );
-        form.set("browserTranscript", browserTranscript.current);
+        const localTranscript = browserTranscript.current.trim();
+        const requestBody = localTranscript
+          ? JSON.stringify({ browserTranscript: localTranscript })
+          : (() => {
+              const form = new FormData();
+              form.set("audio", blob, `meal-recording.${mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : "webm"}`);
+              return form;
+            })();
         setBusy(true);
         setVoiceProcessingSeconds(0);
         setVoiceStatus(
@@ -1757,7 +1789,8 @@ export default function Home() {
         try {
           const result = await api("/api/ai/analyze-voice", {
             method: "POST",
-            body: form,
+            ...(localTranscript ? { headers: { "Content-Type": "application/json" } } : {}),
+            body: requestBody,
           });
           setMealSource("voice");
           setMealTranscript(result.transcript);
@@ -1925,11 +1958,30 @@ export default function Home() {
       <section className="welcome">
         <h1>{greeting}, {state.owner.name}</h1>
       </section>
-      <div className="daily-score-bar" role="progressbar" aria-label="ציון יומי" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.dailyScore?.score || 0}>
-        <i style={{ width: `${state.dailyScore?.score || 0}%` }} />
-        <span>{state.dailyScore?.score || 0}/100</span>
-      </div>
+      <details className={`daily-score-details score-${scoreTone}`}>
+        <summary aria-label="פתיחת הסבר על הציון היומי">
+          <div className="daily-score-bar" role="progressbar" aria-label="ציון יומי" aria-valuemin={0} aria-valuemax={100} aria-valuenow={dailyScore}>
+            <i style={{ width: `${dailyScore}%` }} />
+            <span>{dailyScore}/100</span>
+          </div>
+        </summary>
+        <div className="daily-score-explanation">
+          <header>
+            <div><strong>הציון היומי שלך: {dailyScore}/100</strong><small>הציון מתעדכן לפי הנתונים שתיעדת היום</small></div>
+            <b>{scoreImprovement?.tip}</b>
+          </header>
+          <div className="score-parts">
+            {scoreGuidance.map((part) => (
+              <span key={part.label}><small>{part.label}</small><strong>{part.value}/{part.max}</strong></span>
+            ))}
+          </div>
+        </div>
+      </details>
       <section className="daily-card">
+        <header className="daily-card-heading">
+          <div><span>כמות קלוריות יומית</span><strong>{dailyCalorieTarget.toLocaleString()}</strong></div>
+          <div><span>נותרו להיום</span><strong>{remaining.toLocaleString()}</strong></div>
+        </header>
         <details className="calorie-details">
           <summary aria-label="פתיחת מידע על חישוב יעד הקלוריות">
             <div
@@ -1941,8 +1993,7 @@ export default function Home() {
               <div>
                 <span>נצרכו היום</span>
                 <strong>{consumed.toLocaleString()}</strong>
-                <span>מתוך {dailyCalorieTarget.toLocaleString()} קלוריות</span>
-                <small>{remaining.toLocaleString()} קלוריות נשארו</small>
+                <small>קלוריות</small>
               </div>
             </div>
           </summary>
@@ -3562,10 +3613,24 @@ export default function Home() {
               </div>
               <button onClick={() => setHistoryOpen(false)}>×</button>
             </header>
-            <div className="history-days">
-              {[...(state.history || []), state.today]
-                .sort((a, b) => b.date.localeCompare(a.date))
-                .map((day) => {
+            <section className="history-calendar" aria-label="לוח שנה של ציונים יומיים">
+              <header>
+                <button type="button" onClick={() => moveHistoryMonth(-1)} aria-label="החודש הקודם">‹</button>
+                <strong>{new Date(`${activeCalendarMonth}-01T12:00:00`).toLocaleDateString("he-IL", { month: "long", year: "numeric" })}</strong>
+                <button type="button" onClick={() => moveHistoryMonth(1)} aria-label="החודש הבא">›</button>
+              </header>
+              <div className="calendar-weekdays">{["א", "ב", "ג", "ד", "ה", "ו", "ש"].map((day) => <span key={day}>{day}</span>)}</div>
+              <div className="calendar-grid">
+                {calendarCells.map((date, index) => {
+                  if (!date) return <i key={`empty-${index}`} />;
+                  const day = historyDays.find((item) => item.date === date);
+                  const score = Number(day?.dailyScore?.score || 0);
+                  return <button type="button" key={date} className={`${day ? `score-${scoreToneFor(score)}` : "no-data"} ${date === activeHistoryDate ? "selected" : ""}`} onClick={() => day && setHistorySelectedDate(date)} disabled={!day} aria-label={day ? `${date}, ציון ${score}` : `${date}, אין נתונים`}><span>{Number(date.slice(-2))}</span>{day && <small>{score}</small>}</button>;
+                })}
+              </div>
+            </section>
+            <div className="history-days history-selected-day">
+              {activeHistoryDay && [activeHistoryDay].map((day) => {
                   const totals = day.meals.reduce(
                     (sum: any, meal: any) => ({
                       kcal: sum.kcal + Number(meal.kcal || 0),
@@ -3588,10 +3653,7 @@ export default function Home() {
                     fat: goalStatus(totals.fat, goals.fat),
                   };
                   return (
-                    <details
-                      key={day.date}
-                      open={day.date === state.today.date}
-                    >
+                    <details key={day.date} open>
                       <summary>
                         <div>
                           <strong>

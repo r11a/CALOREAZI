@@ -54,3 +54,27 @@ test("photo capture communicates quality, confidence, offline state and save res
   assert.match(page, /meal-result-toast/);
   assert.match(css, /photo-quality/);
 });
+
+test("dashboard explains its dynamic score and separates calorie target from consumption", () => {
+  assert.match(page, /daily-score-details score-/);
+  assert.match(page, /scoreGuidance/);
+  assert.match(page, /כמות קלוריות יומית/);
+  assert.match(page, /נותרו להיום/);
+  assert.match(css, /score-red/);
+  assert.match(css, /score-blue/);
+});
+
+test("history opens with a navigable score-colored calendar and one selected day", () => {
+  assert.match(page, /history-calendar/);
+  assert.match(page, /moveHistoryMonth/);
+  assert.match(page, /setHistorySelectedDate/);
+  assert.match(page, /activeHistoryDay/);
+  assert.match(css, /calendar-grid/);
+});
+
+test("photo and voice use compact fast paths with fallbacks", () => {
+  assert.match(page, /maxSize = 1280, quality = 0\.76/);
+  assert.match(page, /audioBitsPerSecond: 32_000/);
+  assert.match(page, /localTranscript/);
+  assert.match(page, /JSON\.stringify\(\{ browserTranscript: localTranscript \}\)/);
+});
