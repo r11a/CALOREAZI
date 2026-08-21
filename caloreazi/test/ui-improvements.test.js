@@ -91,10 +91,19 @@ test("history opens with a navigable score-colored calendar and one selected day
 });
 
 test("photo and voice use compact fast paths with fallbacks", () => {
-  assert.match(page, /maxSize = 1280, quality = 0\.76/);
+  assert.match(page, /maxSize = 1024, quality = 0\.68/);
+  assert.match(page, /attempt < 6 \? 350 : 700/);
   assert.match(page, /audioBitsPerSecond: 32_000/);
   assert.match(page, /localTranscript/);
   assert.match(page, /JSON\.stringify\(\{ browserTranscript: localTranscript \}\)/);
+});
+
+test("meal review supports focused AI correction and calm consistency badges", () => {
+  assert.match(page, /correctMealWithAi/);
+  assert.match(page, /תקן עם AI/);
+  assert.match(page, /consistencyBadges/);
+  assert.match(css, /ai-correction-box/);
+  assert.match(css, /consistency-badges/);
 });
 
 test("meal save explains missing fields, infers safe values and blocks duplicate submissions", () => {
