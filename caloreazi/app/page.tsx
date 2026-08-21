@@ -551,7 +551,7 @@ export default function Home() {
   const [tasteWizardOpen, setTasteWizardOpen] = useState(false);
   const [tasteWizardStep, setTasteWizardStep] = useState(0);
   const [tasteDraft, setTasteDraft] = useState<any>({ likes: [], dislikes: [], prepTime: "medium" });
-  const [suggestionPeriod, setSuggestionPeriod] = useState("lunch");
+  const [suggestionPeriod, setSuggestionPeriod] = useState("");
   const [suggestionRefresh, setSuggestionRefresh] = useState(0);
   const [macroDetail, setMacroDetail] = useState<"protein" | "carbs" | "fat" | "">("");
   const [mealPreview, setMealPreview] = useState<any>(null);
@@ -600,7 +600,6 @@ export default function Home() {
   const [libraryVisibility, setLibraryVisibility] = useState("all");
   const [editingFood, setEditingFood] = useState<any>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
-  const directCameraInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
   const foodImageInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
@@ -871,16 +870,6 @@ export default function Home() {
       });
     return items;
   }, [profile, waterRemaining, proteinRemaining, consumed, remaining, now, state?.today?.meals?.length]);
-  const dailyRecommendation = useMemo(() => {
-    if (!dailyInsights.length) return null;
-    const urgent = consumed > Number(profile?.calories || 0)
-      ? dailyInsights.find((item) => item.title === "עברת את היעד היומי")
-      : null;
-    if (urgent) return urgent;
-    const slot = now.getDate() + Math.floor(now.getHours() / 4);
-    return dailyInsights[slot % dailyInsights.length];
-  }, [dailyInsights, consumed, profile?.calories, now]);
-
   async function login(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -1224,6 +1213,19 @@ export default function Home() {
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+  async function emptyTrash() {
+    if (!trashItems.length || !window.confirm(`למחוק לצמיתות את כל ${trashItems.length} הפריטים בסל? לא ניתן לשחזר אותם לאחר מכן.`)) return;
+    try {
+      await api("/api/trash", { method: "DELETE", body: JSON.stringify({ all: true }) });
+      setTrashItems([]);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  function returnFromTrashToAdmin() {
+    setTrashOpen(false);
+    void openAdmin();
   }
   async function addMeal(event: FormEvent) {
     event.preventDefault();
@@ -2234,48 +2236,7 @@ export default function Home() {
           </div>
         </div>
       </section>
-      <section className="primary-actions action-trio">
-        <button
-          className="camera-action"
-          onClick={() => uploadInput.current?.click()}
-          disabled={busy}
-        >
-          <span className="camera-icon"><AppIcon name="camera" /></span>
-          <span>
-            <strong>צילום ארוחה</strong>
-            <small>צלם ארוחה וקבל ניתוח AI</small>
-          </span>
-          <b>{busy ? "מנתח…" : "צלם עכשיו"}</b>
-        </button>
-        <input
-          ref={uploadInput}
-          className="camera-input"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={analyzePhoto}
-        />
-        <input
-          ref={directCameraInput}
-          className="camera-input"
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={analyzePhoto}
-        />
-        <button
-          className="manual-action"
-          onClick={() => {
-            setQuickCategory("");
-            setQuickAddOpen(true);
-          }}
-        >
-          <span className="manual-icon"><AppIcon name="plus" /></span>
-          <span>
-            <strong>הוספה ידנית</strong>
-            <small>פרי, ירק, משקה או ארוחה</small>
-          </span>
-        </button>
-      </section>
+      <input ref={uploadInput} className="camera-input" type="file" accept="image/*" onChange={analyzePhoto} />
       {error && (
         <button className="notice" onClick={() => setError("")}>
           {error} ×
@@ -2295,10 +2256,10 @@ export default function Home() {
       <section className="content-grid">
         <div className="main-feed">
         <section className="panel meal-suggestions-panel">
-          <header><div><h2>מה כדאי לאכול עכשיו?</h2><p>לפי החוסרים היום והטעם האישי שלך</p></div><div className="suggestion-actions"><button type="button" onClick={() => setSuggestionRefresh((value) => value + 1)}>רענן</button><button type="button" onClick={openTasteWizard}>העדפות</button></div></header>
+          <header><div><h2>מה כדאי לאכול עכשיו?</h2><p>בחר סוג ארוחה כדי לקבל המלצות מותאמות</p></div><div className="suggestion-actions">{suggestionPeriod && <button type="button" onClick={() => setSuggestionRefresh((value) => value + 1)}>רענן</button>}<button type="button" onClick={openTasteWizard}>העדפות</button></div></header>
           <div className="suggestion-periods">{[["breakfast","בוקר"],["lunch","צהריים"],["dinner","ערב"],["snack","בין ארוחות"]].map(([key,label]) => <button type="button" className={suggestionPeriod === key ? "selected" : ""} onClick={() => setSuggestionPeriod(key)} key={key}>{label}</button>)}</div>
-          <div className="meal-suggestion-list">{mealSuggestions.map((meal) => <article key={meal.name}><div><strong>{meal.name}</strong><small>{meal.reason}{meal.personal ? " · מתאים להעדפות שלך" : ""}</small></div><span><b>{meal.kcal}</b> kcal</span><footer>{meal.protein}g חלבון · {meal.carbs}g פחמימות · {meal.fat}g שומן</footer></article>)}</div>
-          {!profile?.tasteProfile?.completedAt && <button className="taste-survey-callout" type="button" onClick={openTasteWizard}>התאם את ההמלצות אליי · שאלון קצר ולא חובה</button>}
+          {suggestionPeriod && <div className="meal-suggestion-list">{mealSuggestions.map((meal) => <article key={meal.name}><div><strong>{meal.name}</strong><small>{meal.reason}{meal.personal ? " · מתאים להעדפות שלך" : ""}</small></div><span><b>{meal.kcal}</b> kcal</span><footer>{meal.protein}g חלבון · {meal.carbs}g פחמימות · {meal.fat}g שומן</footer></article>)}</div>}
+          {suggestionPeriod && !profile?.tasteProfile?.completedAt && <button className="taste-survey-callout" type="button" onClick={openTasteWizard}>התאם את ההמלצות אליי · שאלון קצר ולא חובה</button>}
         </section>
         <div className="panel meals-panel">
           <header>
@@ -2306,13 +2267,13 @@ export default function Home() {
               <p className="eyebrow">הארוחות שלי</p>
               <h2>מה אכלת היום</h2>
             </div>
-            <button
+            <button className="manual-add-button"
               onClick={() => {
                 setQuickCategory("");
                 setQuickAddOpen(true);
               }}
             >
-              הוסף ידנית
+              <AppIcon name="plus" /> הוסף ארוחה ידנית
             </button>
           </header>
           {state.today.meals.length === 0 ? (
@@ -2413,18 +2374,20 @@ export default function Home() {
             </div>
             <p>{state.today.waterMl.toLocaleString()} מתוך {profile.waterMl.toLocaleString()} מ״ל</p>
           </section>
+          <button type="button" className="panel trends-tile" onClick={openInsights}>
+            <span><AppIcon name="activity" /></span>
+            <div><strong>מגמות</strong><small>{latestWeightDelta === null ? `ציון היום ${dailyScore}/100 · הוסף מדידת משקל למעקב` : `${latestWeightDelta > 0 ? "עלייה" : latestWeightDelta < 0 ? "ירידה" : "ללא שינוי"} של ${Math.abs(latestWeightDelta).toFixed(1)} ק״ג · ציון היום ${dailyScore}/100`}</small></div>
+            <b>←</b>
+          </button>
           <section className="panel insights-panel">
             <header>
               <div>
                 <p className="eyebrow">המלצת המאמן</p>
-                <h2>{dailyRecommendation?.title || "היום שלך"}</h2>
+                <h2>המלצות המאמן</h2>
               </div>
-              <button className="insights-more" onClick={openInsights}>
-                מגמות
-              </button>
             </header>
             <div className="daily-insights">
-              {[dailyRecommendation].filter(Boolean).map((item: any) => (
+              {dailyInsights.slice(0, 3).map((item: any) => (
                 <article key={item.title}>
                   <i><AppIcon name={item.title.includes("שתייה") ? "water" : "coach"} /></i>
                   <div>
@@ -2450,8 +2413,8 @@ export default function Home() {
         </button>
         <button
           className="nav-camera"
-          onClick={() => directCameraInput.current?.click()}
-          aria-label="צילום ארוחה"
+          onClick={() => uploadInput.current?.click()}
+          aria-label="בחירת צילום, גלריה או קובץ"
         >
           <AppIcon name="camera" />
         </button>
@@ -4090,7 +4053,7 @@ export default function Home() {
             <section className="weight-trends">
               <div className="weight-trends-heading">
                 <div><strong>מעקב משקל</strong><small>כל עדכון נשמר כמדידה חדשה לפי תאריך ואינו מוחק את ההיסטוריה</small></div>
-                <b>{latestWeight ? `${Number(latestWeight).toFixed(1)} ק״ג` : "אין מדידה"}{latestWeightDelta !== null && <small className={latestWeightDelta > 0 ? "weight-up" : latestWeightDelta < 0 ? "weight-down" : "weight-steady"}>{latestWeightDelta > 0 ? "↑" : latestWeightDelta < 0 ? "↓" : "→"} {Math.abs(latestWeightDelta).toFixed(1)}</small>}</b>
+                <b>{latestWeight ? `${Number(latestWeight).toFixed(1)} ק״ג` : "אין מדידה"}{latestWeightDelta !== null ? <small className={latestWeightDelta > 0 ? "weight-up" : latestWeightDelta < 0 ? "weight-down" : "weight-steady"}><span aria-hidden="true">{latestWeightDelta > 0 ? "↑" : latestWeightDelta < 0 ? "↓" : "→"}</span> {Math.abs(latestWeightDelta).toFixed(1)} ק״ג <em>מהקודם</em></small> : <small className="weight-steady">אין מדידה קודמת</small>}</b>
               </div>
               <form className="weight-update-form" onSubmit={saveTrendWeight}>
                 <label>משקל נוכחי<input type="number" min="25" max="350" step="0.1" value={weightValue || ""} onChange={(event) => setWeightValue(Number(event.target.value))} /></label>
@@ -4185,6 +4148,7 @@ export default function Home() {
             <p className="modal-help">
               הפריטים נשמרים למשך 30 יום לפני מחיקה קבועה.
             </p>
+            <div className="trash-toolbar"><button type="button" onClick={returnFromTrashToAdmin}>חזרה למרכז הניהול</button><button type="button" className="danger" disabled={!trashItems.length} onClick={emptyTrash}>רוקן סל מחזור</button></div>
             <div className="trash-list">
               {trashItems.length ? (
                 trashItems.map((item) => (
