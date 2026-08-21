@@ -380,7 +380,7 @@ function goalStatus(value: number, target: number) {
   return { className: "goal-over", label: "מעל היעד" };
 }
 
-function AppIcon({ name }: { name: "camera" | "image" | "plus" | "coach" | "edit" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" }) {
+function AppIcon({ name }: { name: "camera" | "image" | "plus" | "coach" | "edit" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic" }) {
   const paths = {
     camera: <><path d="M14.5 5 13 3h-2L9.5 5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><circle cx="12" cy="11.5" r="3.5"/></>,
     image: <><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-4-4L7 20"/></>,
@@ -394,6 +394,7 @@ function AppIcon({ name }: { name: "camera" | "image" | "plus" | "coach" | "edit
     settings: <><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 15 6l-.3-2.6h-4L10.5 6A7 7 0 0 0 9 7L6.6 6l-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A7 7 0 0 0 10.5 18l.2 2.6h4L15 18a7 7 0 0 0 1.5-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/></>,
     lock: <><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
     search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
+    mic: <><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></>,
   };
   return <svg className="app-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -529,6 +530,7 @@ export default function Home() {
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
   const [waterOpen, setWaterOpen] = useState(false);
   const [waterValue, setWaterValue] = useState(0);
+  const [waterTargetValue, setWaterTargetValue] = useState(2000);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileForm, setProfileForm] = useState<any>({});
   const [now, setNow] = useState(() => new Date());
@@ -979,6 +981,7 @@ export default function Home() {
   }
 
   async function openAdmin() {
+    closeOpenScreens();
     if (isAdmin) {
       setSettingsOpen(true);
       loadAdminData().catch((e) => setError(e.message));
@@ -1059,6 +1062,7 @@ export default function Home() {
   }
   function openWaterEditor() {
     setWaterValue(Number(state?.today?.waterMl || 0));
+    setWaterTargetValue(Number(profile?.waterMl || 2000));
     setWaterOpen(true);
   }
   async function saveWater() {
@@ -1067,7 +1071,7 @@ export default function Home() {
       setState(
         await api("/api/water", {
           method: "PUT",
-          body: JSON.stringify({ amount: waterValue }),
+          body: JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue }),
         }),
       );
       setWaterOpen(false);
@@ -1076,6 +1080,29 @@ export default function Home() {
     } finally {
       setBusy(false);
     }
+  }
+  function closeOpenScreens() {
+    setCoachOpen(false); setSettingsOpen(false); setAdminLoginOpen(false); setMealOpen(false); setQuickAddOpen(false);
+    setWaterOpen(false); setProfileOpen(false); setHistoryOpen(false); setInsightsOpen(false); setActivityOpen(false);
+    setTrashOpen(false); setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false);
+    setPendingQuickFood(null); setEditingFood(null);
+  }
+  function openNavigationScreen(screen: "home" | "history" | "admin" | "coach") {
+    closeOpenScreens();
+    if (screen === "history") setHistoryOpen(true);
+    if (screen === "admin") void openAdmin();
+    if (screen === "coach") setCoachOpen(true);
+  }
+
+  function dictateManualDescription() {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) { setMealOpen(false); setVoiceOpen(true); return; }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "he-IL"; recognition.interimResults = false; recognition.maxAlternatives = 1;
+    setPhotoStatus("מקשיב… אפשר לתאר את הארוחה עכשיו.");
+    recognition.onresult = (event: any) => { const text = event.results?.[0]?.[0]?.transcript || ""; setManualDescription((current) => `${current} ${text}`.trim()); setPhotoStatus("ההכתבה נוספה. אפשר לתקן או לחשב עם AI."); };
+    recognition.onerror = () => setPhotoStatus("לא הצלחתי לקלוט את ההכתבה. אפשר לנסות שוב או להקליד.");
+    recognition.start();
   }
   async function openInsights() {
     setInsightsOpen(true);
@@ -2330,10 +2357,10 @@ export default function Home() {
         </div>
       </section>
       <nav className="bottom-nav">
-        <button className="active">
+        <button className={!historyOpen && !settingsOpen && !adminLoginOpen && !coachOpen ? "active" : ""} onClick={() => openNavigationScreen("home")}>
           <span><AppIcon name="home" /></span>היום
         </button>
-        <button onClick={() => setHistoryOpen(true)}>
+        <button className={historyOpen ? "active" : ""} onClick={() => openNavigationScreen("history")}>
           <span><AppIcon name="history" /></span>היסטוריה
         </button>
         <button
@@ -2343,11 +2370,11 @@ export default function Home() {
         >
           <AppIcon name="camera" />
         </button>
-        <button onClick={openAdmin}>
+        <button className={settingsOpen || adminLoginOpen ? "active" : ""} onClick={() => openNavigationScreen("admin")}>
           <span><AppIcon name={isAdmin ? "settings" : "lock"} /></span>
           {isAdmin ? "ניהול" : "Admin"}
         </button>
-        <button onClick={() => setCoachOpen(true)}>
+        <button className={coachOpen ? "active" : ""} onClick={() => openNavigationScreen("coach")}>
           <span><AppIcon name="coach" /></span>מאמן
         </button>
       </nav>
@@ -4386,6 +4413,7 @@ export default function Home() {
                 ＋
               </button>
             </div>
+            <label className="water-target-field">יעד שתייה יומי<select value={waterTargetValue} onChange={(event) => setWaterTargetValue(Number(event.target.value))}>{[1500,1750,2000,2250,2500,2750].map((amount) => <option key={amount} value={amount}>{(amount / 1000).toLocaleString("he-IL")} ליטר</option>)}</select><small>היעד ישמש את פס המים ואת חישוב הציון היומי.</small></label>
             <footer>
               <button onClick={() => setWaterOpen(false)}>ביטול</button>
               <button className="primary" onClick={saveWater} disabled={busy}>
@@ -4431,17 +4459,7 @@ export default function Home() {
                     }
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={analyzeManualDescription}
-                  disabled={busy || !manualDescription.trim()}
-                >
-                  {busy
-                    ? "מחשב…"
-                    : catalogOnly
-                      ? "צור תמונה וחשב ערכים"
-                      : "חשב אוטומטית עם AI"}
-                </button>
+                <div className="manual-ai-actions"><button type="button" className="dictation-action" onClick={dictateManualDescription}><AppIcon name="mic" /> הכתבה</button><button type="button" onClick={analyzeManualDescription} disabled={busy || !manualDescription.trim()}>{busy ? "מחשב…" : catalogOnly ? "צור תמונה וחשב ערכים" : "חשב קלוריות עם AI"}</button></div>
                 <small>
                   {catalogOnly
                     ? "לאחר החישוב אפשר לבדוק ולתקן את הערכים לפני שמירה בגלריה."
@@ -4449,7 +4467,7 @@ export default function Home() {
                 </small>
               </section>
             )}
-            <div className="settings-grid">
+            {(!manualAiMode || mealItems.length > 0) && <><div className="settings-grid">
               {photoPreview && (
                 <img
                   className="meal-photo-preview wide"
@@ -4738,6 +4756,7 @@ export default function Home() {
                 </div>
               )}
             </section>
+            </>}
             <footer>
               {editingMealId && <button className="danger" type="button" onClick={async () => { await deleteMeal(editingMealId); setEditingMealId(""); setMealOpen(false); }}>מחק ארוחה</button>}
               <button type="button" onClick={() => setMealOpen(false)}>
@@ -4745,7 +4764,7 @@ export default function Home() {
               </button>
               <button
                 className="primary"
-                disabled={busy}
+                disabled={busy || (manualAiMode && mealItems.length === 0)}
               >
                 {busy
                   ? "שומר…"
