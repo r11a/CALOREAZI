@@ -29,6 +29,7 @@ type AppState = {
   coachHistory: { role: "user" | "assistant"; text: string; at?: string }[];
   foods: any[];
   partnerships: any[];
+  shareCandidates: { id: string; name: string }[];
   sharedProfiles: any[];
   adminConfigured: boolean;
 };
@@ -531,6 +532,7 @@ export default function Home() {
   const [quickFoodWeight, setQuickFoodWeight] = useState(100);
   const [barcodeValue, setBarcodeValue] = useState("");
   const [barcodeStatus, setBarcodeStatus] = useState("");
+  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
   const [adminHealth, setAdminHealth] = useState<any>(null);
   const [adminTab, setAdminTab] = useState("ai");
   const [adminBackups, setAdminBackups] = useState<any[]>([]);
@@ -554,6 +556,7 @@ export default function Home() {
   const [waterValue, setWaterValue] = useState(0);
   const [waterTargetValue, setWaterTargetValue] = useState(2000);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileTab, setProfileTab] = useState<"basic" | "health" | "goals" | "account">("basic");
   const [profileForm, setProfileForm] = useState<any>({});
   const [tasteWizardOpen, setTasteWizardOpen] = useState(false);
   const [tasteWizardStep, setTasteWizardStep] = useState(0);
@@ -587,6 +590,7 @@ export default function Home() {
   const [voiceProcessingSeconds, setVoiceProcessingSeconds] = useState(0);
   const [partnerForm, setPartnerForm] = useState({
     email: "",
+    userIds: [] as string[],
     daily: true,
     meals: true,
     weight: false,
@@ -603,11 +607,13 @@ export default function Home() {
   const [customFoodDraft, setCustomFoodDraft] = useState<any>(null);
   const [customFoodStatus, setCustomFoodStatus] = useState("");
   const [foodLibraryOpen, setFoodLibraryOpen] = useState(false);
+  const [pendingFavorite, setPendingFavorite] = useState<any>(null);
   const [libraryQuery, setLibraryQuery] = useState("");
   const [editingFood, setEditingFood] = useState<any>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
   const directCameraInput = useRef<HTMLInputElement>(null);
-  const barcodeCameraInput = useRef<HTMLInputElement>(null);
+  const barcodeVideo = useRef<HTMLVideoElement>(null);
+  const barcodeScanLocked = useRef(false);
   const avatarInput = useRef<HTMLInputElement>(null);
   const foodImageInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
@@ -706,6 +712,26 @@ export default function Home() {
     }, 350);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [quickSearch, quickAddOpen]);
+
+  useEffect(() => {
+    if (!barcodeScannerOpen || !barcodeVideo.current) return;
+    let stopped = false;
+    let controls: { stop: () => void } | undefined;
+    barcodeScanLocked.current = false;
+    setBarcodeStatus("כוון את הברקוד למרכז המסגרת — הזיהוי אוטומטי");
+    import("@zxing/browser").then(async ({ BrowserMultiFormatReader }) => {
+      const reader = new BrowserMultiFormatReader();
+      controls = await reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }, barcodeVideo.current!, (result) => {
+        if (!result || stopped || barcodeScanLocked.current) return;
+        barcodeScanLocked.current = true;
+        const value = result.getText();
+        setBarcodeValue(value);
+        setBarcodeScannerOpen(false);
+        void lookupBarcode(value);
+      });
+    }).catch(() => { setBarcodeStatus("לא ניתן לפתוח את המצלמה. ודא שניתנה הרשאת מצלמה או הזן את הברקוד ידנית."); });
+    return () => { stopped = true; controls?.stop(); const stream = barcodeVideo.current?.srcObject as MediaStream | null; stream?.getTracks().forEach((track) => track.stop()); };
+  }, [barcodeScannerOpen]);
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState === "visible")
@@ -1462,6 +1488,7 @@ export default function Home() {
     } catch (e) { setError((e as Error).message); }
   }
   function openProfile() {
+    setProfileTab("basic");
     setProfileForm({
       name: state?.owner?.name || "",
       age: profile.age,
@@ -1569,7 +1596,7 @@ export default function Home() {
           body: JSON.stringify(partnerForm),
         }),
       );
-      setPartnerForm({ email: "", daily: true, meals: true, weight: false });
+      setPartnerForm({ email: "", userIds: [], daily: true, meals: true, weight: false });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1700,21 +1727,6 @@ export default function Home() {
       setBarcodeStatus(Number(response.product?.kcal) > 0 ? response.attribution || "המוצר נמצא" : "המוצר זוהה והערכים החסרים הושלמו על ידי AI");
       selectQuickFood(product);
     } catch (error) { setBarcodeStatus((error as Error).message || "הברקוד לא נמצא; אפשר לחפש בשם או להוסיף ידנית"); }
-  }
-  async function scanBarcodeImage(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]; event.target.value = "";
-    if (!file) return;
-    try {
-      const Detector = (window as any).BarcodeDetector;
-      if (!Detector) { setBarcodeStatus("הסריקה האוטומטית אינה נתמכת במכשיר הזה; אפשר להזין את המספר שמתחת לברקוד."); return; }
-      const bitmap = await createImageBitmap(file);
-      const codes = await new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] }).detect(bitmap);
-      bitmap.close();
-      const value = String(codes?.[0]?.rawValue || "");
-      if (!value) { setBarcodeStatus("לא זוהה ברקוד. נסה צילום קרוב, ישר ומואר יותר."); return; }
-      setBarcodeValue(value);
-      await lookupBarcode(value);
-    } catch { setBarcodeStatus("לא ניתן היה לקרוא את הברקוד; אפשר להזין את המספר ידנית."); }
   }
   function confirmQuickFood() {
     const item = pendingQuickFood;
@@ -2619,7 +2631,7 @@ export default function Home() {
               </button>
               <button onClick={() => { setSettingsOpen(false); void openTrash(); }}>סל מחזור</button>
             </nav>
-            {adminHealth && (
+            {adminTab === "ai" && adminHealth && (
               <section className="health-grid">
                 <article>
                   <span className="health-ok">●</span>
@@ -3210,7 +3222,7 @@ export default function Home() {
                 )}
               </div>
             </section>
-            {aiStatus && <p className="settings-status">{aiStatus}</p>}
+            {adminTab === "ai" && aiStatus && <p className="settings-status">{aiStatus}</p>}
             <footer>
               <button onClick={() => saveAi(false)} disabled={busy}>
                 שמור
@@ -3238,9 +3250,8 @@ export default function Home() {
               <button onClick={() => setQuickAddOpen(false)}>×</button>
             </header>
             <section className="barcode-search">
-              <button type="button" onClick={() => barcodeCameraInput.current?.click()}><AppIcon name="camera" /><span><strong>סריקת ברקוד</strong><small>צלם את הברקוד שעל האריזה</small></span></button>
-              <div><input inputMode="numeric" value={barcodeValue} onChange={(event) => setBarcodeValue(event.target.value.replace(/\D/g, "").slice(0, 14))} placeholder="או הזן מספר ברקוד" aria-label="מספר ברקוד" /><button type="button" onClick={() => lookupBarcode()}>חפש</button></div>
-              <input ref={barcodeCameraInput} className="camera-input" type="file" accept="image/*" capture="environment" onChange={scanBarcodeImage} />
+              <button type="button" onClick={() => setBarcodeScannerOpen(true)}><AppIcon name="camera" /><span><strong>סריקת ברקוד חיה</strong><small>הזיהוי מתבצע אוטומטית ולא נשמר צילום</small></span></button>
+              <div className="barcode-manual-field"><input inputMode="numeric" value={barcodeValue} onChange={(event) => setBarcodeValue(event.target.value.replace(/\D/g, "").slice(0, 14))} placeholder="או הזן מספר ברקוד" aria-label="מספר ברקוד" />{barcodeValue && <button className="barcode-clear" type="button" onClick={() => { setBarcodeValue(""); setBarcodeStatus(""); }} aria-label="ניקוי ברקוד">×</button>}<button type="button" onClick={() => lookupBarcode()}>חפש</button></div>
               {barcodeStatus && <p>{barcodeStatus}</p>}
             </section>
             <div className="quick-catalog-search"><AppIcon name="search" /><input autoFocus type="search" value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="חיפוש בארוחות, פירות, ירקות ומשקאות…" aria-label="חיפוש בהוספת אוכל" />{quickSearch && <button type="button" onClick={() => setQuickSearch("")} aria-label="ניקוי החיפוש">×</button>}</div>
@@ -3436,6 +3447,8 @@ export default function Home() {
                 </button>
               </div>
             </div>
+            <nav className="profile-tabs" aria-label="חלקי הפרופיל">{[["basic","👤","אישי"],["health","♥","בריאות"],["goals","◎","יעדים"],["account","⚙","חשבון"]].map(([key,icon,label]) => <button key={key} type="button" className={profileTab === key ? "active" : ""} onClick={() => setProfileTab(key as typeof profileTab)}><span>{icon}</span>{label}</button>)}</nav>
+            {profileTab === "basic" && <section className="profile-tab-panel"><header><span>👤</span><div><strong>הפרטים הבסיסיים שלי</strong><small>נתונים המשמשים לחישוב יעדים ומעקב</small></div></header>
             <div className="settings-grid">
               <label>
                 שם
@@ -3475,6 +3488,16 @@ export default function Home() {
                     })
                   }
                 />
+              </label>
+              <label className="initial-weight-field">
+                <span>משקל התחלתי <b>נקודת ייחוס קבועה</b></span>
+                <input
+                  type="text"
+                  value={initialWeight > 0 ? `${initialWeight.toFixed(1)} ק״ג` : "לא נשמר"}
+                  readOnly
+                  aria-readonly="true"
+                />
+                <small>נקבע ברישום ואינו משתנה כשמוסיפים מדידות חדשות.</small>
               </label>
               <label className="current-weight-field">
                 <span>משקל נוכחי <b>נשמר בהיסטוריה</b></span>
@@ -3532,6 +3555,8 @@ export default function Home() {
                 />
               </label>
             </div>
+            </section>}
+            {profileTab === "health" && <section className="profile-tab-panel"><header><span>♥</span><div><strong>בריאות והתאמה אישית</strong><small>מידע רלוונטי להמלצות בטוחות יותר</small></div></header>
             <section className="health-profile">
               <div><p className="eyebrow">מידע בריאותי רלוונטי</p><h3>התאמה בטוחה יותר של ההמלצות</h3><small>נשמר בפרופיל הפרטי ומשמש את ה־AI. אינו תחליף לייעוץ רפואי.</small></div>
               <div className="settings-grid">
@@ -3542,6 +3567,8 @@ export default function Home() {
                 <label className="wide">תרופות רלוונטיות לתזונה<input value={profileForm.relevantMedications || ""} onChange={(e) => setProfileForm({ ...profileForm, relevantMedications: e.target.value })} placeholder="רק מידע שחשוב להמלצות מזון ותיאבון" /></label>
               </div>
             </section>
+            </section>}
+            {profileTab === "goals" && <section className="profile-tab-panel"><header><span>◎</span><div><strong>יעדים ומדדים</strong><small>טווחים, משקל ומצב ההתקדמות</small></div></header>
             <section className="health-profile">
               <div><p className="eyebrow">יעדים מקצועיים</p><h3>טווחים ויום אימון</h3></div>
               <div className="settings-grid">
@@ -3577,6 +3604,8 @@ export default function Home() {
                 </b>
               </span>
             </div>
+            </section>}
+            {profileTab === "account" && <section className="profile-tab-panel account-panel"><header><span>⚙</span><div><strong>העדפות וחשבון</strong><small>תצוגה, שיתוף, גיבוי וניהול מידע</small></div></header>
             <button className="taste-profile-entry" type="button" onClick={openTasteWizard}><span>♡</span><div><strong>שאלון טעמים והעדפות</strong><small>{profile?.tasteProfile?.completedAt ? `${profile.tasteProfile.likes?.length || 0} העדפות אהובות נשמרו · אפשר לעדכן` : "שאלון קצר ולא חובה להתאמת המלצות הארוחות וה־AI"}</small></div><b>←</b></button>
             <button
               className="profile-sharing"
@@ -3625,6 +3654,7 @@ export default function Home() {
               <a href="api/export" download><strong>ייצוא וגיבוי הנתונים</strong><small>הורדת עותק של הפרופיל, הארוחות והמדידות</small></a>
               <button type="button" onClick={deleteMyData}><strong>מחיקת החשבון לצמיתות</strong><small>דורש סיסמה ושני שלבי אישור · לא ניתן לשחזר</small></button>
             </section>
+            </section>}
             <footer>
               <button type="button" onClick={switchUser}>
                 החלף משתמש
@@ -3654,20 +3684,21 @@ export default function Home() {
             <div className="catalog-list">
               {(state.favorites || []).filter((favorite) => !libraryQuery.trim() || String(favorite.meal.name).includes(libraryQuery.trim())).map((favorite) => (
                 <article key={favorite.id}>
-                  <span>★</span>
+                  <span className="favorite-mark">★</span>
                   <div>
                     <strong>{favorite.meal.name}</strong>
-                    <small>{favorite.meal.kcal} kcal</small>
+                    <small>{favorite.meal.kcal} kcal · {favorite.meal.protein || 0}g חלבון</small>
                   </div>
-                  <button onClick={() => { void repeatFavorite(favorite.id); setFoodLibraryOpen(false); }}>הוסף להיום</button>
-                  <button className="danger" onClick={() => removeFavorite(favorite.id)}>הסר מהמועדפים</button>
+                  <button className="favorite-add" aria-label={`הוספת ${favorite.meal.name} להיום`} title="הוסף להיום" onClick={() => setPendingFavorite(favorite)}><AppIcon name="plus" /></button>
+                  <button className="favorite-remove" aria-label={`הסרת ${favorite.meal.name} מהמועדפים`} title="הסר מהמועדפים" onClick={() => removeFavorite(favorite.id)}>×</button>
                 </article>
               ))}
-              {!state.favorites?.length && <p>עדיין אין מועדפים. אפשר להוסיף ארוחה למועדפים מתוך חלון פרטי הארוחה.</p>}
+              {!state.favorites?.length && <div className="favorites-empty"><span>☆</span><strong>עדיין אין מועדפים</strong><small>אפשר להוסיף ארוחה למועדפים מתוך פרטי הארוחה.</small></div>}
             </div>
           </section>
         </div>
       )}
+      {pendingFavorite && <div className="modal-layer modal-nested"><button className="backdrop" onClick={() => setPendingFavorite(null)} /><section className="settings-modal compact-modal favorite-confirm"><header><div><h2>להוסיף להיום?</h2><p>{pendingFavorite.meal.name}</p></div><button onClick={() => setPendingFavorite(null)}>×</button></header><div><strong>{pendingFavorite.meal.kcal} קלוריות</strong><span>{pendingFavorite.meal.protein || 0}g חלבון · {pendingFavorite.meal.carbs || 0}g פחמימות · {pendingFavorite.meal.fat || 0}g שומן</span></div><footer><button onClick={() => setPendingFavorite(null)}>ביטול</button><button className="primary" onClick={async () => { await repeatFavorite(pendingFavorite.id); setPendingFavorite(null); setFoodLibraryOpen(false); }}>＋ הוסף לארוחה</button></footer></section></div>}
       {editingFood && (
         <div className="modal-layer modal-nested">
           <button className="backdrop" onClick={() => setEditingFood(null)} />
@@ -4071,7 +4102,7 @@ export default function Home() {
                   </section>
                 )}
                 <div className="trend-summary">
-                  <article>
+                  <article className={`kpi-score score-${scoreToneFor(insightsData.summary.weeklyScore || 0)}`}><i>◎</i>
                     <small>ציון שבועי</small>
                     <strong>{insightsData.summary.weeklyScore || "—"}</strong>
                     <span>
@@ -4080,23 +4111,23 @@ export default function Home() {
                         : "נדרשים עוד ימים"}
                     </span>
                   </article>
-                  <article>
+                  <article className={Number(insightsData.summary.averageCalories) / Math.max(1, Number(profile.calories)) >= .9 && Number(insightsData.summary.averageCalories) / Math.max(1, Number(profile.calories)) <= 1.05 ? "kpi-calories is-good" : "kpi-calories needs-attention"}><i>🔥</i>
                     <small>ממוצע קלוריות</small>
                     <strong>{insightsData.summary.averageCalories}</strong>
                     <span>ליום, 7 ימים</span>
                   </article>
-                  <article>
+                  <article className={Number(insightsData.summary.averageProtein) >= Number(profile.protein) * .9 ? "kpi-protein is-good" : "kpi-protein needs-attention"}><i>●</i>
                     <small>חלבון ממוצע</small>
                     <strong>{insightsData.summary.averageProtein}g</strong>
                     <span>ליום</span>
                   </article>
-                  <article>
+                  <article className={Number(insightsData.summary.activeMinutes) >= 120 ? "kpi-activity is-good" : "kpi-activity needs-attention"}><i>↗</i>
                     <small>פעילות</small>
                     <strong>{insightsData.summary.activeMinutes}</strong>
                     <span>דקות השבוע</span>
                   </article>
-                  <article><small>ימים בטווח</small><strong>{insightsData.summary.targetCompliance}%</strong><span>{insightsData.summary.trackedDays} ימי מעקב</span></article>
-                  <article><small>הארוחה המאוזנת</small><strong className="trend-meal-name">{insightsData.summary.topMeal}</strong><span>לפי ציון הארוחה</span></article>
+                  <article className={Number(insightsData.summary.targetCompliance) >= 70 ? "kpi-range is-good" : "kpi-range needs-attention"}><i>✓</i><small>ימים בטווח</small><strong>{insightsData.summary.targetCompliance}%</strong><span>{insightsData.summary.trackedDays} ימי מעקב</span></article>
+                  <article className="kpi-meal"><i>★</i><small>הארוחה המאוזנת</small><strong className="trend-meal-name">{insightsData.summary.topMeal}</strong><span>לפי ציון הארוחה</span></article>
                 </div>
                 <p className="trend-narrative">{insightsData.narrative}</p>
                 <p className="coach-recommendation"><b>המלצת זהב:</b> {insightsData.recommendation}</p>
@@ -4169,19 +4200,15 @@ export default function Home() {
               </div>
               <button onClick={() => setPartnerOpen(false)}>×</button>
             </header>
-            <p className="modal-help">
-              שלח הזמנה לחשבון קיים. השיתוף יתחיל רק לאחר אישור וניתן לביטול בכל
-              עת.
-            </p>
+            <p className="modal-help">בחר משתמש אחד או יותר. מוצגים שמות משתמש בלבד, והשיתוף יתחיל לאחר אישור כל משתמש.</p>
             <form className="partner-invite" onSubmit={invitePartner}>
-              <input
-                type="email"
-                value={partnerForm.email}
-                onChange={(e) =>
-                  setPartnerForm({ ...partnerForm, email: e.target.value })
-                }
-                placeholder="האימייל של בן/בת הזוג"
-              />
+              <div className="partner-user-picker" role="group" aria-label="בחירת משתמשים לשיתוף">
+                {(state.shareCandidates || []).map((candidate) => {
+                  const selected = partnerForm.userIds.includes(candidate.id);
+                  return <button key={candidate.id} type="button" className={selected ? "selected" : ""} aria-pressed={selected} onClick={() => setPartnerForm({ ...partnerForm, userIds: selected ? partnerForm.userIds.filter((id) => id !== candidate.id) : [...partnerForm.userIds, candidate.id] })}><span>{candidate.name.slice(0, 1)}</span><strong>{candidate.name}</strong><i>{selected ? "✓" : "+"}</i></button>;
+                })}
+                {!state.shareCandidates?.length && <p>אין כרגע משתמשים נוספים שאפשר להזמין.</p>}
+              </div>
               <div>
                 <label>
                   <input
@@ -4223,8 +4250,8 @@ export default function Home() {
                   משקל ומגמה
                 </label>
               </div>
-              <button className="primary" disabled={busy || !partnerForm.email}>
-                שלח הזמנה
+              <button className="primary" disabled={busy || !partnerForm.userIds.length}>
+                שלח הזמנה ל־{partnerForm.userIds.length || 0} משתמשים
               </button>
             </form>
             <div className="partner-links">
@@ -4333,6 +4360,7 @@ export default function Home() {
           </section>
         </div>
       )}
+      {barcodeScannerOpen && <div className="modal-layer barcode-scanner-layer"><button className="backdrop" onClick={() => setBarcodeScannerOpen(false)} /><section className="barcode-scanner"><header><div><strong>סריקת ברקוד</strong><small>המצלמה מנתחת וידאו מקומית בלבד</small></div><button type="button" onClick={() => setBarcodeScannerOpen(false)} aria-label="סגירה">×</button></header><div className="barcode-video-frame"><video ref={barcodeVideo} playsInline muted /><i /><span>מקם את הברקוד בתוך המסגרת</span></div><p>{barcodeStatus}</p><button type="button" onClick={() => setBarcodeScannerOpen(false)}>ביטול וחזרה להזנה ידנית</button></section></div>}
       {customFoodOpen && (
         <div className="modal-layer">
           <button

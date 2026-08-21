@@ -1,6 +1,6 @@
 {
   "name": "caloreazi",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "private": true,
   "license": "UNLICENSED",
   "engines": {
@@ -21,6 +21,7 @@
     "version:check": "node scripts/sync-version.mjs --check"
   },
   "dependencies": {
+    "@zxing/browser": "^0.2.1",
     "drizzle-orm": "0.45.2",
     "react": "19.2.6",
     "react-dom": "19.2.6",

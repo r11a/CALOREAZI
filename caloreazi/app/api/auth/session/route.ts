@@ -9,7 +9,10 @@ export async function POST(request: Request) {
   const login = String(body.login || "").trim().toLowerCase();
   const limited = checkRateLimit(`login:${clientAddress(request)}:${login}`, { limit: 8, windowMs: 15 * 60_000 }); if (limited) return limited;
   const state = await readState();
-  const user = state.users.find((item) => item.email?.toLowerCase() === login || item.username?.toLowerCase() === login);
+  const directUser = state.users.find((item) => item.email?.toLowerCase() === login || item.username?.toLowerCase() === login);
+  const namedUsers = state.users.filter((item) => String(item.name || "").trim().toLowerCase() === login && !item.disabled);
+  if (!directUser && namedUsers.length > 1) return Response.json({ error: "קיימים כמה משתמשים בשם זה; יש להתחבר באמצעות אימייל" }, { status: 409 });
+  const user = directUser || namedUsers[0];
   if (user?.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now()) return Response.json({ error: "החשבון נעול זמנית עקב ניסיונות התחברות כושלים" }, { status: 423 });
   if (!user || user.disabled === true || !(await verifyPassword(String(body.password || ""), user.password))) { await updateState((latest) => { const target = latest.users.find((item) => item.id === user?.id); if (target) { target.failedLoginCount = Number(target.failedLoginCount || 0) + 1; if (target.failedLoginCount >= 8) target.lockedUntil = new Date(Date.now() + 15 * 60_000).toISOString(); } addAudit(latest, { userId: user?.id || null, action: "auth.login_failed", target: login, result: "failure", details: clientAddress(request) }); return latest; }); return Response.json({ error: "שם המשתמש או הסיסמה שגויים" }, { status: 401 }); }
   const loggedInAt = new Date().toISOString();

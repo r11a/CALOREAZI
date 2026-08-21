@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   if (barcode.length >= 8) {
     for (const host of ["world.openfoodfacts.org", "world.openfoodfacts.net"]) {
       try {
-        const response = await fetch(`https://${host}/api/v2/product/${barcode}.json?fields=code,product_name,product_name_he,brands,quantity,image_front_small_url,nutriments`, { headers: { "User-Agent": "CALOREAZI/1.8.0 (https://github.com/r11a/CALOREAZI)" }, signal: AbortSignal.timeout(8000), next: { revalidate: 86400 } });
+        const response = await fetch(`https://${host}/api/v2/product/${barcode}.json?fields=code,product_name,product_name_he,brands,quantity,image_front_small_url,nutriments`, { headers: { "User-Agent": "CALOREAZI/1.8.1 (https://github.com/r11a/CALOREAZI)" }, signal: AbortSignal.timeout(8000), next: { revalidate: 86400 } });
         if (!response.ok || !response.headers.get("content-type")?.includes("json")) continue;
         const payload = await response.json();
         const product = payload.product as OpenFoodProduct | undefined;
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
   for (const host of ["world.openfoodfacts.org", "world.openfoodfacts.net"]) {
     try {
       const response = await fetch(`https://${host}/cgi/search.pl?${params}`, {
-        headers: { "User-Agent": "CALOREAZI/1.8.0 (https://github.com/r11a/CALOREAZI)" },
+        headers: { "User-Agent": "CALOREAZI/1.8.1 (https://github.com/r11a/CALOREAZI)" },
         signal: AbortSignal.timeout(8000),
         next: { revalidate: 3600 },
       });

@@ -183,6 +183,7 @@ export function userView(state, userId, admin = false) {
     ai,
     aiUsage: admin ? state.aiUsage : [],
     foods: (state.foodCatalog || []).filter((food) => food.visibility === "shared" || food.ownerId === userId),
+    shareCandidates: state.users.filter((item) => item.id !== userId && !item.disabled).map((item) => ({ id: item.id, name: item.name })),
     partnerships,
     sharedProfiles,
     adminConfigured: state.users.some((item) => item.role === "admin" && item.password?.hash),
