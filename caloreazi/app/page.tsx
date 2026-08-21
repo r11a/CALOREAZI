@@ -501,6 +501,8 @@ export default function Home() {
   });
   const [photoPreview, setPhotoPreview] = useState("");
   const [photoStatus, setPhotoStatus] = useState("");
+  const [aiCorrection, setAiCorrection] = useState("");
+  const [aiCorrectionStatus, setAiCorrectionStatus] = useState("");
   const [photoQuality, setPhotoQuality] = useState<{ level: "good" | "warning"; message: string } | null>(null);
   const [mealConfidence, setMealConfidence] = useState<"low" | "medium" | "high">("low");
   const [mealResult, setMealResult] = useState<any>(null);
@@ -780,6 +782,12 @@ export default function Home() {
   ];
   const scoreImprovement = [...scoreGuidance].sort((a, b) => (b.max - b.value) - (a.max - a.value))[0];
   const scoreHeadline = dailyScore >= 80 ? "יום מאוזן מאוד — המשך כך." : dailyScore >= 60 ? `כיוון טוב — ${scoreImprovement.tip}` : dailyScore >= 40 ? `יש בסיס טוב. ${scoreImprovement.tip}` : `אפשר לשפר כבר היום: ${scoreImprovement.tip}`;
+  const consistencyBadges = [
+    ...(state.streak >= 1 ? [{ icon: "✓", label: "תיעוד היום" }] : []),
+    ...(state.streak >= 3 ? [{ icon: "◇", label: `${state.streak} ימים בקצב שלך` }] : []),
+    ...(state.streak >= 7 ? [{ icon: "★", label: "שבוע של עקביות" }] : []),
+    ...(dailyScore >= 80 ? [{ icon: "◎", label: "יום מאוזן" }] : []),
+  ].slice(0, 3);
   const mealSuggestions = useMemo(() => {
     const taste = profile?.tasteProfile || { likes: [], dislikes: [] }; const likes = taste.likes || []; const dislikes = taste.dislikes || []; const blocked = `${profile?.restrictions || ""} ${profile?.foodAllergies || ""}`.toLocaleLowerCase("he");
     const proteinGap = Math.max(0, Number(profile?.protein || 0) - macros.protein); const carbsGap = Math.max(0, Number(profile?.carbs || 0) - macros.carbs); const fatGap = Math.max(0, Number(profile?.fat || 0) - macros.fat);
@@ -1374,6 +1382,8 @@ export default function Home() {
       setAnalysisJobId("");
       setPhotoPreview("");
       setPhotoStatus("");
+      setAiCorrection("");
+      setAiCorrectionStatus("");
       setPhotoQuality(null);
       setMealConfidence("low");
       setSaveToLibrary(false);
@@ -1617,6 +1627,8 @@ export default function Home() {
     setPhotoPreview("");
     setMealDateTime(localDateTimeInput());
     setPhotoStatus("תאר את הארוחה וה-AI יחשב ויפרק אותה לפריטים לפני האישור.");
+    setAiCorrection("");
+    setAiCorrectionStatus("");
     setQuickAddOpen(false);
     setMealOpen(true);
   }
@@ -1758,6 +1770,34 @@ export default function Home() {
       setBusy(false);
     }
   }
+  async function correctMealWithAi() {
+    const correction = aiCorrection.trim();
+    if (!correction || busy) return;
+    setBusy(true);
+    setAiCorrectionStatus("מתקן רק את הטיוטה הנוכחית…");
+    try {
+      const result = await api("/api/ai/analyze-text", {
+        method: "POST",
+        body: JSON.stringify({
+          correction,
+          draft: {
+            name: mealForm.name,
+            items: mealItems,
+            totals: calculateMealDraft(mealItems, mealForm),
+          },
+        }),
+      });
+      setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 });
+      setMealItems(result.items);
+      setMealConfidence(result.confidence || "low");
+      setAiCorrection("");
+      setAiCorrectionStatus(`התיקון הוחל. ${result.explanation || "בדוק את הערכים ואשר."}`);
+    } catch (e) {
+      setAiCorrectionStatus((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   function updateMealItem(
     index: number,
     field: string,
@@ -1838,7 +1878,7 @@ export default function Home() {
     }
   }
 
-  async function prepareImage(file: File, maxSize = 1280, quality = 0.76) {
+  async function prepareImage(file: File, maxSize = 1024, quality = 0.68) {
     if (!file.type.match(/^image\/(jpeg|png|webp)$/))
       throw new Error("יש לבחור תמונת JPG, PNG או WebP");
     const url = URL.createObjectURL(file);
@@ -1870,7 +1910,7 @@ export default function Home() {
         ? { level: "warning" as const, message: "איכות הצילום נמוכה יחסית. מומלץ לצלם שוב מקרוב ובתאורה טובה לקבלת זיהוי מדויק יותר." }
         : { level: "good" as const, message: "איכות ורזולוציית הצילום מתאימות לניתוח." };
       setPhotoQuality(quality);
-      const imageDataUrl = await prepareImage(file);
+      const imageDataUrl = await prepareImage(file, 1024, 0.68);
       const clientId = crypto.randomUUID();
       if (!navigator.onLine) { await queueOfflineCapture({ imageDataUrl, clientId, createdAt: new Date().toISOString() }); setOfflineQueueCount(await offlineCaptureCount()); setPhotoPreview(imageDataUrl); setMealSource("photo"); setPhotoStatus("הצילום נשמר במכשיר ויישלח אוטומטית לניתוח כשהחיבור יחזור."); setMealOpen(true); return; }
       setPhotoPreview(imageDataUrl);
@@ -1890,7 +1930,7 @@ export default function Home() {
             ? "מזהה פריטים וכמויות…"
             : "הצילום נשמר וממתין לניתוח…",
         );
-        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        await new Promise((resolve) => window.setTimeout(resolve, attempt < 6 ? 350 : 700));
         result = await api(
           `/api/ai/analyze-meal?id=${encodeURIComponent(jobId)}`,
         );
@@ -1910,6 +1950,8 @@ export default function Home() {
       setPhotoStatus(
         `זוהו ${result.items.length} פריטים (${result.confidence === "high" ? "ביטחון גבוה" : result.confidence === "medium" ? "ביטחון בינוני" : "ביטחון נמוך"}). בדוק משקל וכמות; החישוב יתבצע רק לאחר אישור. ${result.explanation || ""}`,
       );
+      setAiCorrection("");
+      setAiCorrectionStatus("");
     } catch (e) {
       setPhotoStatus((e as Error).message);
       setMealOpen(true);
@@ -2205,6 +2247,11 @@ export default function Home() {
       <section className="welcome">
         <div><h1>{greeting}, {state.owner.name}</h1><p>{scoreHeadline}</p></div>
       </section>
+      {consistencyBadges.length > 0 && (
+        <div className="consistency-badges" aria-label="הישגים בקצב שלך">
+          {consistencyBadges.map((badge) => <span key={badge.label}><b>{badge.icon}</b>{badge.label}</span>)}
+        </div>
+      )}
       <details className={`daily-score-details score-${scoreTone}`}>
         <summary aria-label="פתיחת הסבר על הציון היומי">
           <div className="daily-score-bar" role="progressbar" aria-label="ציון יומי" aria-valuemin={0} aria-valuemax={100} aria-valuenow={dailyScore}>
@@ -4751,6 +4798,16 @@ export default function Home() {
               )}
             </div>
             {(mealForm.name || mealItems.length > 0) && <section className="meal-review-summary"><header><div><small>סיכום לפני הוספה</small><strong>{mealForm.name || "ארוחה חדשה"}</strong></div><b>{Math.round(Number(mealDraftPreview.kcal || 0))}<small> kcal</small></b></header><div><span className="protein"><small>חלבון</small><strong>{Math.round(Number(mealDraftPreview.protein || 0))}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{Math.round(Number(mealDraftPreview.carbs || 0))}g</strong></span><span className="fat"><small>שומן</small><strong>{Math.round(Number(mealDraftPreview.fat || 0))}g</strong></span></div><p>בדוק את השם, הכמות והערכים ולחץ על “הוסף לארוחה”.</p></section>}
+            {mealItems.length > 0 && (
+              <section className="ai-correction-box">
+                <div><strong>צריך לתקן את הזיהוי?</strong><small>כתוב רק מה לא נכון — ה־AI יעדכן את הטיוטה בלי לשמור אותה.</small></div>
+                <div>
+                  <input value={aiCorrection} onChange={(event) => setAiCorrection(event.target.value)} placeholder="למשל: זה קפה עם מעט חלב וללא סוכר" onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void correctMealWithAi(); } }} />
+                  <button type="button" onClick={correctMealWithAi} disabled={busy || !aiCorrection.trim()}>{busy ? "מתקן…" : "תקן עם AI"}</button>
+                </div>
+                {aiCorrectionStatus && <p role="status">{aiCorrectionStatus}</p>}
+              </section>
+            )}
             <section className="library-options">
               <label>
                 <input
