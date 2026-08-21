@@ -25,6 +25,11 @@ test("coffee uses curated realistic values instead of vision estimates", () => {
   assert.equal(findNutritionFood("cappuccino").sourceId, "coffee-with-milk");
 });
 
+test("authoritative catalog exposes total dietary sugar separately from carbohydrates", () => {
+  assert.equal(findNutritionFood("apple").sugarPer100, 10.4);
+  assert.equal(findNutritionFood("חזה עוף").sugarPer100, 0);
+});
+
 test("USDA energy respects units and converts kilojoules to kilocalories", () => {
   assert.equal(energyKcal({ foodNutrients: [{ nutrientName: "Energy", unitName: "KJ", value: 383 }, { nutrientName: "Energy", unitName: "KCAL", value: 92 }] }), 92);
   assert.ok(Math.abs(energyKcal({ foodNutrients: [{ nutrientName: "Energy", unitName: "KJ", value: 383 }] }) - 91.54) < .01);

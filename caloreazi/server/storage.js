@@ -31,10 +31,10 @@ export async function probeStorage(state, kind, snapshot) { const target = resol
 async function directorySize(directory) { let total = 0; for (const entry of await readdir(directory, { withFileTypes: true })) { const file = path.join(directory, entry.name); if (entry.isDirectory()) total += await directorySize(file); else if (entry.isFile()) total += (await stat(file)).size; } return total; }
 export async function storageCapacity(target) { const filesystem = await statfs(target.resolved); return { usedByCaloreaziBytes: await directorySize(target.resolved), filesystemTotalBytes: Number(filesystem.blocks) * Number(filesystem.bsize), filesystemFreeBytes: Number(filesystem.bavail) * Number(filesystem.bsize) }; }
 
-export async function saveMediaDataUrl(state, dataUrl, id) {
+export async function saveMediaDataUrl(state, dataUrl, id, options = {}) {
   const match = String(dataUrl || "").match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/); if (!match) return null;
   let target; let pendingDestination = null; try { target = await probeStorage(state, "gallery"); } catch (error) { const desired = resolveStorageDir(state, "gallery"); if (desired.destination === "internal") throw error; pendingDestination = { destination: desired.destination, relativePath: desired.relativePath }; target = await probeStorage(state, "gallery", { ...storageSettings(state), galleryDestination: "internal", galleryRelativePath: "gallery-pending" }); } let file = `${id}.webp`; let contentType = "image/webp"; const source = Buffer.from(match[2], "base64"); let buffer = source;
-  try { const sharp = (await import("sharp")).default; buffer = await sharp(source).resize({ width: 640, height: 640, fit: "inside", withoutEnlargement: true }).webp({ quality: 80, alphaQuality: 90 }).toBuffer(); }
+  try { const sharp = (await import("sharp")).default; const maxSize = Math.max(192, Math.min(1280, Number(options.maxSize) || 640)); const quality = Math.max(55, Math.min(90, Number(options.quality) || 80)); buffer = await sharp(source).resize({ width: maxSize, height: maxSize, fit: "inside", withoutEnlargement: true }).webp({ quality, alphaQuality: 85 }).toBuffer(); }
   catch { file = `${id}.image`; contentType = match[1]; }
   await writeFile(path.join(target.resolved, file), buffer, { mode: 0o600 });
   return { file, contentType, destination: target.destination, relativePath: target.relativePath, size: buffer.length, sha256: createHash("sha256").update(buffer).digest("hex"), ...(pendingDestination ? { pendingDestination, pendingSince: new Date().toISOString() } : {}) };

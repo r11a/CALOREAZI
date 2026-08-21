@@ -447,6 +447,8 @@ export default function Home() {
     fat: 0,
   });
   const [mealItems, setMealItems] = useState<any[]>([]);
+  const [mealValidationErrors, setMealValidationErrors] = useState<Record<string, string>>({});
+  const [mealSaveFeedback, setMealSaveFeedback] = useState("");
   const [aiOriginalItems, setAiOriginalItems] = useState<any[]>([]);
   const [mealSource, setMealSource] = useState<"manual" | "photo" | "voice">(
     "manual",
@@ -499,6 +501,8 @@ export default function Home() {
   const [mealConfidence, setMealConfidence] = useState<"low" | "medium" | "high">("low");
   const [mealResult, setMealResult] = useState<any>(null);
   const [weightValue, setWeightValue] = useState(0);
+  const [weightDate, setWeightDate] = useState("");
+  const [weightFeedback, setWeightFeedback] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickCategory, setQuickCategory] = useState("");
   const [adminHealth, setAdminHealth] = useState<any>(null);
@@ -574,6 +578,7 @@ export default function Home() {
   const avatarInput = useRef<HTMLInputElement>(null);
   const foodImageInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
+  const mealSaveInFlight = useRef(false);
   const audioChunks = useRef<Blob[]>([]);
   const recordingStartedAt = useRef(0);
   const speechRecognition = useRef<any>(null);
@@ -639,6 +644,12 @@ export default function Home() {
     themeColor.content = dark ? "#0b0c0c" : "#f7f5f0";
     document.head.appendChild(themeColor);
   }, [dark]);
+  useEffect(() => {
+    if (!mealOpen) {
+      setMealValidationErrors({});
+      setMealSaveFeedback("");
+    }
+  }, [mealOpen]);
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState === "visible")
@@ -722,6 +733,14 @@ export default function Home() {
           (weightEntries.at(-1).weight - weightEntries[0].weight).toFixed(1),
         )
       : 0;
+  const visibleWeightEntries = weightEntries.slice(-12);
+  const weightRange = visibleWeightEntries.length ? { min: Math.min(...visibleWeightEntries.map((item: any) => Number(item.weight))), max: Math.max(...visibleWeightEntries.map((item: any) => Number(item.weight))) } : { min: 0, max: 0 };
+  const weightChartPoints = visibleWeightEntries.map((item: any, index: number) => {
+    const x = visibleWeightEntries.length === 1 ? 300 : 24 + index * (552 / (visibleWeightEntries.length - 1));
+    const spread = Math.max(1, weightRange.max - weightRange.min);
+    const y = 136 - ((Number(item.weight) - weightRange.min) / spread) * 104;
+    return { ...item, x, y };
+  });
   const greeting =
     now.getHours() < 5
       ? "לילה טוב"
@@ -1045,10 +1064,30 @@ export default function Home() {
   }
   async function openInsights() {
     setInsightsOpen(true);
+    setWeightValue(Number(latestWeight || 0));
+    setWeightDate(state?.today?.date || new Date().toISOString().slice(0, 10));
+    setWeightFeedback("");
     try {
       setInsightsData(await api("/api/insights"));
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+  async function saveTrendWeight(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setWeightFeedback("");
+    if (!(Number(weightValue) >= 25 && Number(weightValue) <= 350)) { setWeightFeedback("יש להזין משקל בין 25 ל־350 ק״ג."); return; }
+    setBusy(true);
+    try {
+      const latest = await api("/api/measurements", { method: "POST", body: JSON.stringify({ weight: Number(weightValue), date: weightDate }) });
+      setState(latest);
+      setInsightsData(await api("/api/insights"));
+      setWeightFeedback(`המשקל ${Number(weightValue).toFixed(1)} ק״ג נשמר בתאריך ${weightDate}. ההיסטוריה עודכנה.`);
+    } catch (e) {
+      setWeightFeedback(`העדכון לא נשמר: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
     }
   }
   async function addActivity(event: FormEvent) {
@@ -1093,10 +1132,53 @@ export default function Home() {
   }
   async function addMeal(event: FormEvent) {
     event.preventDefault();
+    if (busy || mealSaveInFlight.current) return;
+    setError("");
+    const completedFields: string[] = [];
+    const normalizedItems = mealItems
+      .filter((item) => item.name || item.searchNameEn || item.grams || item.kcalPer100 || item.proteinPer100 || item.carbsPer100 || item.fatPer100)
+      .map((item) => {
+        const next = { ...item };
+        if (!String(next.name || "").trim() && String(next.searchNameEn || "").trim()) { next.name = String(next.searchNameEn).trim(); completedFields.push("שם פריט"); }
+        if (!(Number(next.quantity) > 0)) { next.quantity = 1; completedFields.push(`כמות עבור ${next.name || "פריט"}`); }
+        if (!(Number(next.kcalPer100) > 0)) {
+          const macroCalories = Number(next.proteinPer100 || 0) * 4 + Number(next.carbsPer100 || 0) * 4 + Number(next.fatPer100 || 0) * 9;
+          if (macroCalories > 0) { next.kcalPer100 = Math.round(macroCalories); completedFields.push(`קלוריות עבור ${next.name || "פריט"}`); }
+        }
+        return next;
+      });
+    const inferredName = normalizedItems.map((item) => String(item.name || "").trim()).filter(Boolean).slice(0, 3).join(" · ") || manualDescription.trim();
+    const normalizedForm = { ...mealForm };
+    if (!String(normalizedForm.name || "").trim() && inferredName) { normalizedForm.name = inferredName.slice(0, 120); completedFields.push("שם הארוחה"); }
+    if (!normalizedItems.length && !(Number(normalizedForm.kcal) > 0)) {
+      const macroCalories = Number(normalizedForm.protein || 0) * 4 + Number(normalizedForm.carbs || 0) * 4 + Number(normalizedForm.fat || 0) * 9;
+      if (macroCalories > 0) { normalizedForm.kcal = Math.round(macroCalories); completedFields.push("קלוריות לפי רכיבי המאקרו"); }
+    }
+    let normalizedDateTime = mealDateTime;
+    if (!normalizedDateTime || !Number.isFinite(new Date(normalizedDateTime).getTime())) { normalizedDateTime = localDateTimeInput(); completedFields.push("תאריך ושעה"); }
+    const validationErrors: Record<string, string> = {};
+    if (!String(normalizedForm.name || "").trim()) validationErrors.name = "יש להזין שם לארוחה";
+    normalizedItems.forEach((item, index) => {
+      if (!String(item.name || "").trim()) validationErrors[`item-name-${index}`] = `חסר שם בפריט ${index + 1}`;
+      if (!(Number(item.grams) > 0)) validationErrors[`item-grams-${index}`] = `חסר משקל בגרם עבור ${item.name || `פריט ${index + 1}`}`;
+      if (!(Number(item.kcalPer100) > 0)) validationErrors[`item-kcal-${index}`] = `חסרות קלוריות ל־100 גרם עבור ${item.name || `פריט ${index + 1}`}`;
+    });
+    if (!normalizedItems.length && !(Number(normalizedForm.kcal) > 0)) validationErrors.kcal = "חסרה כמות הקלוריות של הארוחה";
+    setMealForm(normalizedForm);
+    setMealItems(normalizedItems);
+    setMealDateTime(normalizedDateTime);
+    setMealValidationErrors(validationErrors);
+    if (Object.keys(validationErrors).length) {
+      setMealSaveFeedback(`${completedFields.length ? `השלמנו אוטומטית: ${[...new Set(completedFields)].join(", ")}. ` : ""}כדי לשמור צריך להשלים: ${Object.values(validationErrors).join("; ")}.`);
+      window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-meal-field="${Object.keys(validationErrors)[0]}"]`)?.focus());
+      return;
+    }
+    setMealSaveFeedback(completedFields.length ? `הושלמו אוטומטית: ${[...new Set(completedFields)].join(", ")}. שומר כעת…` : "שומר כעת…");
+    mealSaveInFlight.current = true;
     setBusy(true);
     try {
-      const calculated = mealItems.length
-        ? mealItems.reduce(
+      const calculated = normalizedItems.length
+        ? normalizedItems.reduce(
             (total, item) => {
               const factor =
                 (Math.max(0, Number(item.grams) || 0) *
@@ -1112,16 +1194,16 @@ export default function Home() {
             },
             { kcal: 0, protein: 0, carbs: 0, fat: 0 },
           )
-        : mealForm;
+        : normalizedForm;
       const finalMeal = {
-        ...mealForm,
+        ...normalizedForm,
         period: mealPeriod,
-        occurredAt: new Date(mealDateTime).toISOString(),
+        occurredAt: new Date(normalizedDateTime).toISOString(),
         kcal: Math.round(calculated.kcal),
         protein: Math.round(calculated.protein),
         carbs: Math.round(calculated.carbs),
         fat: Math.round(calculated.fat),
-        items: mealItems,
+        items: normalizedItems,
         aiOriginalItems,
         source: mealSource,
         transcript: mealTranscript,
@@ -1163,6 +1245,7 @@ export default function Home() {
       }
       setState(latest);
       if (!catalogOnly) setMealResult({ name: finalMeal.name, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId) });
+      if (!catalogOnly && savedMealId && !photoPreview) void api("/api/meals/image", { method: "POST", body: JSON.stringify({ id: savedMealId, allowGenerate: generateFoodArtwork }) }).then((imageState) => { setState(imageState); if (imageState.imageCompleted) setMealResult((current: any) => current ? { ...current, imageCompleted: true } : current); }).catch(() => undefined);
       if (!catalogOnly && savedLocalDate && savedLocalDate !== latest.today?.date)
         setError(`הארוחה נשמרה בהיסטוריה בתאריך ${savedLocalDate}, בהתאם לשעה שנבחרה.`);
       setMealOpen(false);
@@ -1185,9 +1268,14 @@ export default function Home() {
       setFoodCategory("meals");
       setManualAiMode(false);
       setCatalogOnly(false);
+      setMealValidationErrors({});
+      setMealSaveFeedback("");
     } catch (e) {
-      setError((e as Error).message);
+      const message = (e as Error).message;
+      setMealSaveFeedback(`השמירה לא הושלמה: ${message}`);
+      setError(message);
     } finally {
+      mealSaveInFlight.current = false;
       setBusy(false);
     }
   }
@@ -2080,7 +2168,7 @@ export default function Home() {
         </button>
       )}
       {offlineQueueCount > 0 && <aside className="offline-queue-status" role="status">{offlineQueueCount} {offlineQueueCount === 1 ? "צילום ממתין" : "צילומים ממתינים"} לחיבור ולניתוח</aside>}
-      {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הארוחה עודכנה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name} · {mealResult.kcal} קלוריות</span><small>{mealResult.protein}g חלבון · {mealResult.carbs}g פחמימות · {mealResult.fat}g שומן</small></div><button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
+      {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הארוחה עודכנה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name} · {mealResult.kcal} קלוריות</span><small>{mealResult.protein}g חלבון · {mealResult.carbs}g פחמימות · {mealResult.fat}g שומן{mealResult.imageCompleted ? " · תמונה הושלמה" : ""}</small></div><button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
       {undoMeal && (
         <aside className="undo-toast" role="status">
           <span>“{undoMeal.name}” נמחקה</span>
@@ -2118,7 +2206,7 @@ export default function Home() {
                 .map((meal) => (
                   <article key={meal.id}>
                     {meal.image ? (
-                      <img className="meal-thumb" src={meal.image} alt="" />
+                      <img className="meal-thumb" src={meal.image} alt="" loading="lazy" decoding="async" />
                     ) : (
                       <span
                         className={`meal-icon meal-${meal.period || "snack"}`}
@@ -2286,7 +2374,10 @@ export default function Home() {
                   <i /> מחובר לנתוני היום שלך
                 </small>
               </div>
-              <button onClick={() => setCoachOpen(false)}>×</button>
+              <div className="coach-header-actions">
+                <button className="clear-chat" onClick={() => setMessages([])} title="ניקוי התצוגה בלבד; ההיסטוריה נשמרת">נקה מסך</button>
+                <button onClick={() => setCoachOpen(false)} aria-label="סגירת המאמן">×</button>
+              </div>
             </header>
             <div className="chat-feed">
               {messages.length === 0 && (
@@ -2310,6 +2401,11 @@ export default function Home() {
               <button onClick={() => setMessage("איך היום שלי נראה?")}>
                 איך היום שלי?
               </button>
+              <button onClick={() => setMessage("HELP: איך מוסיפים ארוחה ידנית ושומרים אותה?")}>איך מוסיפים ארוחה?</button>
+              <button onClick={() => setMessage("HELP: איך מצלמים ארוחה כדי לקבל זיהוי מדויק?")}>איך מצלמים נכון?</button>
+              <button onClick={() => setMessage("HELP: איך מחושב הציון היומי ואיך אפשר לשפר אותו?")}>איך משפרים ציון?</button>
+              <button onClick={() => setMessage("HELP: איך משנים את היעדים והפרטים האישיים?")}>איך משנים יעדים?</button>
+              <button onClick={() => setMessage("מה חסר לי היום בחלבון, פחמימות, שומן, מים וקלוריות?")}>מה חסר לי היום?</button>
             </div>
             <form onSubmit={sendMessage}>
               <input
@@ -3275,8 +3371,8 @@ export default function Home() {
                   }
                 />
               </label>
-              <label>
-                משקל נוכחי (ק״ג)
+              <label className="current-weight-field">
+                <span>משקל נוכחי <b>נשמר בהיסטוריה</b></span>
                 <input
                   type="number"
                   min="25"
@@ -3285,6 +3381,7 @@ export default function Home() {
                   value={weightValue || ""}
                   onChange={(e) => setWeightValue(Number(e.target.value))}
                 />
+                <small>{weightEntries.at(-1)?.date ? `המדידה האחרונה: ${new Date(`${weightEntries.at(-1).date}T12:00:00`).toLocaleDateString("he-IL")}` : "עדיין לא נשמרה מדידת משקל"}</small>
               </label>
               <label>
                 משקל יעד
@@ -3357,8 +3454,8 @@ export default function Home() {
               <span>
                 BMI <b>{profile.caloriePlan?.bmi}</b>
               </span>
-              <span>
-                משקל נוכחי <b>{latestWeight} ק״ג</b>
+              <span className="current-weight-metric">
+                משקל נוכחי <b>{latestWeight} ק״ג</b><small>{weightEntries.at(-1)?.date ? new Date(`${weightEntries.at(-1).date}T12:00:00`).toLocaleDateString("he-IL") : "ללא תאריך"}</small>
               </span>
               <span>
                 יעד <b>{profile.targetWeight} ק״ג</b>
@@ -3671,13 +3768,13 @@ export default function Home() {
                           </small>
                         </div>
                         <span
-                          className={`history-calories ${statuses.kcal.className}`}
+                          className={`history-calories score-${scoreToneFor(Number(day.dailyScore?.score || 0))}`}
                         >
                           <b>
                             {totals.kcal.toLocaleString()} /{" "}
                             {goals.kcal.toLocaleString()}
                           </b>
-                          <small>kcal · {statuses.kcal.label}</small>
+                          <small>kcal · ציון {Number(day.dailyScore?.score || 0)}/100</small>
                         </span>
                       </summary>
                       <div className="history-summary">
@@ -3721,7 +3818,7 @@ export default function Home() {
                               </time>
                               <i />
                               {meal.image ? (
-                                <img src={meal.image} alt="" />
+                                <img src={meal.image} alt="" loading="lazy" decoding="async" />
                               ) : (
                                 <span className="timeline-icon">🍽</span>
                               )}
@@ -3861,10 +3958,40 @@ export default function Home() {
               </div>
               <button onClick={() => setInsightsOpen(false)}>×</button>
             </header>
+            <section className="weight-trends">
+              <div className="weight-trends-heading">
+                <div><strong>מעקב משקל</strong><small>כל עדכון נשמר כמדידה חדשה לפי תאריך ואינו מוחק את ההיסטוריה</small></div>
+                <b>{latestWeight ? `${Number(latestWeight).toFixed(1)} ק״ג` : "אין מדידה"}</b>
+              </div>
+              <form className="weight-update-form" onSubmit={saveTrendWeight}>
+                <label>משקל נוכחי<input type="number" min="25" max="350" step="0.1" value={weightValue || ""} onChange={(event) => setWeightValue(Number(event.target.value))} /></label>
+                <label>תאריך המדידה<input type="date" value={weightDate} max={state.today?.date} onChange={(event) => setWeightDate(event.target.value)} /></label>
+                <button className="primary" disabled={busy}>{busy ? "שומר…" : "שמור מדידה"}</button>
+              </form>
+              {weightFeedback && <p className="weight-feedback" role="status">{weightFeedback}</p>}
+              {weightChartPoints.length > 1 ? (
+                <div className="weight-history-chart">
+                  <svg viewBox="0 0 600 160" role="img" aria-label="גרף היסטוריית משקל">
+                    <polyline points={weightChartPoints.map((point: any) => `${point.x},${point.y}`).join(" ")} />
+                    {weightChartPoints.map((point: any) => <g key={point.id || point.date}><circle cx={point.x} cy={point.y} r="5" /><text x={point.x} y={point.y - 10}>{Number(point.weight).toFixed(1)}</text></g>)}
+                  </svg>
+                  <div className="weight-chart-dates"><span>{new Date(`${visibleWeightEntries[0].date}T12:00:00`).toLocaleDateString("he-IL")}</span><strong>{weightChange === 0 ? "ללא שינוי" : `${weightChange > 0 ? "+" : ""}${weightChange} ק״ג`}</strong><span>{new Date(`${visibleWeightEntries.at(-1).date}T12:00:00`).toLocaleDateString("he-IL")}</span></div>
+                </div>
+              ) : <p className="trend-empty">לאחר שתי מדידות יוצג כאן גרף שינוי ברור. המדידה הקיימת נשמרת.</p>}
+              {visibleWeightEntries.length > 0 && <div className="weight-history-list">{[...visibleWeightEntries].reverse().slice(0, 5).map((entry: any, index: number, entries: any[]) => { const previous = entries[index + 1]; const delta = previous ? Number(entry.weight) - Number(previous.weight) : 0; return <span key={entry.id || entry.date}><small>{new Date(`${entry.date}T12:00:00`).toLocaleDateString("he-IL")}</small><strong>{Number(entry.weight).toFixed(1)} ק״ג</strong><b>{previous ? `${delta > 0 ? "+" : ""}${delta.toFixed(1)}` : "מדידה ראשונה"}</b></span>; })}</div>}
+            </section>
             {!insightsData ? (
               <p className="modal-help">מחשב מגמות…</p>
             ) : (
               <>
+                {insightsData.sugar?.enabled && (
+                  <section className="sugar-insights">
+                    <header><div><strong>סוכרים תזונתיים משוערים</strong><small>מוצג בגלל מצב הסוכר שסומן בכרטיס האישי</small></div><b>לא גלוקוז בדם</b></header>
+                    <div className="sugar-periods"><span><small>היום</small><strong>{insightsData.sugar.today}g</strong></span><span><small>ממוצע 7 ימים</small><strong>{insightsData.sugar.weeklyAverage}g</strong></span><span><small>ממוצע 30 ימים</small><strong>{insightsData.sugar.monthlyAverage}g</strong></span></div>
+                    {insightsData.sugar.days.some((day: any) => day.coverage > 0) ? <div className="sugar-chart" aria-label="גרף צריכת סוכרים תזונתיים ל־30 ימים">{insightsData.sugar.days.map((day: any) => { const maximum = Math.max(1, ...insightsData.sugar.days.map((item: any) => Number(item.sugar || 0))); return <span key={day.date} title={`${day.date}: ${day.sugar} גרם`}><i style={{ height: `${day.coverage ? Math.max(4, day.sugar / maximum * 100) : 0}%` }} /><small>{new Date(`${day.date}T12:00:00`).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</small></span>; })}</div> : <p className="trend-empty">עדיין אין מספיק ארוחות עם נתון סוכר מאומת. ארוחות חדשות ממקורות תזונה תואמים יצברו נתונים אוטומטית.</p>}
+                    <p className="sugar-disclaimer">זהו סך הסוכרים במזון לפי נתוני הקטלוג הזמינים, לא סוכר מוסף ולא מדידת גלוקוז. כיסוי הנתונים בחודש: {insightsData.sugar.coverage}%.</p>
+                  </section>
+                )}
                 <div className="trend-summary">
                   <article>
                     <small>ציון שבועי</small>
@@ -3895,31 +4022,19 @@ export default function Home() {
                 </div>
                 <p className="trend-narrative">{insightsData.narrative}</p>
                 <p className="coach-recommendation"><b>המלצת זהב:</b> {insightsData.recommendation}</p>
-                <div className="weekly-score-chart">
-                  {insightsData.daily.slice(-14).map((day: any) => (
-                    <div key={day.date} title={`${day.date}: ${day.score}`}>
-                      <small>
-                        {new Date(`${day.date}T12:00:00`).toLocaleDateString(
-                          "he-IL",
-                          { day: "numeric", month: "numeric" },
-                        )}
-                      </small>
-                      <span><i className={day.score >= 80 ? "good" : day.score >= 55 ? "attention" : "low"} style={{ width: `${Math.max(3, day.score)}%` }} /></span>
-                      <b>{day.score}/100</b>
-                    </div>
-                  ))}
-                </div>
-                <div className="trend-legend">
-                  <span>
-                    <i className="good" /> 80–100 מאוזן
-                  </span>
-                  <span>
-                    <i className="attention" /> 55–79 דורש תשומת לב
-                  </span>
-                  <span>
-                    <i className="low" /> מתחת ל־55
-                  </span>
-                </div>
+                <section className="weekly-goal-progress">
+                  <header><strong>ממוצע 7 ימים מול היעדים שלך</strong><small>הפס מציג אחוז מהיעד; המספרים מראים בפועל מול היעד</small></header>
+                  {[
+                    { label: "קלוריות ליום", actual: insightsData.summary.averageCalories, target: profile.calories, unit: "kcal", note: "טווח רצוי: 90%–105% מהיעד", tone: "calories" },
+                    { label: "חלבון ליום", actual: insightsData.summary.averageProtein, target: profile.protein, unit: "g", note: "לפחות 90% מהיעד תומך בשובע ובשמירת שריר", tone: "protein" },
+                    { label: "מים ליום", actual: insightsData.summary.averageWater, target: profile.waterMl, unit: "מ״ל", note: "ממוצע השתייה בימים האחרונים", tone: "water" },
+                    { label: "פעילות שבועית", actual: insightsData.summary.activeMinutes, target: 150, unit: "דק׳", note: "יעד בסיס שימושי: 150 דקות בשבוע", tone: "activity" },
+                  ].map((metric) => { const percent = Math.round(Number(metric.actual || 0) / Math.max(1, Number(metric.target || 0)) * 100); return <article className={`goal-progress ${metric.tone}`} key={metric.label}><div><strong>{metric.label}</strong><b>{Number(metric.actual || 0).toLocaleString()} / {Number(metric.target || 0).toLocaleString()} {metric.unit}</b></div><span><i style={{ width: `${Math.min(100, percent)}%` }} /></span><footer><small>{metric.note}</small><em>{percent}%</em></footer></article>; })}
+                </section>
+                <section className="daily-score-history">
+                  <header><strong>ציון יומי — 14 ימים אחרונים</strong><small>לחיצה על יום בלוח ההיסטוריה מציגה את הסיבות לציון</small></header>
+                  <div>{insightsData.daily.slice(-14).map((day: any) => <span className={`score-${scoreToneFor(day.score)}`} key={day.date}><small>{new Date(`${day.date}T12:00:00`).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</small><strong>{day.score}</strong></span>)}</div>
+                </section>
               </>
             )}
           </section>
@@ -4335,6 +4450,12 @@ export default function Home() {
                 ×
               </button>
             </header>
+            {mealSaveFeedback && (
+              <div className={`meal-save-feedback ${Object.keys(mealValidationErrors).length ? "needs-input" : "saving"}`} role="status" aria-live="assertive">
+                <strong>{Object.keys(mealValidationErrors).length ? "נדרשת השלמה לפני השמירה" : "מצב השמירה"}</strong>
+                <span>{mealSaveFeedback}</span>
+              </div>
+            )}
             {manualAiMode && mealItems.length === 0 && (
               <section className="manual-ai-entry">
                 <label>
@@ -4386,6 +4507,9 @@ export default function Home() {
               <label className="wide">
                 שם הארוחה
                 <input
+                  data-meal-field="name"
+                  className={mealValidationErrors.name ? "field-error" : ""}
+                  aria-invalid={Boolean(mealValidationErrors.name)}
                   value={mealForm.name}
                   onChange={(e) =>
                     setMealForm({ ...mealForm, name: e.target.value })
@@ -4440,7 +4564,9 @@ export default function Home() {
                   {mealItems.map((item, index) => (
                     <article key={index}>
                       <input
+                        data-meal-field={`item-name-${index}`}
                         className="item-name"
+                        aria-invalid={Boolean(mealValidationErrors[`item-name-${index}`])}
                         value={item.name}
                         onChange={(e) =>
                           updateMealItem(index, "name", e.target.value)
@@ -4451,6 +4577,9 @@ export default function Home() {
                       <label>
                         משקל בגרם
                         <input
+                          data-meal-field={`item-grams-${index}`}
+                          className={mealValidationErrors[`item-grams-${index}`] ? "field-error" : ""}
+                          aria-invalid={Boolean(mealValidationErrors[`item-grams-${index}`])}
                           type="number"
                           min="1"
                           max="3000"
@@ -4467,6 +4596,9 @@ export default function Home() {
                       <label>
                         כמות
                         <input
+                          data-meal-field={`item-kcal-${index}`}
+                          className={mealValidationErrors[`item-kcal-${index}`] ? "field-error" : ""}
+                          aria-invalid={Boolean(mealValidationErrors[`item-kcal-${index}`])}
                           type="number"
                           min="0.1"
                           max="50"
@@ -4517,6 +4649,9 @@ export default function Home() {
                   <label>
                     קלוריות
                     <input
+                      data-meal-field="kcal"
+                      className={mealValidationErrors.kcal ? "field-error" : ""}
+                      aria-invalid={Boolean(mealValidationErrors.kcal)}
                       type="number"
                       min="1"
                       value={mealForm.kcal || ""}
@@ -4652,17 +4787,11 @@ export default function Home() {
               </button>
               <button
                 className="primary"
-                disabled={
-                  busy ||
-                  !mealForm.name ||
-                  (mealItems.length
-                    ? mealItems.some(
-                        (item) => !item.name || !item.grams || !item.kcalPer100,
-                      )
-                    : !mealForm.kcal)
-                }
+                disabled={busy}
               >
-                {catalogOnly
+                {busy
+                  ? "שומר…"
+                  : catalogOnly
                   ? "שמור בגלריה"
                   : mealItems.length
                     ? "אישור, חישוב והוספה"

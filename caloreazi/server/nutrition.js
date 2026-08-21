@@ -7,8 +7,9 @@ export function calculateMealFromItems(items = []) {
     result.protein += Math.max(0, Number(item.proteinPer100) || 0) * factor;
     result.carbs += Math.max(0, Number(item.carbsPer100) || 0) * factor;
     result.fat += Math.max(0, Number(item.fatPer100) || 0) * factor;
+    if (item.sugarPer100 != null) { result.sugar += Math.max(0, Number(item.sugarPer100) || 0) * factor; result.sugarTrackedItems += 1; }
     return result;
-  }, { kcal: 0, protein: 0, carbs: 0, fat: 0 });
+  }, { kcal: 0, protein: 0, carbs: 0, fat: 0, sugar: 0, sugarTrackedItems: 0 });
   return Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, Math.round(value)]));
 }
 

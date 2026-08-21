@@ -13,7 +13,8 @@ export async function POST(request: Request) {
   const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
   const calculated = items.length ? calculateMealFromItems(items) : body;
   const kcal = Math.max(0, Number(calculated.kcal) || 0);
-  if (!name || !kcal) return Response.json({ error: "יש להזין שם ארוחה וקלוריות" }, { status: 400 });
+  const missingFields = [...(!name ? ["שם הארוחה"] : []), ...(!kcal ? ["קלוריות"] : [])];
+  if (missingFields.length) return Response.json({ error: `לא ניתן לשמור. יש להשלים: ${missingFields.join(", ")}`, fields: missingFields }, { status: 400 });
   const beveragePattern = /(קפה|אספרסו|לאטה|קפוצ.?ינו|תה|coffee|espresso|latte|cappuccino|tea)/i;
   const implausibleBeverage = items.some((item) => {
     if (!beveragePattern.test(String(item.name || ""))) return false;
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     const source = ["photo", "voice"].includes(body.source) ? body.source : "manual";
     const originalImage = /^data:image\/(jpeg|png|webp);base64,/.test(String(body.image || "")) && String(body.image).length <= 8_000_000 ? String(body.image) : ""; const id = crypto.randomUUID(); const media = originalImage ? await saveMediaDataUrl(latest, originalImage, id) : null;
     const requestedTime = new Date(body.occurredAt || Date.now()); const time = Number.isFinite(requestedTime.getTime()) && requestedTime.getTime() <= Date.now() ? requestedTime.toISOString() : new Date().toISOString();
-    const meal = { id, name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
+    const meal = { id, name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
     meal.score = calculateMealScore(meal);
     if (body.analysisJobId) { const job = latest.analysisJobs?.find((item) => item.id === body.analysisJobId && item.userId === session.userId); if (job) { job.status = "completed"; job.mealId = meal.id; job.completedAt = new Date().toISOString(); job.updatedAt = job.completedAt; } }
     const localDate = localDateAt(time, userTimeZone(data)); savedMealId = meal.id; savedLocalDate = localDate;
@@ -75,7 +76,7 @@ export async function PATCH(request: Request) {
       const calculated = items.length ? calculateMealFromItems(items) : body;
       if (name) meal.name = name;
       meal.period = ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : meal.period;
-      meal.kcal = Math.max(0, Number(calculated.kcal) || 0); meal.protein = Math.max(0, Number(calculated.protein) || 0); meal.carbs = Math.max(0, Number(calculated.carbs) || 0); meal.fat = Math.max(0, Number(calculated.fat) || 0); meal.items = items;
+      meal.kcal = Math.max(0, Number(calculated.kcal) || 0); meal.protein = Math.max(0, Number(calculated.protein) || 0); meal.carbs = Math.max(0, Number(calculated.carbs) || 0); meal.fat = Math.max(0, Number(calculated.fat) || 0); meal.sugar = Math.max(0, Number(calculated.sugar) || 0); meal.sugarTrackedItems = Math.max(0, Number(calculated.sugarTrackedItems) || 0); meal.items = items;
       const requested = new Date(body.occurredAt || meal.time); if (Number.isFinite(requested.getTime()) && requested.getTime() <= Date.now()) meal.time = requested.toISOString();
     }
     meal.score = calculateMealScore(meal); meal.updatedAt = new Date().toISOString();

@@ -22,5 +22,5 @@ test("calculates an edited meal from weight and quantity", () => {
     { grams: 120, quantity: 2, kcalPer100: 100, proteinPer100: 10, carbsPer100: 5, fatPer100: 2 },
     { grams: 50, quantity: 1, kcalPer100: 200, proteinPer100: 4, carbsPer100: 20, fatPer100: 8 },
   ]);
-  assert.deepEqual(result, { kcal: 340, protein: 26, carbs: 22, fat: 9 });
+  assert.deepEqual(result, { kcal: 340, protein: 26, carbs: 22, fat: 9, sugar: 0, sugarTrackedItems: 0 });
 });
