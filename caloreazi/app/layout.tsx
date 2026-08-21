@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: "CALOREAZI — המאמן התזונתי האישי שלך",
   description: "מעקב תזונה חכם, פשוט ואישי עם AI Coach שמכיר אותך.",
   applicationName: "CALOREAZI",
+  appleWebApp: { capable: true, title: "CALOREAZI" },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -19,7 +20,15 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#F26A3D" };
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F7F5F0" },
+    { media: "(prefers-color-scheme: dark)", color: "#0B0C0C" },
+  ],
+};
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="he" dir="rtl"><body>{children}</body></html>;

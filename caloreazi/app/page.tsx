@@ -629,6 +629,13 @@ export default function Home() {
   }, []);
   useEffect(() => {
     window.localStorage.setItem("caloreazi-theme", dark ? "dark" : "light");
+    document.documentElement.style.backgroundColor = dark ? "#0b0c0c" : "#f7f5f0";
+    document.body.style.backgroundColor = dark ? "#0b0c0c" : "#f7f5f0";
+    document.querySelectorAll('meta[name="theme-color"]').forEach((element) => element.remove());
+    const themeColor = document.createElement("meta");
+    themeColor.name = "theme-color";
+    themeColor.content = dark ? "#0b0c0c" : "#f7f5f0";
+    document.head.appendChild(themeColor);
   }, [dark]);
   useEffect(() => {
     const refresh = () => {
@@ -3826,16 +3833,17 @@ export default function Home() {
                 </div>
                 <p className="trend-narrative">{insightsData.narrative}</p>
                 <p className="coach-recommendation"><b>המלצת זהב:</b> {insightsData.recommendation}</p>
-                <div className="score-chart">
+                <div className="weekly-score-chart">
                   {insightsData.daily.slice(-14).map((day: any) => (
                     <div key={day.date} title={`${day.date}: ${day.score}`}>
-                      <i style={{ height: `${Math.max(6, day.score)}%` }} />
                       <small>
                         {new Date(`${day.date}T12:00:00`).toLocaleDateString(
                           "he-IL",
-                          { day: "numeric" },
+                          { day: "numeric", month: "numeric" },
                         )}
                       </small>
+                      <span><i className={day.score >= 80 ? "good" : day.score >= 55 ? "attention" : "low"} style={{ width: `${Math.max(3, day.score)}%` }} /></span>
+                      <b>{day.score}/100</b>
                     </div>
                   ))}
                 </div>

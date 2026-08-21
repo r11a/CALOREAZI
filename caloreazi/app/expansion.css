@@ -13,10 +13,13 @@
 .trend-summary small,.trend-summary span { color:var(--muted); font-size:9px; }
 .trend-summary strong { font-size:24px; }
 .trend-narrative { padding:13px; border-radius:12px; color:var(--green); background:color-mix(in srgb,var(--green) 9%,var(--surface)); }
-.score-chart { height:190px; padding:18px 8px 0; display:flex; align-items:flex-end; gap:6px; border-bottom:1px solid var(--line); }
-.score-chart > div { height:100%; flex:1; display:flex; align-items:center; justify-content:flex-end; flex-direction:column; gap:5px; }
-.score-chart i { width:100%; max-width:24px; border-radius:6px 6px 0 0; background:linear-gradient(var(--green),#9fc7b0); }
-.score-chart small { color:var(--muted); font-size:8px; }
+.weekly-score-chart { margin-top:18px; padding:14px; display:grid; gap:10px; border:1px solid var(--line); border-radius:16px; background:color-mix(in srgb,var(--surface) 82%,var(--canvas)); }
+.weekly-score-chart > div { display:grid; grid-template-columns:44px minmax(0,1fr) 48px; align-items:center; gap:10px; direction:rtl; }
+.weekly-score-chart small { color:var(--muted); font-size:10px; text-align:right; }
+.weekly-score-chart span { height:14px; overflow:hidden; direction:ltr; border-radius:999px; background:var(--line); }
+.weekly-score-chart i { height:100%; display:block; border-radius:inherit; background:var(--green); }
+.weekly-score-chart i.attention { background:var(--amber); }.weekly-score-chart i.low { background:var(--orange); }
+.weekly-score-chart b { color:var(--ink); font-size:11px; text-align:left; }
 .trend-legend { margin-top:12px; display:flex; gap:14px; color:var(--muted); font-size:9px; }
 .trend-legend i { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); }
 .trend-legend i.attention { background:var(--amber); }.trend-legend i.low { background:var(--orange); }
