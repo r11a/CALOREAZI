@@ -51,7 +51,12 @@ export function calculateNutritionTargets(input) {
 
 export function calculateDayScore(day, profile, activity = []) {
   const meals = Array.isArray(day?.meals) ? day.meals : [];
-  const totals = meals.reduce((sum, meal) => ({ kcal: sum.kcal + Number(meal.kcal || 0), protein: sum.protein + Number(meal.protein || 0) }), { kcal: 0, protein: 0 });
+  const totals = meals.reduce((sum, meal) => ({
+    kcal: sum.kcal + Number(meal.kcal || 0),
+    protein: sum.protein + Number(meal.protein || 0),
+    carbs: sum.carbs + Number(meal.carbs || 0),
+    fat: sum.fat + Number(meal.fat || 0),
+  }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
   const calorieTarget = Math.max(1, Number(profile?.calories || 2000));
   const proteinTarget = Math.max(1, Number(profile?.protein || 100));
   const waterTarget = Math.max(1, Number(profile?.waterMl || 2000));

@@ -552,6 +552,9 @@ export default function Home() {
   const [tasteWizardStep, setTasteWizardStep] = useState(0);
   const [tasteDraft, setTasteDraft] = useState<any>({ likes: [], dislikes: [], prepTime: "medium" });
   const [suggestionPeriod, setSuggestionPeriod] = useState("lunch");
+  const [suggestionRefresh, setSuggestionRefresh] = useState(0);
+  const [macroDetail, setMacroDetail] = useState<"protein" | "carbs" | "fat" | "">("");
+  const [mealPreview, setMealPreview] = useState<any>(null);
   const [now, setNow] = useState(() => new Date());
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historySelectedDate, setHistorySelectedDate] = useState("");
@@ -601,6 +604,7 @@ export default function Home() {
   const foodImageInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const mealSaveInFlight = useRef(false);
+  const imageCompletionRequested = useRef(new Set<string>());
   const audioChunks = useRef<Blob[]>([]);
   const recordingStartedAt = useRef(0);
   const speechRecognition = useRef<any>(null);
@@ -626,6 +630,13 @@ export default function Home() {
       })
       .catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => {
+    const meal = state?.today?.meals?.find((item) => item.id && (!item.image || /(?:category-|food-sprite-|generic|placeholder)/i.test(String(item.image))) && !imageCompletionRequested.current.has(item.id));
+    if (!meal) return;
+    imageCompletionRequested.current.add(meal.id);
+    api("/api/meals/image", { method: "POST", body: JSON.stringify({ id: meal.id, allowGenerate: true }) }).then(setState).catch(() => undefined);
+  }, [state]);
   useEffect(() => {
     let lastLocalDate = localDateTimeInput().slice(0, 10);
     const timer = window.setInterval(() => {
@@ -740,12 +751,14 @@ export default function Home() {
   const mealSuggestions = useMemo(() => {
     const taste = profile?.tasteProfile || { likes: [], dislikes: [] }; const likes = taste.likes || []; const dislikes = taste.dislikes || []; const blocked = `${profile?.restrictions || ""} ${profile?.foodAllergies || ""}`.toLocaleLowerCase("he");
     const proteinGap = Math.max(0, Number(profile?.protein || 0) - macros.protein); const carbsGap = Math.max(0, Number(profile?.carbs || 0) - macros.carbs); const fatGap = Math.max(0, Number(profile?.fat || 0) - macros.fat);
-    return mealSuggestionCatalog.filter((meal) => meal.periods.includes(suggestionPeriod) && !meal.tags.some((tag) => dislikes.includes(tag) || blocked.includes(tag.toLocaleLowerCase("he"))) && !(profile?.diet === "vegan" && meal.tags.some((tag) => ["עוף", "דגים", "ביצים", "חלבי"].includes(tag))) && !(profile?.diet === "vegetarian" && meal.tags.some((tag) => ["עוף", "דגים"].includes(tag)))).map((meal) => {
+    const ranked = mealSuggestionCatalog.filter((meal) => meal.periods.includes(suggestionPeriod) && !meal.tags.some((tag) => dislikes.includes(tag) || blocked.includes(tag.toLocaleLowerCase("he"))) && !(profile?.diet === "vegan" && meal.tags.some((tag) => ["עוף", "דגים", "ביצים", "חלבי"].includes(tag))) && !(profile?.diet === "vegetarian" && meal.tags.some((tag) => ["עוף", "דגים"].includes(tag)))).map((meal) => {
       const preference = meal.tags.filter((tag) => likes.includes(tag)).length * 18; const nutrition = Math.min(proteinGap, meal.protein) * 1.4 + Math.min(carbsGap, meal.carbs) * .25 + Math.min(fatGap, meal.fat) * .35;
       const reason = proteinGap > 20 && meal.protein >= 25 ? `משלימה כ־${meal.protein}g חלבון מהחוסר היומי` : carbsGap > 35 && meal.carbs >= 35 ? "מתאימה לחוסר הנוכחי בפחמימות" : "מאוזנת ביחס למה שנאכל עד עכשיו";
       return { ...meal, rank: preference + nutrition, reason, personal: meal.tags.some((tag) => likes.includes(tag)) };
-    }).sort((a, b) => b.rank - a.rank).slice(0, 3);
-  }, [profile, macros, suggestionPeriod]);
+    }).sort((a, b) => b.rank - a.rank);
+    const offset = ranked.length ? suggestionRefresh % ranked.length : 0;
+    return [...ranked.slice(offset), ...ranked.slice(0, offset)].slice(0, 3);
+  }, [profile, macros, suggestionPeriod, suggestionRefresh]);
   const historyDays = useMemo(() => [...(state?.history || []), ...(state?.today ? [{ ...state.today, dailyScore: state.dailyScore }] : [])], [state?.history, state?.today, state?.dailyScore]);
   const activeHistoryDate = historySelectedDate || state?.today?.date || "";
   const activeHistoryDay = historyDays.find((day) => day.date === activeHistoryDate) || historyDays[0];
@@ -771,6 +784,8 @@ export default function Home() {
   const isAdmin = state?.currentUser?.role === "admin";
   const weightEntries = state?.measurements || [];
   const latestWeight = weightEntries.at(-1)?.weight || profile?.weight || 0;
+  const previousWeight = weightEntries.length > 1 ? Number(weightEntries.at(-2)?.weight) : null;
+  const latestWeightDelta = previousWeight === null ? null : Number((Number(latestWeight) - previousWeight).toFixed(1));
   const weightChange =
     weightEntries.length > 1
       ? Number(
@@ -1200,6 +1215,15 @@ export default function Home() {
       setError((e as Error).message);
     }
   }
+  async function permanentlyDeleteTrash(id: string) {
+    if (!window.confirm("למחוק את הפריט לצמיתות? לא ניתן לשחזר פעולה זו.")) return;
+    try {
+      await api("/api/trash", { method: "DELETE", body: JSON.stringify({ id }) });
+      setTrashItems((items) => items.filter((item) => item.id !== id));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   async function addMeal(event: FormEvent) {
     event.preventDefault();
     if (busy || mealSaveInFlight.current) return;
@@ -1315,7 +1339,7 @@ export default function Home() {
       }
       setState(latest);
       if (!catalogOnly) setMealResult({ name: finalMeal.name, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId) });
-      if (!catalogOnly && savedMealId && !photoPreview) void api("/api/meals/image", { method: "POST", body: JSON.stringify({ id: savedMealId, allowGenerate: generateFoodArtwork }) }).then((imageState) => { setState(imageState); if (imageState.imageCompleted) setMealResult((current: any) => current ? { ...current, imageCompleted: true } : current); }).catch(() => undefined);
+      if (!catalogOnly && savedMealId && !photoPreview) void api("/api/meals/image", { method: "POST", body: JSON.stringify({ id: savedMealId, allowGenerate: true }) }).then((imageState) => { setState(imageState); if (imageState.imageCompleted) setMealResult((current: any) => current ? { ...current, imageCompleted: true } : current); }).catch(() => undefined);
       if (!catalogOnly && savedLocalDate && savedLocalDate !== latest.today?.date)
         setError(`הארוחה נשמרה בהיסטוריה בתאריך ${savedLocalDate}, בהתאם לשעה שנבחרה.`);
       setMealOpen(false);
@@ -2188,21 +2212,21 @@ export default function Home() {
         </details>
         <div className="daily-copy">
           <div className="macro-grid">
-            <span className="macro-bar protein" style={{ "--progress": `${Math.min(100, Math.round((macros.protein / Math.max(1, profile.protein)) * 100))}%` } as any}>
+            <button type="button" className="macro-bar protein" onClick={() => setMacroDetail("protein")} style={{ "--progress": `${Math.min(100, Math.round((macros.protein / Math.max(1, profile.protein)) * 100))}%` } as any}>
               <strong>חלבון · {profile.protein}g ליום</strong>
               <b>{Math.round((macros.protein / Math.max(1, profile.protein)) * 100)}%</b>
               <small>{macros.protein}g נצרכו</small>
-            </span>
-            <span className="macro-bar carbs" style={{ "--progress": `${Math.min(100, Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100))}%` } as any}>
+            </button>
+            <button type="button" className="macro-bar carbs" onClick={() => setMacroDetail("carbs")} style={{ "--progress": `${Math.min(100, Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100))}%` } as any}>
               <strong>פחמימות · {profile.carbs}g ליום</strong>
               <b>{Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100)}%</b>
               <small>{macros.carbs}g נצרכו</small>
-            </span>
-            <span className="macro-bar fat" style={{ "--progress": `${Math.min(100, Math.round((macros.fat / Math.max(1, profile.fat)) * 100))}%` } as any}>
+            </button>
+            <button type="button" className="macro-bar fat" onClick={() => setMacroDetail("fat")} style={{ "--progress": `${Math.min(100, Math.round((macros.fat / Math.max(1, profile.fat)) * 100))}%` } as any}>
               <strong>שומן · {profile.fat}g ליום</strong>
               <b>{Math.round((macros.fat / Math.max(1, profile.fat)) * 100)}%</b>
               <small>{macros.fat}g נצרכו</small>
-            </span>
+            </button>
           </div>
         </div>
       </section>
@@ -2259,7 +2283,7 @@ export default function Home() {
       <section className="content-grid">
         <div className="main-feed">
         <section className="panel meal-suggestions-panel">
-          <header><div><h2>מה כדאי לאכול עכשיו?</h2><p>לפי החוסרים היום והטעם האישי שלך</p></div><button type="button" onClick={openTasteWizard}>העדפות</button></header>
+          <header><div><h2>מה כדאי לאכול עכשיו?</h2><p>לפי החוסרים היום והטעם האישי שלך</p></div><div className="suggestion-actions"><button type="button" onClick={() => setSuggestionRefresh((value) => value + 1)}>רענן</button><button type="button" onClick={openTasteWizard}>העדפות</button></div></header>
           <div className="suggestion-periods">{[["breakfast","בוקר"],["lunch","צהריים"],["dinner","ערב"],["snack","בין ארוחות"]].map(([key,label]) => <button type="button" className={suggestionPeriod === key ? "selected" : ""} onClick={() => setSuggestionPeriod(key)} key={key}>{label}</button>)}</div>
           <div className="meal-suggestion-list">{mealSuggestions.map((meal) => <article key={meal.name}><div><strong>{meal.name}</strong><small>{meal.reason}{meal.personal ? " · מתאים להעדפות שלך" : ""}</small></div><span><b>{meal.kcal}</b> kcal</span><footer>{meal.protein}g חלבון · {meal.carbs}g פחמימות · {meal.fat}g שומן</footer></article>)}</div>
           {!profile?.tasteProfile?.completedAt && <button className="taste-survey-callout" type="button" onClick={openTasteWizard}>התאם את ההמלצות אליי · שאלון קצר ולא חובה</button>}
@@ -2290,15 +2314,13 @@ export default function Home() {
                 .sort((a, b) => String(a.time).localeCompare(String(b.time)))
                 .map((meal) => (
                   <article key={meal.id}>
-                    {meal.image ? (
-                      <img className="meal-thumb" src={meal.image} alt="" loading="lazy" decoding="async" />
-                    ) : (
-                      <span
-                        className={`meal-icon meal-${meal.period || "snack"}`}
-                      >
-                        🍽
-                      </span>
-                    )}
+                    <button type="button" className="meal-visual-button" onClick={() => setMealPreview(meal)} aria-label={`הצגת פרטי ${meal.name}`}>
+                      {meal.image ? (
+                        <img className="meal-thumb" src={meal.image} alt="" loading="lazy" decoding="async" />
+                      ) : (
+                        <span className={`meal-icon meal-${meal.period || "snack"}`}>🍽</span>
+                      )}
+                    </button>
                     <div>
                       <span className="meal-meta">
                         <time>
@@ -2429,6 +2451,29 @@ export default function Home() {
           <span><AppIcon name="coach" /></span>מאמן
         </button>
       </nav>
+      {macroDetail && (
+        <div className="modal-layer macro-detail-layer">
+          <button className="backdrop" onClick={() => setMacroDetail("")} aria-label="סגירת הפירוט" />
+          <section className={`settings-modal macro-detail-modal ${macroDetail}`}>
+            <header><h2>{macroDetail === "protein" ? "חלבון" : macroDetail === "carbs" ? "פחמימות" : "שומן"} מהארוחות היום</h2><button onClick={() => setMacroDetail("")}>×</button></header>
+            <div className="macro-source-list">
+              {state.today.meals.filter((meal) => Number(meal[macroDetail] || 0) > 0).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal[macroDetail] || 0))}g</b></span>)}
+              {!state.today.meals.some((meal) => Number(meal[macroDetail] || 0) > 0) && <p>אין עדיין מאכלים שתורמים למדד הזה היום.</p>}
+            </div>
+          </section>
+        </div>
+      )}
+      {mealPreview && (
+        <div className="modal-layer meal-preview-layer">
+          <button className="backdrop" onClick={() => setMealPreview(null)} aria-label="סגירת פרטי הארוחה" />
+          <section className="settings-modal meal-preview-modal">
+            <header><div><h2>{mealPreview.name}</h2><small>{periodLabels[mealPreview.period || "snack"]} · {new Date(mealPreview.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</small></div><button onClick={() => setMealPreview(null)}>×</button></header>
+            {mealPreview.image ? <img className="meal-preview-image" src={mealPreview.image} alt={mealPreview.name} /> : <div className="meal-preview-placeholder">🍽</div>}
+            <div className="meal-preview-values"><span className="calories"><small>קלוריות</small><strong>{mealPreview.kcal}</strong><b>kcal</b></span><span className="protein"><small>חלבון</small><strong>{mealPreview.protein}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{mealPreview.carbs}g</strong></span><span className="fat"><small>שומן</small><strong>{mealPreview.fat}g</strong></span></div>
+            {Array.isArray(mealPreview.items) && mealPreview.items.length > 0 && <div className="meal-preview-items"><strong>מרכיבי הארוחה</strong>{mealPreview.items.map((item: any, index: number) => <span key={`${item.name}-${index}`}><b>{item.name}</b><small>{item.grams ? `${item.grams} גרם` : item.quantity ? `כמות ${item.quantity}` : ""}</small></span>)}</div>}
+          </section>
+        </div>
+      )}
       {coachOpen && (
         <div className="coach-layer">
           <button className="backdrop" onClick={() => setCoachOpen(false)} />
@@ -2602,6 +2647,7 @@ export default function Home() {
               >
                 Audit
               </button>
+              <button onClick={() => { setSettingsOpen(false); void openTrash(); }}>סל מחזור</button>
             </nav>
             {adminHealth && (
               <section className="health-grid">
@@ -4043,7 +4089,7 @@ export default function Home() {
             <section className="weight-trends">
               <div className="weight-trends-heading">
                 <div><strong>מעקב משקל</strong><small>כל עדכון נשמר כמדידה חדשה לפי תאריך ואינו מוחק את ההיסטוריה</small></div>
-                <b>{latestWeight ? `${Number(latestWeight).toFixed(1)} ק״ג` : "אין מדידה"}</b>
+                <b>{latestWeight ? `${Number(latestWeight).toFixed(1)} ק״ג` : "אין מדידה"}{latestWeightDelta !== null && <small className={latestWeightDelta > 0 ? "weight-up" : latestWeightDelta < 0 ? "weight-down" : "weight-steady"}>{latestWeightDelta > 0 ? "↑" : latestWeightDelta < 0 ? "↓" : "→"} {Math.abs(latestWeightDelta).toFixed(1)}</small>}</b>
               </div>
               <form className="weight-update-form" onSubmit={saveTrendWeight}>
                 <label>משקל נוכחי<input type="number" min="25" max="350" step="0.1" value={weightValue || ""} onChange={(event) => setWeightValue(Number(event.target.value))} /></label>
@@ -4151,7 +4197,7 @@ export default function Home() {
                         {new Date(item.deletedAt).toLocaleDateString("he-IL")}
                       </small>
                     </div>
-                    <button onClick={() => restoreTrash(item.id)}>שחזר</button>
+                    <div className="trash-actions"><button onClick={() => restoreTrash(item.id)}>שחזר</button><button className="danger" onClick={() => permanentlyDeleteTrash(item.id)}>מחק לצמיתות</button></div>
                   </article>
                 ))
               ) : (
