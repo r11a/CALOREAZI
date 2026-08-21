@@ -102,6 +102,7 @@ test("meal review supports focused AI correction and calm consistency badges", (
   assert.match(page, /correctMealWithAi/);
   assert.match(page, /תקן עם AI/);
   assert.match(page, /consistencyBadges/);
+  assert.match(page, /Number\(state\?\.streak \|\| 0\)/);
   assert.match(css, /ai-correction-box/);
   assert.match(css, /consistency-badges/);
 });

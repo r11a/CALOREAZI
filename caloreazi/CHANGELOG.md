@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.2
+
+- Fixed an initial-render crash caused by reading streak data before application state finished loading.
+- Release CI now downloads a real frontend asset before and after an add-on restart.
+
 ## 1.9.1
 
 - Unified photo, voice and manual meal capture around one editable review-and-confirm flow.

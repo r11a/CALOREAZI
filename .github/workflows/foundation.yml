@@ -65,9 +65,15 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:18686/health
+          asset="$(curl -fsS http://127.0.0.1:18686/ | grep -oE '/_next/static/[^" ]+\.(js|css)' | head -1)"
+          test -n "$asset"
+          curl -fsS "http://127.0.0.1:18686$asset" -o /tmp/caloreazi-static-asset
+          test -s /tmp/caloreazi-static-asset
           docker restart caloreazi-runtime
           for attempt in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:18686/health; then
+              curl -fsS "http://127.0.0.1:18686$asset" -o /tmp/caloreazi-static-asset-after-restart
+              test -s /tmp/caloreazi-static-asset-after-restart
               docker logs caloreazi-runtime
               exit 0
             fi
