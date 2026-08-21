@@ -1,7 +1,7 @@
 import { normalizeUsage } from "./usage.js";
 import { requestAi } from "./http.js";
 
-export async function generateGeminiCoachReply({ apiKey, model, instructions, input, imageDataUrl, signal }) {
+export async function generateGeminiCoachReply({ apiKey, model, instructions, input, imageDataUrl = "", signal = undefined }) {
   if (!apiKey || !model) throw new Error("Gemini API key and model are required");
   const { response, payload } = await requestAi(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",

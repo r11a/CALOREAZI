@@ -43,9 +43,10 @@ jobs:
           echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
       - run: npm ci
       - run: npm run db:migrate
-      - run: npm test
+      - run: npm run verify
       - run: npm run lint
       - run: npm run test:integration
+      - run: npm audit --omit=dev
       - name: Prove normalized persistence
         run: |
           test "$(psql "$CALOREAZI_DATABASE_URL" -Atc "SELECT to_regclass('public.runtime_state') IS NULL")" = "t"
@@ -55,13 +56,22 @@ jobs:
         run: docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.22 -t caloreazi-foundation:test .
       - name: Boot Home Assistant image and verify runtime
         run: |
-          docker run -d --name caloreazi-runtime -p 18686:8686 caloreazi-foundation:test
+          docker volume create caloreazi-cold-data
+          docker run -d --name caloreazi-runtime -p 18686:8686 -v caloreazi-cold-data:/data caloreazi-foundation:test
           for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18686/health; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18686/health
+          docker restart caloreazi-runtime
+          for attempt in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:18686/health; then
               docker logs caloreazi-runtime
               exit 0
             fi
-            sleep 1
+            sleep 2
           done
           docker logs caloreazi-runtime
           exit 1
