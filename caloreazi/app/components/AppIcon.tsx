@@ -1,4 +1,4 @@
-export type AppIconName = "camera" | "image" | "plus" | "coach" | "edit" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic";
+export type AppIconName = "camera" | "image" | "plus" | "coach" | "sparkles" | "edit" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic";
 
 export function AppIcon({ name }: { name: AppIconName }) {
   const paths = {
@@ -6,6 +6,7 @@ export function AppIcon({ name }: { name: AppIconName }) {
     image: <><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-4-4L7 20"/></>,
     plus: <><path d="M12 5v14M5 12h14"/></>,
     coach: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4Z"/><path d="m18.5 15 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z"/></>,
+    sparkles: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4Z"/><path d="m18.5 15 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z"/></>,
     edit: <><path d="M4 20h4l11-11-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></>,
     water: <path d="M12 3s5 5.7 5 10a5 5 0 0 1-10 0c0-4.3 5-10 5-10Z"/>,
     activity: <path d="M4 12h3l2-5 4 10 2-5h5"/>,

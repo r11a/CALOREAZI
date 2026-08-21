@@ -1933,6 +1933,14 @@ export default function Home() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    setManualAiMode(false);
+    setMealSource("photo");
+    setMealItems([]);
+    setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 });
+    setPhotoPreview("");
+    setPhotoQuality(null);
+    setPhotoStatus("מכין את התמונה לזיהוי…");
+    setMealOpen(true);
     setMealDateTime(localDateTimeInput());
     setMealPeriod(mealPeriodFor());
     setMealReviewReady(false);
@@ -1944,18 +1952,22 @@ export default function Home() {
       const originalUrl = URL.createObjectURL(file);
       const original = new Image(); original.src = originalUrl; await original.decode();
       const shortestSide = Math.min(original.width, original.height);
-      const quality = shortestSide < 640 || file.size < 45_000
-        ? { level: "warning" as const, message: "איכות הצילום נמוכה יחסית. מומלץ לצלם שוב מקרוב ובתאורה טובה לקבלת זיהוי מדויק יותר." }
+      const quality = shortestSide < 480
+        ? { level: "warning" as const, message: "התמונה קטנה או לא ברורה מספיק לזיהוי אמין." }
         : { level: "good" as const, message: "איכות ורזולוציית הצילום מתאימות לניתוח." };
       setPhotoQuality(quality);
       const imageDataUrl = await prepareImage(file, 960, 0.65, original);
       URL.revokeObjectURL(originalUrl);
-      const clientId = crypto.randomUUID();
-      if (!navigator.onLine) { await queueOfflineCapture({ imageDataUrl, clientId, createdAt: new Date().toISOString() }); setOfflineQueueCount(await offlineCaptureCount()); setPhotoPreview(imageDataUrl); setMealSource("photo"); setPhotoStatus("הצילום נשמר במכשיר ויישלח אוטומטית לניתוח כשהחיבור יחזור."); setMealOpen(true); return; }
       setPhotoPreview(imageDataUrl);
       setMealSource("photo");
       setMealItems([]);
       setMealOpen(true);
+      if (quality.level === "warning") {
+        setPhotoStatus("לא הצלחנו לקרוא את התמונה בביטחון. צלם שוב מקרוב ובתאורה טובה.");
+        return;
+      }
+      const clientId = crypto.randomUUID();
+      if (!navigator.onLine) { await queueOfflineCapture({ imageDataUrl, clientId, createdAt: new Date().toISOString() }); setOfflineQueueCount(await offlineCaptureCount()); setPhotoPreview(imageDataUrl); setMealSource("photo"); setPhotoStatus("הצילום נשמר במכשיר ויישלח אוטומטית לניתוח כשהחיבור יחזור."); setMealOpen(true); return; }
       let result = await api("/api/ai/analyze-meal", {
         method: "POST",
         headers: { "Idempotency-Key": clientId },
@@ -1987,9 +1999,7 @@ export default function Home() {
       setAiOriginalItems(structuredClone(result.items));
       setMealConfidence(result.confidence || "low");
       setMealReviewReady(true);
-      setPhotoStatus(
-        `זוהו ${result.items.length} פריטים (${result.confidence === "high" ? "ביטחון גבוה" : result.confidence === "medium" ? "ביטחון בינוני" : "ביטחון נמוך"}). בדוק משקל וכמות; החישוב יתבצע רק לאחר אישור. ${result.explanation || ""}`,
-      );
+      setPhotoStatus("הזיהוי הושלם. בדוק את התוצאה ואשר.");
       setAiCorrection("");
       setAiCorrectionStatus("");
     } catch (e) {
@@ -4616,27 +4626,16 @@ export default function Home() {
               </section>
             )}
             {(!manualAiMode || mealItems.length > 0) && <>
-            <section className="meal-review-intro">
-              {photoPreview ? <img src={photoPreview} alt="תצוגה מקדימה של הארוחה" /> : <span className={`meal-source-icon ${mealSource}`}><AppIcon name={mealSource === "voice" ? "mic" : mealSource === "photo" ? "camera" : "plus"} /></span>}
-              <div>
-                <small>{mealSource === "photo" ? "זוהה מצילום" : mealSource === "voice" ? "זוהה מהכתבה" : "הוספה ידנית"}</small>
-                <strong>{busy ? "מכין את התוצאה…" : mealReviewReady ? "מוכן לבדיקה ולאישור" : "ממתין לפרטים"}</strong>
-                {photoStatus && <p className="photo-status">{photoStatus}</p>}
-              </div>
-              <div className="meal-flow" aria-label="שלבי הוספת הארוחה"><span className="done">1</span><i /><span className={mealReviewReady ? "done" : "active"}>2</span><i /><span className={mealReviewReady ? "active" : ""}>3</span></div>
-            </section>
-            <details className="meal-details" open={mealDetailsOpen || !mealItems.length} onToggle={(event) => setMealDetailsOpen(event.currentTarget.open)}>
-              <summary><span><strong>עריכת פרטים וערכים</strong><small>פתח רק אם צריך לתקן את הזיהוי או הכמות</small></span><b>⌄</b></summary>
+            {mealSource === "photo" ? <section className={`photo-review-hero ${photoQuality?.level === "warning" ? "retry" : ""} ${busy && !mealReviewReady ? "analyzing" : ""}`}>
+              {photoPreview ? <img src={photoPreview} alt="התמונה שצולמה" /> : <div className="photo-placeholder"><AppIcon name="camera" /></div>}
+              {photoQuality?.level === "warning" ? <div className="photo-retry-message"><strong>צריך צילום ברור יותר</strong><p>{photoStatus}</p><button type="button" onClick={() => directCameraInput.current?.click()}><AppIcon name="camera" /> צלם שוב</button></div> : busy && !mealReviewReady ? <div className="photo-analyzing" role="status"><span className="scan-spark"><AppIcon name="sparkles" /></span><strong>מזהה מה יש בתמונה</strong><p>{photoStatus}</p><i><b /></i></div> : <div className="photo-detection"><small>זוהה בתמונה</small><h3>{mealForm.name || "הארוחה שלך"}</h3>{mealReviewReady && <><div className="recognition-stars" aria-label={`אמינות זיהוי ${mealConfidence === "high" ? "גבוהה" : mealConfidence === "medium" ? "טובה" : "נמוכה"}`}>{[1,2,3,4,5].map((star) => <span className={star <= (mealConfidence === "high" ? 5 : mealConfidence === "medium" ? 4 : 2) ? "filled" : ""} key={star}>★</span>)}<b>{mealConfidence === "high" ? "זיהוי מצוין" : mealConfidence === "medium" ? "זיהוי טוב" : "כדאי לבדוק"}</b></div><strong className="detected-calories">{Math.round(Number(mealDraftPreview.kcal || 0))} <small>קלוריות</small></strong></>}</div>}
+            </section> : <section className="meal-review-intro">
+              <span className={`meal-source-icon ${mealSource}`}><AppIcon name={mealSource === "voice" ? "mic" : "plus"} /></span>
+              <div><small>{mealSource === "voice" ? "זוהה מהכתבה" : "הוספה ידנית"}</small><strong>{busy ? "מכין את התוצאה…" : mealReviewReady ? "מוכן לבדיקה ולאישור" : "ממתין לפרטים"}</strong>{photoStatus && <p className="photo-status">{photoStatus}</p>}</div>
+            </section>}
+            {!busy && photoQuality?.level !== "warning" && <details className="meal-details" open={mealDetailsOpen || !mealItems.length} onToggle={(event) => setMealDetailsOpen(event.currentTarget.open)}>
+              <summary><span><strong>יש טעות? ערוך</strong><small>שם, כמות, משקל או ערכים</small></span><b>⌄</b></summary>
             <div className="settings-grid">
-              {photoPreview && (
-                <img
-                  className="meal-photo-preview wide meal-photo-details"
-                  src={photoPreview}
-                  alt="התמונה שנבחרה לניתוח"
-                />
-              )}
-              {photoQuality && <p className={`photo-quality ${photoQuality.level} wide`}><strong>{photoQuality.level === "good" ? "צילום תקין" : "כדאי לשפר את הצילום"}</strong><span>{photoQuality.message}</span></p>}
-              {mealSource === "photo" && <div className="photo-guide wide"><strong>בדיקת צילום</strong><span>ודא שכל הצלחת מוארת ונמצאת בפריים, שאין מזון מוסתר ושניתן להבין את גודל המנה.</span><small>בביטחון נמוך חובה לבדוק את שם הפריט, המשקל והכמות לפני השמירה.</small></div>}
               <label className="wide">
                 שם הארוחה
                 <input
@@ -4848,7 +4847,7 @@ export default function Home() {
                   </button>
                 </>
               )}
-            </div></details>
+            </div></details>}
             {(mealForm.name || mealItems.length > 0) && <section className="meal-review-summary"><header><div><small>הארוחה שלך</small><strong>{mealForm.name || "ארוחה חדשה"}</strong></div><b>{Math.round(Number(mealDraftPreview.kcal || 0))}<small> kcal</small></b></header><div><span className="protein"><small>חלבון</small><strong>{Math.round(Number(mealDraftPreview.protein || 0))}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{Math.round(Number(mealDraftPreview.carbs || 0))}g</strong></span><span className="fat"><small>שומן</small><strong>{Math.round(Number(mealDraftPreview.fat || 0))}g</strong></span></div><p>זה הסיכום שיתווסף ליומן. אפשר לאשר או לפתוח את העריכה המתקדמת.</p></section>}
             {mealItems.length > 0 && (
               <section className="ai-correction-box">
@@ -4931,7 +4930,7 @@ export default function Home() {
               <button type="button" onClick={() => setMealOpen(false)}>
                 ביטול
               </button>
-              <button
+              {photoQuality?.level === "warning" ? <button type="button" className="primary" onClick={() => directCameraInput.current?.click()}><AppIcon name="camera" /> צילום חוזר</button> : <button
                 type="submit"
                 className="primary"
                 disabled={busy || (manualAiMode && mealItems.length === 0)}
@@ -4943,7 +4942,7 @@ export default function Home() {
                   : catalogOnly
                   ? "שמור בגלריה"
                   : "אישור והוספה ליומן"}
-              </button>
+              </button>}
             </footer>
           </form>
         </div>

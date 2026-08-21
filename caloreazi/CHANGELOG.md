@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.1
+
+- Photo capture now opens directly into an animated recognition state instead of briefly showing manual-entry controls.
+- Replaced the dense photo review with a large image, clear detected meal name, calories and a five-star confidence indicator.
+- Detailed fields, AI correction and library options stay hidden unless the user opens “יש טעות? ערוך”.
+- Unreadable photos stop before AI analysis and offer one prominent “צלם שוב” action.
+- Removed duplicated photo, technical guidance and small status text from the default review.
+
 ## 1.10.0
 
 - Redesigned meal capture as a calm, unified review screen for photo, voice, barcode and manual entry.
