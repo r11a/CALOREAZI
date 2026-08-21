@@ -101,12 +101,22 @@ test("photo and voice use compact fast paths with fallbacks", () => {
 test("meal capture presents a simple review with optional advanced controls", () => {
   assert.match(page, /meal-review-intro/);
   assert.match(page, /מוכן לבדיקה ולאישור/);
-  assert.match(page, /עריכת פרטים וערכים/);
+  assert.match(page, /יש טעות\? ערוך/);
   assert.match(page, /אישור והוספה ליומן/);
   assert.match(page, /adjustMealItem/);
   assert.match(page, /adjustMealForm/);
   assert.match(css, /number-stepper/);
   assert.match(css, /min-width:44px/);
+});
+
+test("photo capture skips manual entry and shows a focused animated recognition state", () => {
+  assert.match(page, /setManualAiMode\(false\)/);
+  assert.match(page, /photo-analyzing/);
+  assert.match(page, /מזהה מה יש בתמונה/);
+  assert.match(page, /recognition-stars/);
+  assert.match(page, /צריך צילום ברור יותר/);
+  assert.match(css, /scan-progress/);
+  assert.match(css, /photo-review-hero/);
 });
 
 test("photo preparation reuses the decoded image and voice does not auto-favorite meals", () => {
