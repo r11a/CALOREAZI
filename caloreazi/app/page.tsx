@@ -1129,7 +1129,7 @@ export default function Home() {
     setCoachOpen(false); setSettingsOpen(false); setAdminLoginOpen(false); setMealOpen(false); setQuickAddOpen(false);
     setWaterOpen(false); setProfileOpen(false); setHistoryOpen(false); setInsightsOpen(false); setActivityOpen(false);
     setTrashOpen(false); setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false); setTasteWizardOpen(false);
-    setPendingQuickFood(null); setEditingFood(null);
+    setMacroDetail(""); setMealPreview(null); setPendingQuickFood(null); setEditingFood(null);
   }
   function openNavigationScreen(screen: "home" | "history" | "admin" | "coach") {
     closeOpenScreens();
