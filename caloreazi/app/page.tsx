@@ -600,6 +600,7 @@ export default function Home() {
   const [libraryVisibility, setLibraryVisibility] = useState("all");
   const [editingFood, setEditingFood] = useState<any>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
+  const directCameraInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
   const foodImageInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
@@ -2250,6 +2251,14 @@ export default function Home() {
           accept="image/jpeg,image/png,image/webp"
           onChange={analyzePhoto}
         />
+        <input
+          ref={directCameraInput}
+          className="camera-input"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={analyzePhoto}
+        />
         <button
           className="manual-action"
           onClick={() => {
@@ -2438,7 +2447,7 @@ export default function Home() {
         </button>
         <button
           className="nav-camera"
-          onClick={() => uploadInput.current?.click()}
+          onClick={() => directCameraInput.current?.click()}
           aria-label="צילום ארוחה"
         >
           <AppIcon name="camera" />
