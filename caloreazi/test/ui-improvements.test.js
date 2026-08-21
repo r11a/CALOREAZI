@@ -24,6 +24,18 @@ test("editing a meal exposes an explicit save changes and close action", () => {
   assert.match(page, /meal-modal\$\{editingMealId \? " is-editing" : ""\}/);
 });
 
+test("macro detail lists are sorted from the largest gram contribution", () => {
+  assert.match(page, /sort\(\(a, b\) => Number\(b\.protein \|\| 0\) - Number\(a\.protein \|\| 0\)\)/);
+  assert.match(page, /sort\(\(a, b\) => Number\(b\.carbs \|\| 0\) - Number\(a\.carbs \|\| 0\)\)/);
+  assert.match(page, /sort\(\(a, b\) => Number\(b\.fat \|\| 0\) - Number\(a\.fat \|\| 0\)\)/);
+});
+
+test("admin operational logs stay inside their tab and trends expose a monthly comparison", () => {
+  assert.match(page, /adminTab === "audit" && <section className="admin-users admin-operations" id="admin-audit"/);
+  assert.match(page, /תמונת מצב ל־30 ימים/);
+  assert.match(page, /monthlyAverageCalories/);
+});
+
 test("favorites, online food search, weight selection and mobile accessibility are present", () => {
   assert.match(page, /libraryQuery/);
   assert.match(page, /state\.favorites/);

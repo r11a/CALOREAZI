@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { flushOfflineCaptures, offlineCaptureCount, queueOfflineCapture } from "./offline-queue";
+import { AppIcon } from "./components/AppIcon";
 
 type AppState = {
   authenticated?: boolean;
@@ -17,7 +18,7 @@ type AppState = {
   owner: null | { name: string; email: string; role: string; avatar?: string };
   currentUser: { id: string; name: string; role: "admin" | "user" };
   profile: any;
-  today: { waterMl: number; meals: any[] };
+  today: { date: string; waterMl: number; meals: any[] };
   ai: any;
   aiUsage: any[];
   history: any[];
@@ -395,25 +396,6 @@ function goalStatus(value: number, target: number) {
   if (ratio < 0.98) return { className: "goal-near", label: "קרוב ליעד" };
   if (ratio <= 1.05) return { className: "goal-on", label: "בטווח היעד" };
   return { className: "goal-over", label: "מעל היעד" };
-}
-
-function AppIcon({ name }: { name: "camera" | "image" | "plus" | "coach" | "edit" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic" }) {
-  const paths = {
-    camera: <><path d="M14.5 5 13 3h-2L9.5 5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><circle cx="12" cy="11.5" r="3.5"/></>,
-    image: <><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-4-4L7 20"/></>,
-    plus: <><path d="M12 5v14M5 12h14"/></>,
-    coach: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4Z"/><path d="m18.5 15 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z"/></>,
-    edit: <><path d="M4 20h4l11-11-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></>,
-    water: <path d="M12 3s5 5.7 5 10a5 5 0 0 1-10 0c0-4.3 5-10 5-10Z"/>,
-    activity: <><path d="M4 12h3l2-5 4 10 2-5h5"/></>,
-    home: <><path d="m4 10 8-7 8 7"/><path d="M6 9v11h12V9M10 20v-6h4v6"/></>,
-    history: <><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2M5 5 3-2"/></>,
-    settings: <><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 15 6l-.3-2.6h-4L10.5 6A7 7 0 0 0 9 7L6.6 6l-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A7 7 0 0 0 10.5 18l.2 2.6h4L15 18a7 7 0 0 0 1.5-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/></>,
-    lock: <><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
-    search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
-    mic: <><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></>,
-  };
-  return <svg className="app-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
 async function api(url: string, options?: RequestInit) {
@@ -1345,7 +1327,7 @@ export default function Home() {
         analysisJobId,
         confidence: mealConfidence === "high" ? .9 : mealConfidence === "medium" ? .7 : .45,
       };
-      let latest = state;
+      let latest: AppState = state;
       let savedMealId = editingMealId;
       let savedLocalDate = "";
       if (!catalogOnly) {
@@ -2253,7 +2235,7 @@ export default function Home() {
               className="calorie-ring"
               style={{
                 "--calorie-progress": `${Math.min(100, (consumed / Math.max(1, dailyCalorieTarget)) * 100)}%`,
-              }}
+              } as React.CSSProperties}
             >
               <div>
                 <span>נצרכו היום</span>
@@ -2284,19 +2266,19 @@ export default function Home() {
               <b>{Math.round((macros.protein / Math.max(1, profile.protein)) * 100)}%</b>
               <small>{macros.protein}g נצרכו</small>
             </button>
-            {macroDetail === "protein" && <div className="macro-source-inline protein">{state.today.meals.filter((meal) => Number(meal.protein || 0) > 0).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.protein))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.protein || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
+            {macroDetail === "protein" && <div className="macro-source-inline protein">{state.today.meals.filter((meal) => Number(meal.protein || 0) > 0).sort((a, b) => Number(b.protein || 0) - Number(a.protein || 0)).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.protein))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.protein || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
             <button type="button" className="macro-bar carbs" aria-expanded={macroDetail === "carbs"} onClick={() => setMacroDetail((current) => current === "carbs" ? "" : "carbs")} style={{ "--progress": `${Math.min(100, Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100))}%` } as any}>
               <strong>פחמימות · {profile.carbs}g ליום</strong>
               <b>{Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100)}%</b>
               <small>{macros.carbs}g נצרכו</small>
             </button>
-            {macroDetail === "carbs" && <div className="macro-source-inline carbs">{state.today.meals.filter((meal) => Number(meal.carbs || 0) > 0).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.carbs))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.carbs || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
+            {macroDetail === "carbs" && <div className="macro-source-inline carbs">{state.today.meals.filter((meal) => Number(meal.carbs || 0) > 0).sort((a, b) => Number(b.carbs || 0) - Number(a.carbs || 0)).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.carbs))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.carbs || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
             <button type="button" className="macro-bar fat" aria-expanded={macroDetail === "fat"} onClick={() => setMacroDetail((current) => current === "fat" ? "" : "fat")} style={{ "--progress": `${Math.min(100, Math.round((macros.fat / Math.max(1, profile.fat)) * 100))}%` } as any}>
               <strong>שומן · {profile.fat}g ליום</strong>
               <b>{Math.round((macros.fat / Math.max(1, profile.fat)) * 100)}%</b>
               <small>{macros.fat}g נצרכו</small>
             </button>
-            {macroDetail === "fat" && <div className="macro-source-inline fat">{state.today.meals.filter((meal) => Number(meal.fat || 0) > 0).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.fat))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.fat || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
+            {macroDetail === "fat" && <div className="macro-source-inline fat">{state.today.meals.filter((meal) => Number(meal.fat || 0) > 0).sort((a, b) => Number(b.fat || 0) - Number(a.fat || 0)).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.fat))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.fat || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
           </div>
         </div>
       </section>
@@ -3208,7 +3190,7 @@ export default function Home() {
                 )}
               </div>
             </section>
-            <section className="admin-users admin-operations" id="admin-audit">
+            {adminTab === "audit" && <section className="admin-users admin-operations" id="admin-audit">
               <div className="admin-section-title">
                 <div>
                   <p className="eyebrow">Security & Logs</p>
@@ -3233,14 +3215,14 @@ export default function Home() {
                         {new Date(entry.at).toLocaleString("he-IL")}
                       </small>
                     </div>
-                    <code>{entry.target}</code>
+                    <code>{entry.message || entry.target}</code>
                   </article>
                 ))}
                 {!adminAudit.length && (
                   <p>אין אירועים חריגים או פעולות ניהול מתועדות.</p>
                 )}
               </div>
-            </section>
+            </section>}
             {adminTab === "trash" && <section className="admin-users admin-operations admin-trash" id="admin-trash">
               <div className="admin-section-title"><div><p className="eyebrow">שחזור ומחיקה</p><h3>סל מחזור</h3><small>הפריטים נשמרים למשך 30 יום לפני מחיקה קבועה.</small></div><button type="button" className="danger" disabled={!trashItems.length} onClick={emptyTrash}>רוקן סל מחזור</button></div>
               <div className="trash-list">
@@ -3284,7 +3266,7 @@ export default function Home() {
               <div className="quick-food-grid quick-search-results">
                 {Object.entries(quickFoods).flatMap(([category, items]) => items.map((item, index) => ({ ...item, category, index }))).filter((item) => `${item.name} ${item.portion} ${item.category}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((item: any) => <button key={`${item.category}-${item.name}-${item.portion}`} onClick={() => selectQuickFood(item)}><span className="food-sprite" style={foodSpriteStyle(item.category, item.index)} /><strong>{item.name}</strong><small>{item.portion}</small><b>{item.kcal} kcal</b></button>)}
                 {(state.foods || []).filter((food) => `${food.name} ${food.category || ""}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((food) => <button key={food.id} onClick={() => selectQuickFood({ ...food, portion: "מנה אישית", icon: "🍽" })}>{food.image ? <img src={food.image} alt={food.name} /> : <span>🍽</span>}<strong>{food.name}</strong><small>מהמאגר האישי</small><b>{food.kcal} kcal</b></button>)}
-                {onlineFoodResults.map((food) => <button key={food.id} onClick={() => selectQuickFood(food)}>{food.image ? <img src={food.image} alt="" /> : <span>▦</span>}<strong>{food.name}</strong><small>{food.brand || food.portion}</small><b>{food.kcal} kcal / 100g</b></button>)}
+                {onlineFoodResults.map((food) => <button key={food.id} onClick={() => selectQuickFood(food)}>{food.image ? <img src={food.image} alt="" /> : <span>▦</span>}<strong>{food.name}</strong><small>{food.brand || food.portion}</small><small>{food.source} · {food.confidence?.label || "יש לבדוק מול התווית"}</small><b>{food.kcal} kcal / 100g</b></button>)}
                 <p className="online-food-status">{onlineFoodStatus}</p>
               </div>
             ) : !quickCategory ? (
@@ -4148,6 +4130,17 @@ export default function Home() {
                 </div>
                 <p className="trend-narrative">{insightsData.narrative}</p>
                 <p className="coach-recommendation"><b>המלצת זהב:</b> {insightsData.recommendation}</p>
+                <section className="trend-comparison">
+                  <header><strong>תמונת מצב ל־30 ימים</strong><small>ממוצעים מחושבים רק מימים שבהם הוזנו ארוחות</small></header>
+                  <div>
+                    <span><small>ימי מעקב</small><strong>{insightsData.summary.monthlyTrackedDays} / 30</strong></span>
+                    <span><small>קלוריות בממוצע</small><strong>{insightsData.summary.monthlyAverageCalories} kcal</strong></span>
+                    <span><small>חלבון בממוצע</small><strong>{insightsData.summary.monthlyAverageProtein}g</strong></span>
+                    <span><small>מים בממוצע</small><strong>{Number(insightsData.summary.monthlyAverageWater || 0).toLocaleString()} מ״ל</strong></span>
+                    <span><small>משקל מול ההתחלה</small><strong>{insightsData.summary.referenceWeight ? `${Number(insightsData.summary.currentWeight).toFixed(1)} / ${Number(insightsData.summary.referenceWeight).toFixed(1)} ק״ג` : "אין ייחוס"}</strong></span>
+                    <span><small>קלוריות מול שבוע קודם</small><strong>{insightsData.summary.previousAverageCalories ? `${insightsData.summary.calorieWeeklyChange > 0 ? "+" : ""}${insightsData.summary.calorieWeeklyChange} kcal` : "אין מספיק נתונים"}</strong></span>
+                  </div>
+                </section>
                 <section className="weekly-goal-progress">
                   <header><strong>ממוצע 7 ימים מול היעדים שלך</strong><small>הפס מציג אחוז מהיעד; המספרים מראים בפועל מול היעד</small></header>
                   {[

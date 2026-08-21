@@ -1,0 +1,30 @@
+const beveragePattern = /(קפה|אספרסו|לאטה|קפוצ.?ינו|תה|שוקו|coffee|espresso|latte|cappuccino|tea|cocoa)/i;
+
+export function validateMealNutrition(input = {}) {
+  const items = Array.isArray(input.items) ? input.items : [];
+  const issues = [];
+  const kcal = Math.max(0, Number(input.kcal) || 0);
+  const macroKcal = Math.max(0, Number(input.protein) || 0) * 4 + Math.max(0, Number(input.carbs) || 0) * 4 + Math.max(0, Number(input.fat) || 0) * 9;
+  if (kcal > 0 && macroKcal > 0 && Math.abs(kcal - macroKcal) / Math.max(kcal, macroKcal) > .35)
+    issues.push({ code: "macro_calorie_mismatch", message: "הקלוריות אינן תואמות לערכי החלבון, הפחמימות והשומן. יש לבדוק את הערכים." });
+  for (const item of items) {
+    const name = String(item.name || "");
+    const grams = Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1);
+    const per100 = Math.max(0, Number(item.kcalPer100) || 0);
+    const servingKcal = grams * per100 / 100;
+    if (grams > 3000 || per100 > 950 || servingKcal > 2500)
+      issues.push({ code: "implausible_portion", item: name, message: `הכמות או הערך של ${name || "הפריט"} אינם סבירים.` });
+    if (beveragePattern.test(name) && (grams > 750 || servingKcal > 300))
+      issues.push({ code: "implausible_beverage", item: name, message: "זוהה חישוב לא סביר למשקה. בדוק את הסוג, הכמות והתוספות." });
+  }
+  return { valid: issues.length === 0, issues };
+}
+
+export function nutritionConfidence(product = {}) {
+  const source = String(product.source || "");
+  const hasMacros = Number(product.kcal) > 0 && [product.protein, product.carbs, product.fat].every((value) => Number.isFinite(Number(value)));
+  if (source.includes("משרד הבריאות") && hasMacros) return { level: "high", score: 95, label: "מקור ממשלתי מאומת" };
+  if (source.includes("Open Food Facts") && hasMacros && product.barcode) return { level: "medium", score: 78, label: "מוצר מזוהה בברקוד; מומלץ להשוות לתווית" };
+  if (hasMacros) return { level: "medium", score: 70, label: "ערכים מלאים ממקור חיצוני" };
+  return { level: "low", score: 35, label: "מידע חלקי; נדרש אישור" };
+}

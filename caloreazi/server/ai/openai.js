@@ -1,7 +1,7 @@
 import { normalizeUsage } from './usage.js';
 import { requestAi } from './http.js';
 
-export async function generateOpenAiCoachReply({ apiKey, model, instructions, input, imageDataUrl, signal }) {
+export async function generateOpenAiCoachReply({ apiKey, model, instructions, input, imageDataUrl = "", signal = undefined }) {
   if (!apiKey) throw new Error('OpenAI API key is not configured');
   if (!model) throw new Error('OpenAI model is not configured');
   const { response, payload } = await requestAi('https://api.openai.com/v1/responses', {
