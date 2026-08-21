@@ -87,6 +87,7 @@
  .settings-modal>header>button{position:absolute;top:calc(18px + env(safe-area-inset-top));right:11px;left:auto}
  .settings-modal>footer{display:grid!important;grid-template-columns:1fr 1fr;gap:9px;padding:11px 14px max(11px,env(safe-area-inset-bottom))}
  .settings-modal>footer button{min-width:0;min-height:46px;padding:10px!important}
+ .meal-modal.is-editing>footer .primary{grid-column:1/-1;grid-row:2;min-height:52px}
  .settings-grid{grid-template-columns:1fr!important;gap:13px}.settings-grid .wide{grid-column:auto!important}
  .settings-grid input,.settings-grid select,.field-stack input,.field-stack select{min-height:48px;font-size:16px!important}
  .admin-center>header{min-height:76px;padding-right:62px}.admin-center>.admin-nav{top:76px;padding:8px 12px;gap:6px}.admin-center>.admin-nav button{min-height:42px;padding:8px 13px}

@@ -4491,7 +4491,7 @@ export default function Home() {
       {mealOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setMealOpen(false)} />
-          <form className="settings-modal meal-modal" onSubmit={addMeal}>
+          <form className={`settings-modal meal-modal${editingMealId ? " is-editing" : ""}`} onSubmit={addMeal}>
             <header>
               <div>
                 <p className="eyebrow">יומן יומי</p>
@@ -4830,11 +4830,14 @@ export default function Home() {
                 ביטול
               </button>
               <button
+                type="submit"
                 className="primary"
                 disabled={busy || (manualAiMode && mealItems.length === 0)}
               >
                 {busy
                   ? "שומר…"
+                  : editingMealId
+                  ? "שמור שינויים וסגור"
                   : catalogOnly
                   ? "שמור בגלריה"
                   : "הוסף לארוחה"}

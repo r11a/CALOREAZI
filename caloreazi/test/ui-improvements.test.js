@@ -19,6 +19,11 @@ test("meal rows expose one clear edit action while deletion undo stays available
   assert.match(page, /undoDeleteMeal/);
 });
 
+test("editing a meal exposes an explicit save changes and close action", () => {
+  assert.match(page, /editingMealId\s*\?\s*"שמור שינויים וסגור"/);
+  assert.match(page, /meal-modal\$\{editingMealId \? " is-editing" : ""\}/);
+});
+
 test("favorites, online food search, weight selection and mobile accessibility are present", () => {
   assert.match(page, /libraryQuery/);
   assert.match(page, /state\.favorites/);
