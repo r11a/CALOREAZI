@@ -730,14 +730,40 @@ export default function Home() {
         title: "נשאר פער גדול להיום",
         text: `נותרו ${remaining.toLocaleString()} קלוריות. עדיף לתכנן ארוחה מאוזנת ולא להשלים בבת אחת.`,
       });
+    if ((state?.today?.meals?.length || 0) === 0)
+      items.push({
+        icon: "◷",
+        title: "התחלה פשוטה ליום",
+        text: "הארוחה הראשונה לא צריכה להיות מושלמת — שלב חלבון, ירק או פרי ומקור אנרגיה.",
+      });
+    else
+      items.push({
+        icon: "✓",
+        title: "שמור על רצף נוח",
+        text: "עדיף לפזר את האכילה לאורך היום ולא להגיע לארוחה הבאה רעב מאוד.",
+      });
+    items.push({
+      icon: "◇",
+      title: "שדרוג קטן לארוחה הבאה",
+      text: "נסה להוסיף מרכיב טרי וצבעוני. שינוי קטן ועקבי משפיע יותר מתפריט מושלם ליום אחד.",
+    });
     if (!items.length)
       items.push({
         icon: "✓",
         title: "אתה בקצב מאוזן",
         text: "המשך לעדכן ארוחות ושתייה כדי לקבל המלצה מדויקת יותר.",
       });
-    return items.slice(0, 3);
-  }, [profile, waterRemaining, proteinRemaining, consumed, remaining, now]);
+    return items;
+  }, [profile, waterRemaining, proteinRemaining, consumed, remaining, now, state?.today?.meals?.length]);
+  const dailyRecommendation = useMemo(() => {
+    if (!dailyInsights.length) return null;
+    const urgent = consumed > Number(profile?.calories || 0)
+      ? dailyInsights.find((item) => item.title === "עברת את היעד היומי")
+      : null;
+    if (urgent) return urgent;
+    const slot = now.getDate() + Math.floor(now.getHours() / 4);
+    return dailyInsights[slot % dailyInsights.length];
+  }, [dailyInsights, consumed, profile?.calories, now]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -948,12 +974,12 @@ export default function Home() {
     }
   }
 
-  async function addWater() {
+  async function addWater(amount = 250) {
     try {
       setState(
         await api("/api/water", {
           method: "POST",
-          body: JSON.stringify({ amount: 250 }),
+          body: JSON.stringify({ amount }),
         }),
       );
     } catch (e) {
@@ -1894,6 +1920,7 @@ export default function Home() {
       </section>
       <div className="daily-score-bar" role="progressbar" aria-label="ציון יומי" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.dailyScore?.score || 0}>
         <i style={{ width: `${state.dailyScore?.score || 0}%` }} />
+        <span>{state.dailyScore?.score || 0}/100</span>
       </div>
       <section className="daily-card">
         <details className="calorie-details">
@@ -2111,14 +2138,14 @@ export default function Home() {
             <header>
               <div>
                 <p className="eyebrow">המלצת המאמן</p>
-                <h2>{dailyInsights[0]?.title || "היום שלך"}</h2>
+                <h2>{dailyRecommendation?.title || "היום שלך"}</h2>
               </div>
               <button className="insights-more" onClick={openInsights}>
                 מגמות
               </button>
             </header>
             <div className="daily-insights">
-              {dailyInsights.slice(0, 1).map((item) => (
+              {[dailyRecommendation].filter(Boolean).map((item: any) => (
                 <article key={item.title}>
                   <i><AppIcon name={item.title.includes("שתייה") ? "water" : "coach"} /></i>
                   <div>
@@ -2160,7 +2187,10 @@ export default function Home() {
               {state.today.waterMl.toLocaleString()} מתוך{" "}
               {profile.waterMl.toLocaleString()} מ״ל
             </p>
-            <button onClick={addWater}><AppIcon name="water" /> כוס 250ml</button>
+            <div className="water-step-actions">
+              <button onClick={() => addWater(-250)} disabled={state.today.waterMl <= 0} aria-label="הפחתת 250 מיליליטר מים">−</button>
+              <button onClick={() => addWater(250)} aria-label="הוספת 250 מיליליטר מים">+</button>
+            </div>
           </section>
         </div>
       </section>
