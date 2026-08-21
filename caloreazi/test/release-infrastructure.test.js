@@ -16,3 +16,7 @@ test("release CI enforces type, integration and production dependency gates", ()
   assert.match(workflow, /npm run test:integration/);
   assert.match(workflow, /npm audit --omit=dev/);
 });
+
+test("Home Assistant downloads a complete frontend asset after boot and restart", () => {
+  assert.match(workflow, /caloreazi-static-asset-after-restart/);
+});

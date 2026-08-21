@@ -782,10 +782,11 @@ export default function Home() {
   ];
   const scoreImprovement = [...scoreGuidance].sort((a, b) => (b.max - b.value) - (a.max - a.value))[0];
   const scoreHeadline = dailyScore >= 80 ? "יום מאוזן מאוד — המשך כך." : dailyScore >= 60 ? `כיוון טוב — ${scoreImprovement.tip}` : dailyScore >= 40 ? `יש בסיס טוב. ${scoreImprovement.tip}` : `אפשר לשפר כבר היום: ${scoreImprovement.tip}`;
+  const currentStreak = Number(state?.streak || 0);
   const consistencyBadges = [
-    ...(state.streak >= 1 ? [{ icon: "✓", label: "תיעוד היום" }] : []),
-    ...(state.streak >= 3 ? [{ icon: "◇", label: `${state.streak} ימים בקצב שלך` }] : []),
-    ...(state.streak >= 7 ? [{ icon: "★", label: "שבוע של עקביות" }] : []),
+    ...(currentStreak >= 1 ? [{ icon: "✓", label: "תיעוד היום" }] : []),
+    ...(currentStreak >= 3 ? [{ icon: "◇", label: `${currentStreak} ימים בקצב שלך` }] : []),
+    ...(currentStreak >= 7 ? [{ icon: "★", label: "שבוע של עקביות" }] : []),
     ...(dailyScore >= 80 ? [{ icon: "◎", label: "יום מאוזן" }] : []),
   ].slice(0, 3);
   const mealSuggestions = useMemo(() => {
