@@ -1890,48 +1890,41 @@ export default function Home() {
         </div>
       </header>
       <section className="welcome">
-        <div>
-          <p className="eyebrow">המסלול שלך · {goalLabels[profile.goal]}</p>
-          <button className="welcome-name" onClick={openProfile}>
-            <h1>
-              {greeting}, {state.owner.name}
-            </h1>
-            <span>פרטים אישיים ›</span>
-          </button>
-          <p>הנתונים נשמרים. עוד החלטה טובה אחת בכל פעם.</p>
+        <h1>{greeting}, {state.owner.name}</h1>
+      </section>
+      <section className="daily-score-card" aria-label={`ציון יומי ${state.dailyScore?.score || 0} מתוך 100`}>
+        <div className="score-chart" style={{ "--score": `${state.dailyScore?.score || 0}%` } as any}>
+          <strong>{state.dailyScore?.score || 0}</strong>
+          <small>/100</small>
         </div>
-        <div className="streak">
-          <span>🔥</span>
-          <strong>{state.streak || 0}</strong>
-          <small>{state.streak === 1 ? "יום ברצף" : "ימים ברצף"}</small>
+        <div>
+          <span>הציון היומי שלך</span>
+          <strong>{(state.dailyScore?.score || 0) >= 80 ? "יום מצוין" : (state.dailyScore?.score || 0) >= 60 ? "בכיוון הנכון" : "יש מקום להתקדם"}</strong>
+          <small>הציון משקלל תזונה, שתייה, פעילות ועמידה ביעדים</small>
         </div>
       </section>
       <section className="daily-card">
         <div
           className="calorie-ring"
           style={{
-            background: `conic-gradient(var(--orange) 0 ${Math.min(100, (consumed / profile.calories) * 100)}%,var(--line) 0)`,
+            background: `conic-gradient(var(--orange) 0 ${Math.min(100, (consumed / Math.max(1, dailyCalorieTarget)) * 100)}%,var(--line) 0)`,
           }}
         >
           <div>
-            <strong>{remaining.toLocaleString()}</strong>
-            <span>נשארו</span>
+            <strong>{consumed.toLocaleString()}</strong>
+            <span>מתוך {dailyCalorieTarget.toLocaleString()}</span>
+            <small>{remaining.toLocaleString()} נשארו</small>
           </div>
         </div>
         <div className="daily-copy">
-          <div className="score-row">
-            <span>היום שלך</span>
-            <strong>{state.dailyScore?.score || 0}</strong>
-            <small>/ 100</small>
-          </div>
           <h2>
-            {consumed.toLocaleString()} מתוך {profile.calories.toLocaleString()}{" "}
-            קלוריות
+            קלוריות היום
           </h2>
           {profile.caloriePlan && (
-            <details className="calorie-explanation">
-              <summary>איך חושב היעד?</summary>
+            <details className="calorie-explanation goal-info">
+              <summary aria-label="מידע על חישוב היעד" title="איך חושב היעד?">i</summary>
               <div>
+                <h3>איך חושב היעד?</h3>
                 <span>
                   BMI <b>{profile.caloriePlan.bmi}</b>
                 </span>
@@ -1978,26 +1971,20 @@ export default function Home() {
             </details>
           )}
           <div className="macro-grid">
-            <span>
-              <i className="protein" />
-              חלבון
-              <strong>
-                {macros.protein} / {profile.protein}g
-              </strong>
+            <span className="macro-bar protein" style={{ "--progress": `${Math.min(100, Math.round((macros.protein / Math.max(1, profile.protein)) * 100))}%` } as any}>
+              <strong>חלבון · {profile.protein}g ליום</strong>
+              <b>{Math.round((macros.protein / Math.max(1, profile.protein)) * 100)}%</b>
+              <small>{macros.protein}g נצרכו</small>
             </span>
-            <span>
-              <i className="carbs" />
-              פחמימות
-              <strong>
-                {macros.carbs} / {profile.carbs}g
-              </strong>
+            <span className="macro-bar carbs" style={{ "--progress": `${Math.min(100, Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100))}%` } as any}>
+              <strong>פחמימות · {profile.carbs}g ליום</strong>
+              <b>{Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100)}%</b>
+              <small>{macros.carbs}g נצרכו</small>
             </span>
-            <span>
-              <i className="fat" />
-              שומן
-              <strong>
-                {macros.fat} / {profile.fat}g
-              </strong>
+            <span className="macro-bar fat" style={{ "--progress": `${Math.min(100, Math.round((macros.fat / Math.max(1, profile.fat)) * 100))}%` } as any}>
+              <strong>שומן · {profile.fat}g ליום</strong>
+              <b>{Math.round((macros.fat / Math.max(1, profile.fat)) * 100)}%</b>
+              <small>{macros.fat}g נצרכו</small>
             </span>
           </div>
         </div>
