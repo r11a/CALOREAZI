@@ -83,6 +83,14 @@ function localDateTimeInput(date = new Date()) {
   local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
   return local.toISOString().slice(0, 16);
 }
+
+function mealPeriodFor(date = new Date()) {
+  const hour = date.getHours();
+  if (hour < 11) return "breakfast";
+  if (hour < 16) return "lunch";
+  if (hour < 21) return "dinner";
+  return "snack";
+}
 const quickFoods: Record<
   string,
   {
@@ -452,6 +460,7 @@ export default function Home() {
   const [mealValidationErrors, setMealValidationErrors] = useState<Record<string, string>>({});
   const [mealSaveFeedback, setMealSaveFeedback] = useState("");
   const [mealReviewReady, setMealReviewReady] = useState(false);
+  const [mealDetailsOpen, setMealDetailsOpen] = useState(false);
   const [aiOriginalItems, setAiOriginalItems] = useState<any[]>([]);
   const [mealSource, setMealSource] = useState<"manual" | "photo" | "voice">(
     "manual",
@@ -1438,6 +1447,7 @@ export default function Home() {
   function editMeal(meal: any) {
     const date = new Date(meal.time);
     setEditingMealId(meal.id);
+    setMealDetailsOpen(true);
     setMealForm({
       name: meal.name,
       kcal: meal.kcal,
@@ -1618,6 +1628,7 @@ export default function Home() {
     setMealItems([]);
     setAiOriginalItems([]);
     setMealSource("manual");
+    setMealPeriod(mealPeriodFor());
     setManualAiMode(true);
     setManualDescription("");
     setManualPortion("");
@@ -1630,6 +1641,10 @@ export default function Home() {
     setPhotoStatus("תאר את הארוחה וה-AI יחשב ויפרק אותה לפריטים לפני האישור.");
     setAiCorrection("");
     setAiCorrectionStatus("");
+    setMealReviewReady(false);
+    setMealDetailsOpen(false);
+    setMealSaveFeedback("");
+    setMealValidationErrors({});
     setQuickAddOpen(false);
     setMealOpen(true);
   }
@@ -1742,10 +1757,14 @@ export default function Home() {
     setMealItems([]);
     setAiOriginalItems([]);
     setMealSource("manual");
+    setMealPeriod(mealPeriodFor());
     setManualAiMode(false);
     setPhotoPreview("");
     setMealDateTime(localDateTimeInput());
     setPhotoStatus("ערכים משוערים למנה המקובלת — אפשר לתקן לפני השמירה.");
+    setMealReviewReady(true);
+    setMealDetailsOpen(false);
+    setMealSaveFeedback("");
     setPendingQuickFood(null);
     setQuickAddOpen(false);
     setMealOpen(true);
@@ -1762,6 +1781,8 @@ export default function Home() {
       setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 });
       setMealItems(result.items);
       setAiOriginalItems(structuredClone(result.items));
+      setMealReviewReady(true);
+      setMealDetailsOpen(false);
       setPhotoStatus(
         `ה-AI זיהה ${result.items.length} פריטים. ${result.explanation || ""} בדוק ואשר.`,
       );
@@ -1791,6 +1812,8 @@ export default function Home() {
       setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 });
       setMealItems(result.items);
       setMealConfidence(result.confidence || "low");
+      setMealReviewReady(true);
+      setMealDetailsOpen(false);
       setAiCorrection("");
       setAiCorrectionStatus(`התיקון הוחל. ${result.explanation || "בדוק את הערכים ואשר."}`);
     } catch (e) {
@@ -1809,6 +1832,14 @@ export default function Home() {
         itemIndex === index ? { ...item, [field]: value } : item,
       ),
     );
+  }
+  function adjustMealItem(index: number, field: string, delta: number, min = 0, max = 3000) {
+    setMealItems((items) => items.map((item, itemIndex) => itemIndex === index
+      ? { ...item, [field]: Math.min(max, Math.max(min, Number(item[field] || 0) + delta)) }
+      : item));
+  }
+  function adjustMealForm(field: "kcal" | "protein" | "carbs" | "fat", delta: number) {
+    setMealForm((current) => ({ ...current, [field]: Math.max(field === "kcal" ? 1 : 0, Number(current[field] || 0) + delta) }));
   }
   function addCustomMealItem() {
     setMealItems((items) => [
@@ -1879,13 +1910,15 @@ export default function Home() {
     }
   }
 
-  async function prepareImage(file: File, maxSize = 1024, quality = 0.68) {
+  async function prepareImage(file: File, maxSize = 960, quality = 0.65, decodedImage?: HTMLImageElement) {
     if (!file.type.match(/^image\/(jpeg|png|webp)$/))
       throw new Error("יש לבחור תמונת JPG, PNG או WebP");
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-    image.src = url;
-    await image.decode();
+    const url = decodedImage ? "" : URL.createObjectURL(file);
+    const image = decodedImage || new Image();
+    if (!decodedImage) {
+      image.src = url;
+      await image.decode();
+    }
     const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(image.width * scale);
@@ -1893,7 +1926,7 @@ export default function Home() {
     canvas
       .getContext("2d")
       ?.drawImage(image, 0, 0, canvas.width, canvas.height);
-    URL.revokeObjectURL(url);
+    if (url) URL.revokeObjectURL(url);
     return canvas.toDataURL("image/jpeg", quality);
   }
   async function analyzePhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -1901,17 +1934,22 @@ export default function Home() {
     event.target.value = "";
     if (!file) return;
     setMealDateTime(localDateTimeInput());
+    setMealPeriod(mealPeriodFor());
+    setMealReviewReady(false);
+    setMealSaveFeedback("");
+    setMealValidationErrors({});
     setBusy(true);
     setPhotoStatus("מנתח את הארוחה בעזרת AI…");
     try {
       const originalUrl = URL.createObjectURL(file);
       const original = new Image(); original.src = originalUrl; await original.decode();
-      const shortestSide = Math.min(original.width, original.height); URL.revokeObjectURL(originalUrl);
+      const shortestSide = Math.min(original.width, original.height);
       const quality = shortestSide < 640 || file.size < 45_000
         ? { level: "warning" as const, message: "איכות הצילום נמוכה יחסית. מומלץ לצלם שוב מקרוב ובתאורה טובה לקבלת זיהוי מדויק יותר." }
         : { level: "good" as const, message: "איכות ורזולוציית הצילום מתאימות לניתוח." };
       setPhotoQuality(quality);
-      const imageDataUrl = await prepareImage(file, 1024, 0.68);
+      const imageDataUrl = await prepareImage(file, 960, 0.65, original);
+      URL.revokeObjectURL(originalUrl);
       const clientId = crypto.randomUUID();
       if (!navigator.onLine) { await queueOfflineCapture({ imageDataUrl, clientId, createdAt: new Date().toISOString() }); setOfflineQueueCount(await offlineCaptureCount()); setPhotoPreview(imageDataUrl); setMealSource("photo"); setPhotoStatus("הצילום נשמר במכשיר ויישלח אוטומטית לניתוח כשהחיבור יחזור."); setMealOpen(true); return; }
       setPhotoPreview(imageDataUrl);
@@ -1931,7 +1969,7 @@ export default function Home() {
             ? "מזהה פריטים וכמויות…"
             : "הצילום נשמר וממתין לניתוח…",
         );
-        await new Promise((resolve) => window.setTimeout(resolve, attempt < 6 ? 350 : 700));
+        await new Promise((resolve) => window.setTimeout(resolve, attempt < 8 ? 250 : 500));
         result = await api(
           `/api/ai/analyze-meal?id=${encodeURIComponent(jobId)}`,
         );
@@ -1948,6 +1986,7 @@ export default function Home() {
       setMealItems(result.items);
       setAiOriginalItems(structuredClone(result.items));
       setMealConfidence(result.confidence || "low");
+      setMealReviewReady(true);
       setPhotoStatus(
         `זוהו ${result.items.length} פריטים (${result.confidence === "high" ? "ביטחון גבוה" : result.confidence === "medium" ? "ביטחון בינוני" : "ביטחון נמוך"}). בדוק משקל וכמות; החישוב יתבצע רק לאחר אישור. ${result.explanation || ""}`,
       );
@@ -2072,12 +2111,15 @@ export default function Home() {
           });
           setMealItems(result.items);
           setAiOriginalItems(structuredClone(result.items));
+          setMealPeriod(mealPeriodFor());
+          setMealReviewReady(true);
+          setMealDetailsOpen(false);
           setPhotoPreview("");
           setMealDateTime(localDateTimeInput());
           setPhotoStatus(
             `תמלול: “${result.transcript}”\nזוהו ${result.items.length} פריטים. בדוק שמות, משקל וכמות; החישוב יתבצע רק באישור.`,
           );
-          setSaveToLibrary(true);
+          setSaveToLibrary(false);
           setFoodVisibility("private");
           setGenerateFoodArtwork(true);
           setVoiceOpen(false);
@@ -4573,16 +4615,25 @@ export default function Home() {
                 </small>
               </section>
             )}
-            {(!manualAiMode || mealItems.length > 0) && <><div className="settings-grid">
+            {(!manualAiMode || mealItems.length > 0) && <>
+            <section className="meal-review-intro">
+              {photoPreview ? <img src={photoPreview} alt="תצוגה מקדימה של הארוחה" /> : <span className={`meal-source-icon ${mealSource}`}><AppIcon name={mealSource === "voice" ? "mic" : mealSource === "photo" ? "camera" : "plus"} /></span>}
+              <div>
+                <small>{mealSource === "photo" ? "זוהה מצילום" : mealSource === "voice" ? "זוהה מהכתבה" : "הוספה ידנית"}</small>
+                <strong>{busy ? "מכין את התוצאה…" : mealReviewReady ? "מוכן לבדיקה ולאישור" : "ממתין לפרטים"}</strong>
+                {photoStatus && <p className="photo-status">{photoStatus}</p>}
+              </div>
+              <div className="meal-flow" aria-label="שלבי הוספת הארוחה"><span className="done">1</span><i /><span className={mealReviewReady ? "done" : "active"}>2</span><i /><span className={mealReviewReady ? "active" : ""}>3</span></div>
+            </section>
+            <details className="meal-details" open={mealDetailsOpen || !mealItems.length} onToggle={(event) => setMealDetailsOpen(event.currentTarget.open)}>
+              <summary><span><strong>עריכת פרטים וערכים</strong><small>פתח רק אם צריך לתקן את הזיהוי או הכמות</small></span><b>⌄</b></summary>
+            <div className="settings-grid">
               {photoPreview && (
                 <img
-                  className="meal-photo-preview wide"
+                  className="meal-photo-preview wide meal-photo-details"
                   src={photoPreview}
                   alt="התמונה שנבחרה לניתוח"
                 />
-              )}
-              {photoStatus && (
-                <p className="photo-status wide">{photoStatus}</p>
               )}
               {photoQuality && <p className={`photo-quality ${photoQuality.level} wide`}><strong>{photoQuality.level === "good" ? "צילום תקין" : "כדאי לשפר את הצילום"}</strong><span>{photoQuality.message}</span></p>}
               {mealSource === "photo" && <div className="photo-guide wide"><strong>בדיקת צילום</strong><span>ודא שכל הצלחת מוארת ונמצאת בפריים, שאין מזון מוסתר ושניתן להבין את גודל המנה.</span><small>בביטחון נמוך חובה לבדוק את שם הפריט, המשקל והכמות לפני השמירה.</small></div>}
@@ -4659,7 +4710,7 @@ export default function Home() {
                       />
                       <label>
                         משקל בגרם
-                        <input
+                        <div className="number-stepper"><button type="button" onClick={() => adjustMealItem(index, "grams", -10, 1)}>−</button><input
                           data-meal-field={`item-grams-${index}`}
                           className={mealValidationErrors[`item-grams-${index}`] ? "field-error" : ""}
                           aria-invalid={Boolean(mealValidationErrors[`item-grams-${index}`])}
@@ -4674,11 +4725,11 @@ export default function Home() {
                               Number(e.target.value),
                             )
                           }
-                        />
+                        /><button type="button" onClick={() => adjustMealItem(index, "grams", 10, 1)}>＋</button></div>
                       </label>
                       <label>
                         כמות
-                        <input
+                        <div className="number-stepper"><button type="button" onClick={() => adjustMealItem(index, "quantity", -1, 1, 50)}>−</button><input
                           data-meal-field={`item-kcal-${index}`}
                           className={mealValidationErrors[`item-kcal-${index}`] ? "field-error" : ""}
                           aria-invalid={Boolean(mealValidationErrors[`item-kcal-${index}`])}
@@ -4694,11 +4745,11 @@ export default function Home() {
                               Number(e.target.value),
                             )
                           }
-                        />
+                        /><button type="button" onClick={() => adjustMealItem(index, "quantity", 1, 1, 50)}>＋</button></div>
                       </label>
                       <label>
                         קל׳ ל־100 גרם
-                        <input
+                        <div className="number-stepper"><button type="button" onClick={() => adjustMealItem(index, "kcalPer100", -10, 0, 1000)}>−</button><input
                           type="number"
                           min="0"
                           max="1000"
@@ -4710,7 +4761,7 @@ export default function Home() {
                               Number(e.target.value),
                             )
                           }
-                        />
+                        /><button type="button" onClick={() => adjustMealItem(index, "kcalPer100", 10, 0, 1000)}>＋</button></div>
                       </label>
                       <button
                         className="remove-item"
@@ -4731,7 +4782,7 @@ export default function Home() {
                 <>
                   <label>
                     קלוריות
-                    <input
+                    <div className="number-stepper"><button type="button" onClick={() => adjustMealForm("kcal", -10)}>−</button><input
                       data-meal-field="kcal"
                       className={mealValidationErrors.kcal ? "field-error" : ""}
                       aria-invalid={Boolean(mealValidationErrors.kcal)}
@@ -4744,11 +4795,11 @@ export default function Home() {
                           kcal: Number(e.target.value),
                         })
                       }
-                    />
+                    /><button type="button" onClick={() => adjustMealForm("kcal", 10)}>＋</button></div>
                   </label>
                   <label>
                     חלבון (גרם)
-                    <input
+                    <div className="number-stepper"><button type="button" onClick={() => adjustMealForm("protein", -1)}>−</button><input
                       type="number"
                       min="0"
                       value={mealForm.protein || ""}
@@ -4758,11 +4809,11 @@ export default function Home() {
                           protein: Number(e.target.value),
                         })
                       }
-                    />
+                    /><button type="button" onClick={() => adjustMealForm("protein", 1)}>＋</button></div>
                   </label>
                   <label>
                     פחמימות (גרם)
-                    <input
+                    <div className="number-stepper"><button type="button" onClick={() => adjustMealForm("carbs", -1)}>−</button><input
                       type="number"
                       min="0"
                       value={mealForm.carbs || ""}
@@ -4772,11 +4823,11 @@ export default function Home() {
                           carbs: Number(e.target.value),
                         })
                       }
-                    />
+                    /><button type="button" onClick={() => adjustMealForm("carbs", 1)}>＋</button></div>
                   </label>
                   <label>
                     שומן (גרם)
-                    <input
+                    <div className="number-stepper"><button type="button" onClick={() => adjustMealForm("fat", -1)}>−</button><input
                       type="number"
                       min="0"
                       value={mealForm.fat || ""}
@@ -4786,7 +4837,7 @@ export default function Home() {
                           fat: Number(e.target.value),
                         })
                       }
-                    />
+                    /><button type="button" onClick={() => adjustMealForm("fat", 1)}>＋</button></div>
                   </label>
                   <button
                     className="add-components wide"
@@ -4797,8 +4848,8 @@ export default function Home() {
                   </button>
                 </>
               )}
-            </div>
-            {(mealForm.name || mealItems.length > 0) && <section className="meal-review-summary"><header><div><small>סיכום לפני הוספה</small><strong>{mealForm.name || "ארוחה חדשה"}</strong></div><b>{Math.round(Number(mealDraftPreview.kcal || 0))}<small> kcal</small></b></header><div><span className="protein"><small>חלבון</small><strong>{Math.round(Number(mealDraftPreview.protein || 0))}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{Math.round(Number(mealDraftPreview.carbs || 0))}g</strong></span><span className="fat"><small>שומן</small><strong>{Math.round(Number(mealDraftPreview.fat || 0))}g</strong></span></div><p>בדוק את השם, הכמות והערכים ולחץ על “הוסף לארוחה”.</p></section>}
+            </div></details>
+            {(mealForm.name || mealItems.length > 0) && <section className="meal-review-summary"><header><div><small>הארוחה שלך</small><strong>{mealForm.name || "ארוחה חדשה"}</strong></div><b>{Math.round(Number(mealDraftPreview.kcal || 0))}<small> kcal</small></b></header><div><span className="protein"><small>חלבון</small><strong>{Math.round(Number(mealDraftPreview.protein || 0))}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{Math.round(Number(mealDraftPreview.carbs || 0))}g</strong></span><span className="fat"><small>שומן</small><strong>{Math.round(Number(mealDraftPreview.fat || 0))}g</strong></span></div><p>זה הסיכום שיתווסף ליומן. אפשר לאשר או לפתוח את העריכה המתקדמת.</p></section>}
             {mealItems.length > 0 && (
               <section className="ai-correction-box">
                 <div><strong>צריך לתקן את הזיהוי?</strong><small>כתוב רק מה לא נכון — ה־AI יעדכן את הטיוטה בלי לשמור אותה.</small></div>
@@ -4891,7 +4942,7 @@ export default function Home() {
                   ? "שמור שינויים וסגור"
                   : catalogOnly
                   ? "שמור בגלריה"
-                  : "הוסף לארוחה"}
+                  : "אישור והוספה ליומן"}
               </button>
             </footer>
           </form>
