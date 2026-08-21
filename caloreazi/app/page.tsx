@@ -2213,21 +2213,24 @@ export default function Home() {
         </details>
         <div className="daily-copy">
           <div className="macro-grid">
-            <button type="button" className="macro-bar protein" onClick={() => setMacroDetail("protein")} style={{ "--progress": `${Math.min(100, Math.round((macros.protein / Math.max(1, profile.protein)) * 100))}%` } as any}>
+            <button type="button" className="macro-bar protein" aria-expanded={macroDetail === "protein"} onClick={() => setMacroDetail((current) => current === "protein" ? "" : "protein")} style={{ "--progress": `${Math.min(100, Math.round((macros.protein / Math.max(1, profile.protein)) * 100))}%` } as any}>
               <strong>חלבון · {profile.protein}g ליום</strong>
               <b>{Math.round((macros.protein / Math.max(1, profile.protein)) * 100)}%</b>
               <small>{macros.protein}g נצרכו</small>
             </button>
-            <button type="button" className="macro-bar carbs" onClick={() => setMacroDetail("carbs")} style={{ "--progress": `${Math.min(100, Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100))}%` } as any}>
+            {macroDetail === "protein" && <div className="macro-source-inline protein">{state.today.meals.filter((meal) => Number(meal.protein || 0) > 0).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.protein))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.protein || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
+            <button type="button" className="macro-bar carbs" aria-expanded={macroDetail === "carbs"} onClick={() => setMacroDetail((current) => current === "carbs" ? "" : "carbs")} style={{ "--progress": `${Math.min(100, Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100))}%` } as any}>
               <strong>פחמימות · {profile.carbs}g ליום</strong>
               <b>{Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100)}%</b>
               <small>{macros.carbs}g נצרכו</small>
             </button>
-            <button type="button" className="macro-bar fat" onClick={() => setMacroDetail("fat")} style={{ "--progress": `${Math.min(100, Math.round((macros.fat / Math.max(1, profile.fat)) * 100))}%` } as any}>
+            {macroDetail === "carbs" && <div className="macro-source-inline carbs">{state.today.meals.filter((meal) => Number(meal.carbs || 0) > 0).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.carbs))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.carbs || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
+            <button type="button" className="macro-bar fat" aria-expanded={macroDetail === "fat"} onClick={() => setMacroDetail((current) => current === "fat" ? "" : "fat")} style={{ "--progress": `${Math.min(100, Math.round((macros.fat / Math.max(1, profile.fat)) * 100))}%` } as any}>
               <strong>שומן · {profile.fat}g ליום</strong>
               <b>{Math.round((macros.fat / Math.max(1, profile.fat)) * 100)}%</b>
               <small>{macros.fat}g נצרכו</small>
             </button>
+            {macroDetail === "fat" && <div className="macro-source-inline fat">{state.today.meals.filter((meal) => Number(meal.fat || 0) > 0).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.fat))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.fat || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
           </div>
         </div>
       </section>
@@ -2460,18 +2463,6 @@ export default function Home() {
           <span><AppIcon name="coach" /></span>מאמן
         </button>
       </nav>
-      {macroDetail && (
-        <div className="modal-layer macro-detail-layer">
-          <button className="backdrop" onClick={() => setMacroDetail("")} aria-label="סגירת הפירוט" />
-          <section className={`settings-modal macro-detail-modal ${macroDetail}`}>
-            <header><h2>{macroDetail === "protein" ? "חלבון" : macroDetail === "carbs" ? "פחמימות" : "שומן"} מהארוחות היום</h2><button onClick={() => setMacroDetail("")}>×</button></header>
-            <div className="macro-source-list">
-              {state.today.meals.filter((meal) => Number(meal[macroDetail] || 0) > 0).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal[macroDetail] || 0))}g</b></span>)}
-              {!state.today.meals.some((meal) => Number(meal[macroDetail] || 0) > 0) && <p>אין עדיין מאכלים שתורמים למדד הזה היום.</p>}
-            </div>
-          </section>
-        </div>
-      )}
       {mealPreview && (
         <div className="modal-layer meal-preview-layer">
           <button className="backdrop" onClick={() => setMealPreview(null)} aria-label="סגירת פרטי הארוחה" />
@@ -2480,6 +2471,7 @@ export default function Home() {
             {mealPreview.image ? <img className="meal-preview-image" src={mealPreview.image} alt={mealPreview.name} /> : <div className="meal-preview-placeholder">🍽</div>}
             <div className="meal-preview-values"><span className="calories"><small>קלוריות</small><strong>{mealPreview.kcal}</strong><b>kcal</b></span><span className="protein"><small>חלבון</small><strong>{mealPreview.protein}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{mealPreview.carbs}g</strong></span><span className="fat"><small>שומן</small><strong>{mealPreview.fat}g</strong></span></div>
             {Array.isArray(mealPreview.items) && mealPreview.items.length > 0 && <div className="meal-preview-items"><strong>מרכיבי הארוחה</strong>{mealPreview.items.map((item: any, index: number) => <span key={`${item.name}-${index}`}><b>{item.name}</b><small>{item.grams ? `${item.grams} גרם` : item.quantity ? `כמות ${item.quantity}` : ""}</small></span>)}</div>}
+            <footer><button className="primary" type="button" onClick={() => setMealPreview(null)}>חזרה למה אכלתי היום</button></footer>
           </section>
         </div>
       )}
