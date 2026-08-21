@@ -1892,84 +1892,42 @@ export default function Home() {
       <section className="welcome">
         <h1>{greeting}, {state.owner.name}</h1>
       </section>
-      <section className="daily-score-card" aria-label={`ציון יומי ${state.dailyScore?.score || 0} מתוך 100`}>
-        <div className="score-chart" style={{ "--score": `${state.dailyScore?.score || 0}%` } as any}>
-          <strong>{state.dailyScore?.score || 0}</strong>
-          <small>/100</small>
-        </div>
-        <div>
-          <span>הציון היומי שלך</span>
-          <strong>{(state.dailyScore?.score || 0) >= 80 ? "יום מצוין" : (state.dailyScore?.score || 0) >= 60 ? "בכיוון הנכון" : "יש מקום להתקדם"}</strong>
-          <small>הציון משקלל תזונה, שתייה, פעילות ועמידה ביעדים</small>
-        </div>
-      </section>
+      <div className="daily-score-bar" role="progressbar" aria-label="ציון יומי" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.dailyScore?.score || 0}>
+        <i style={{ width: `${state.dailyScore?.score || 0}%` }} />
+      </div>
       <section className="daily-card">
-        <div
-          className="calorie-ring"
-          style={{
-            background: `conic-gradient(var(--orange) 0 ${Math.min(100, (consumed / Math.max(1, dailyCalorieTarget)) * 100)}%,var(--line) 0)`,
-          }}
-        >
-          <div>
-            <strong>{consumed.toLocaleString()}</strong>
-            <span>מתוך {dailyCalorieTarget.toLocaleString()}</span>
-            <small>{remaining.toLocaleString()} נשארו</small>
-          </div>
-        </div>
-        <div className="daily-copy">
-          <h2>
-            קלוריות היום
-          </h2>
-          {profile.caloriePlan && (
-            <details className="calorie-explanation goal-info">
-              <summary aria-label="מידע על חישוב היעד" title="איך חושב היעד?">i</summary>
+        <details className="calorie-details">
+          <summary aria-label="פתיחת מידע על חישוב יעד הקלוריות">
+            <div
+              className="calorie-ring"
+              style={{
+                "--calorie-progress": `${Math.min(100, (consumed / Math.max(1, dailyCalorieTarget)) * 100)}%`,
+              }}
+            >
               <div>
-                <h3>איך חושב היעד?</h3>
-                <span>
-                  BMI <b>{profile.caloriePlan.bmi}</b>
-                </span>
-                <span>
-                  חילוף חומרים במנוחה{" "}
-                  <b>{profile.caloriePlan.bmr.toLocaleString()}</b>
-                </span>
-                <span>
-                  תחזוקה משוערת{" "}
-                  <b>
-                    {profile.caloriePlan.maintenanceCalories.toLocaleString()}
-                  </b>
-                </span>
-                <span>
-                  התאמה למטרה{" "}
-                  <b>
-                    {profile.caloriePlan.goalAdjustment > 0 ? "+" : ""}
-                    {profile.caloriePlan.goalAdjustment}
-                  </b>
-                </span>
-                <span>
-                  יעד יומי <b>{profile.calories.toLocaleString()}</b>
-                </span>
-                <span>
-                  קצב שבועי משוער{" "}
-                  <b>{profile.caloriePlan.expectedWeeklyChangeKg} ק״ג</b>
-                </span>
+                <span>נצרכו היום</span>
+                <strong>{consumed.toLocaleString()}</strong>
+                <span>מתוך {dailyCalorieTarget.toLocaleString()} קלוריות</span>
+                <small>{remaining.toLocaleString()} קלוריות נשארו</small>
               </div>
-              <small>
-                נוסחת {profile.caloriePlan.formula} × מקדם פעילות{" "}
-                {profile.caloriePlan.activityFactor}. האימונים נשמרים להתאמת
-                האימון ואינם נספרים שוב כדי למנוע כפל.
-              </small>
-              {profile.caloriePlan.safetyFloorApplied && (
-                <small className="safety-note">
-                  הופעלה רצפת בטיחות כדי למנוע יעד נמוך מדי.
-                </small>
-              )}
-              {profile.caloriePlan.goalAdjustedForBmi && (
-                <small className="safety-note">
-                  BMI נמוך מ־18.5: לא הוגדר גירעון קלורי אוטומטי.
-                </small>
-              )}
-            </details>
+            </div>
+          </summary>
+          {profile.caloriePlan && (
+            <div className="calorie-explanation-panel">
+              <h3>איך חושב היעד?</h3>
+              <span>BMI <b>{profile.caloriePlan.bmi}</b></span>
+              <span>חילוף חומרים במנוחה <b>{profile.caloriePlan.bmr.toLocaleString()}</b></span>
+              <span>תחזוקה משוערת <b>{profile.caloriePlan.maintenanceCalories.toLocaleString()}</b></span>
+              <span>התאמה למטרה <b>{profile.caloriePlan.goalAdjustment > 0 ? "+" : ""}{profile.caloriePlan.goalAdjustment}</b></span>
+              <span>יעד יומי <b>{profile.calories.toLocaleString()}</b></span>
+              <span>קצב שבועי משוער <b>{profile.caloriePlan.expectedWeeklyChangeKg} ק״ג</b></span>
+              <small>נוסחת {profile.caloriePlan.formula} × מקדם פעילות {profile.caloriePlan.activityFactor}. האימונים נשמרים להתאמת האימון ואינם נספרים שוב כדי למנוע כפל.</small>
+              {profile.caloriePlan.safetyFloorApplied && <small className="safety-note">הופעלה רצפת בטיחות כדי למנוע יעד נמוך מדי.</small>}
+              {profile.caloriePlan.goalAdjustedForBmi && <small className="safety-note">BMI נמוך מ־18.5: לא הוגדר גירעון קלורי אוטומטי.</small>}
+            </div>
           )}
+        </details>
+        <div className="daily-copy">
           <div className="macro-grid">
             <span className="macro-bar protein" style={{ "--progress": `${Math.min(100, Math.round((macros.protein / Math.max(1, profile.protein)) * 100))}%` } as any}>
               <strong>חלבון · {profile.protein}g ליום</strong>
