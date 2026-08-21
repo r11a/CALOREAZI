@@ -33,10 +33,22 @@ function normalize(value) { return String(value || "").toLocaleLowerCase("he").r
 export function findNutritionFood(name) {
   const target = normalize(name);
   if (!target) return null;
-  return foods.find((food) => [food.name, ...food.aliases].some((alias) => {
-    const candidate = normalize(alias);
-    return target === candidate || target.includes(candidate) || candidate.includes(target);
-  })) || null;
+  const exact = foods.find((food) => [food.name, ...food.aliases].some((alias) => target === normalize(alias)));
+  if (exact) return exact;
+  return foods.map((food) => ({ food, match: [food.name, ...food.aliases].map(normalize).filter((candidate) => target.includes(candidate)).sort((a, b) => b.length - a.length)[0] }))
+    .filter((item) => item.match).sort((a, b) => b.match.length - a.match.length)[0]?.food || null;
+}
+
+export function estimateMealSugar(meal) {
+  if (Number(meal?.sugarTrackedItems || 0) > 0) return { sugar: Math.max(0, Number(meal.sugar || 0)), tracked: true };
+  let sugar = 0; let trackedItems = 0;
+  for (const item of meal?.items || []) {
+    const sugarPer100 = item.sugarPer100 ?? findNutritionFood(item.name)?.sugarPer100;
+    if (sugarPer100 === null || sugarPer100 === undefined) continue;
+    sugar += Number(sugarPer100) * Math.max(0, Number(item.grams || 0)) * Math.max(0, Number(item.quantity || 1)) / 100;
+    trackedItems += 1;
+  }
+  return { sugar: Math.round(sugar * 10) / 10, tracked: trackedItems > 0 };
 }
 
 export function enrichVisionItems(items) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { energyKcal, enrichVisionItems, findNutritionFood } from "../server/nutrition-catalog.js";
+import { energyKcal, enrichVisionItems, estimateMealSugar, findNutritionFood } from "../server/nutrition-catalog.js";
 import { checkRateLimit, requireSameOrigin } from "../server/security.js";
 import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "../server/domains/meals/repository.js";
 import { parseVisionResult } from "../server/meal-analysis.js";
@@ -28,6 +28,11 @@ test("coffee uses curated realistic values instead of vision estimates", () => {
 test("authoritative catalog exposes total dietary sugar separately from carbohydrates", () => {
   assert.equal(findNutritionFood("apple").sugarPer100, 10.4);
   assert.equal(findNutritionFood("חזה עוף").sugarPer100, 0);
+});
+
+test("legacy meals derive dietary sugar from catalog items without inventing zero", () => {
+  assert.deepEqual(estimateMealSugar({ items: [{ name: "תפוח", grams: 150, quantity: 1 }] }), { sugar: 15.6, tracked: true });
+  assert.deepEqual(estimateMealSugar({ items: [{ name: "מאכל לא מוכר", grams: 100 }] }), { sugar: 0, tracked: false });
 });
 
 test("USDA energy respects units and converts kilojoules to kilocalories", () => {

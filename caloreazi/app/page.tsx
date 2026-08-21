@@ -45,6 +45,7 @@ const emptyOnboarding = {
   workouts: 2,
   diet: "none",
   restrictions: "",
+  theme: "dark",
   adminPassword: "",
 };
 const goalLabels: Record<string, string> = {
@@ -379,7 +380,7 @@ function goalStatus(value: number, target: number) {
   return { className: "goal-over", label: "מעל היעד" };
 }
 
-function AppIcon({ name }: { name: "camera" | "image" | "plus" | "coach" | "edit" | "water" | "activity" | "home" | "history" | "settings" | "lock" }) {
+function AppIcon({ name }: { name: "camera" | "image" | "plus" | "coach" | "edit" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" }) {
   const paths = {
     camera: <><path d="M14.5 5 13 3h-2L9.5 5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><circle cx="12" cy="11.5" r="3.5"/></>,
     image: <><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-4-4L7 20"/></>,
@@ -392,6 +393,7 @@ function AppIcon({ name }: { name: "camera" | "image" | "plus" | "coach" | "edit
     history: <><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2M5 5 3-2"/></>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 15 6l-.3-2.6h-4L10.5 6A7 7 0 0 0 9 7L6.6 6l-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A7 7 0 0 0 10.5 18l.2 2.6h4L15 18a7 7 0 0 0 1.5-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1Z"/></>,
     lock: <><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
+    search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
   };
   return <svg className="app-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -505,6 +507,7 @@ export default function Home() {
   const [weightFeedback, setWeightFeedback] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickCategory, setQuickCategory] = useState("");
+  const [quickSearch, setQuickSearch] = useState("");
   const [adminHealth, setAdminHealth] = useState<any>(null);
   const [adminTab, setAdminTab] = useState("ai");
   const [adminBackups, setAdminBackups] = useState<any[]>([]);
@@ -558,7 +561,6 @@ export default function Home() {
     weight: false,
   });
   const [partnerOpen, setPartnerOpen] = useState(false);
-  const [cameraChoiceOpen, setCameraChoiceOpen] = useState(false);
   const [pendingQuickFood, setPendingQuickFood] = useState<any>(null);
   const [manualDescription, setManualDescription] = useState("");
   const [foodCategory, setFoodCategory] = useState("meals");
@@ -573,7 +575,6 @@ export default function Home() {
   const [libraryCategory, setLibraryCategory] = useState("all");
   const [libraryVisibility, setLibraryVisibility] = useState("all");
   const [editingFood, setEditingFood] = useState<any>(null);
-  const photoInput = useRef<HTMLInputElement>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
   const foodImageInput = useRef<HTMLInputElement>(null);
@@ -692,6 +693,18 @@ export default function Home() {
   const remaining = Math.max(0, dailyCalorieTarget - consumed);
   const dailyScore = Math.max(0, Math.min(100, Number(state?.dailyScore?.score || 0)));
   const scoreToneFor = (score: number) => score < 20 ? "red" : score < 40 ? "orange" : score < 60 ? "yellow" : score < 80 ? "blue" : "green";
+  const historyScoreText = (day: any) => {
+    const score = Number(day?.dailyScore?.score || 0); const parts = day?.dailyScore?.parts || {};
+    const weakest = [
+      [40 - Number(parts.calories || 0), "להתקרב לטווח הקלוריות היומי"],
+      [25 - Number(parts.protein || 0), "לפזר יותר חלבון לאורך היום"],
+      [20 - Number(parts.water || 0), "להשלים את יעד השתייה"],
+      [10 - Number(parts.activity || 0), "להוסיף פעילות קצרה"],
+    ].sort((a: any, b: any) => b[0] - a[0])[0]?.[1];
+    if (score >= 80) return `יום מאוזן עם ציון ${score}/100. כדאי לשמר את אותה עקביות גם מחר.`;
+    if (score >= 60) return `יום בכיוון טוב עם ציון ${score}/100. השיפור המשמעותי ביותר יהיה ${weakest}.`;
+    return `ציון היום הוא ${score}/100. הצעד הראשון שכדאי להתמקד בו: ${weakest}.`;
+  };
   const scoreTone = scoreToneFor(dailyScore);
   const scoreParts = state?.dailyScore?.parts || {};
   const scoreGuidance = [
@@ -702,6 +715,7 @@ export default function Home() {
     { label: "עקביות", value: Number(scoreParts.consistency || 0), max: 5, tip: "תעד לפחות שתי ארוחות כדי לקבל תמונת יום מלאה." },
   ];
   const scoreImprovement = [...scoreGuidance].sort((a, b) => (b.max - b.value) - (a.max - a.value))[0];
+  const scoreHeadline = dailyScore >= 80 ? "יום מאוזן מאוד — המשך כך." : dailyScore >= 60 ? `כיוון טוב — ${scoreImprovement.tip}` : dailyScore >= 40 ? `יש בסיס טוב. ${scoreImprovement.tip}` : `אפשר לשפר כבר היום: ${scoreImprovement.tip}`;
   const historyDays = useMemo(() => [...(state?.history || []), ...(state?.today ? [{ ...state.today, dailyScore: state.dailyScore }] : [])], [state?.history, state?.today, state?.dailyScore]);
   const activeHistoryDate = historySelectedDate || state?.today?.date || "";
   const activeHistoryDay = historyDays.find((day) => day.date === activeHistoryDate) || historyDays[0];
@@ -1022,6 +1036,7 @@ export default function Home() {
         body: JSON.stringify({ ...onboarding, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
       setState(data);
+      setDark(onboarding.theme === "dark");
       setAiForm((current) => ({ ...current, ...data.ai, apiKey: "" }));
     } catch (e) {
       setError((e as Error).message);
@@ -2044,7 +2059,7 @@ export default function Home() {
         </div>
       </header>
       <section className="welcome">
-        <h1>{greeting}, {state.owner.name}</h1>
+        <div><h1>{greeting}, {state.owner.name}</h1><p>{scoreHeadline}</p></div>
       </section>
       <details className={`daily-score-details score-${scoreTone}`}>
         <summary aria-label="פתיחת הסבר על הציון היומי">
@@ -2123,7 +2138,7 @@ export default function Home() {
       <section className="primary-actions action-trio">
         <button
           className="camera-action"
-          onClick={() => setCameraChoiceOpen(true)}
+          onClick={() => uploadInput.current?.click()}
           disabled={busy}
         >
           <span className="camera-icon"><AppIcon name="camera" /></span>
@@ -2133,14 +2148,6 @@ export default function Home() {
           </span>
           <b>{busy ? "מנתח…" : "צלם עכשיו"}</b>
         </button>
-        <input
-          ref={photoInput}
-          className="camera-input"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          capture="environment"
-          onChange={analyzePhoto}
-        />
         <input
           ref={uploadInput}
           className="camera-input"
@@ -2280,6 +2287,20 @@ export default function Home() {
           )}
         </div>
         <div className="side-stack">
+          <section className="panel water-panel">
+            <header>
+              <div><p className="eyebrow">שתייה</p><h2>מים היום</h2></div>
+              <button className="water-edit" onClick={openWaterEditor} aria-label="עריכת כמות המים">
+                {state.today.waterMl}<small>ml</small><span>עריכה</span>
+              </button>
+            </header>
+            <div className="water-control-row" dir="ltr">
+              <button onClick={() => addWater(-250)} disabled={state.today.waterMl <= 0} aria-label="הפחתת 250 מיליליטר מים">−</button>
+              <div className="water-progress"><i style={{ width: `${Math.min(100, (state.today.waterMl / profile.waterMl) * 100)}%` }} /></div>
+              <button onClick={() => addWater(250)} aria-label="הוספת 250 מיליליטר מים">+</button>
+            </div>
+            <p>{state.today.waterMl.toLocaleString()} מתוך {profile.waterMl.toLocaleString()} מ״ל</p>
+          </section>
           <section className="panel insights-panel">
             <header>
               <div>
@@ -2306,38 +2327,6 @@ export default function Home() {
               <button onClick={() => setCoachOpen(true)}><AppIcon name="coach" /> שאל את המאמן</button>
             </footer>
           </section>
-          <section className="panel water-panel">
-            <header>
-              <div>
-                <p className="eyebrow">שתייה</p>
-                <h2>מים היום</h2>
-              </div>
-              <button
-                className="water-edit"
-                onClick={openWaterEditor}
-                aria-label="עריכת כמות המים"
-              >
-                {state.today.waterMl}
-                <small>ml</small>
-                <span>עריכה</span>
-              </button>
-            </header>
-            <div className="water-progress">
-              <i
-                style={{
-                  width: `${Math.min(100, (state.today.waterMl / profile.waterMl) * 100)}%`,
-                }}
-              />
-            </div>
-            <p>
-              {state.today.waterMl.toLocaleString()} מתוך{" "}
-              {profile.waterMl.toLocaleString()} מ״ל
-            </p>
-            <div className="water-step-actions">
-              <button onClick={() => addWater(-250)} disabled={state.today.waterMl <= 0} aria-label="הפחתת 250 מיליליטר מים">−</button>
-              <button onClick={() => addWater(250)} aria-label="הוספת 250 מיליליטר מים">+</button>
-            </div>
-          </section>
         </div>
       </section>
       <nav className="bottom-nav">
@@ -2349,7 +2338,7 @@ export default function Home() {
         </button>
         <button
           className="nav-camera"
-          onClick={() => photoInput.current?.click()}
+          onClick={() => uploadInput.current?.click()}
           aria-label="צילום ארוחה"
         >
           <AppIcon name="camera" />
@@ -3154,7 +3143,13 @@ export default function Home() {
               </div>
               <button onClick={() => setQuickAddOpen(false)}>×</button>
             </header>
-            {!quickCategory ? (
+            <div className="quick-catalog-search"><AppIcon name="search" /><input autoFocus type="search" value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="חיפוש בארוחות, פירות, ירקות ומשקאות…" aria-label="חיפוש בהוספת אוכל" />{quickSearch && <button type="button" onClick={() => setQuickSearch("")} aria-label="ניקוי החיפוש">×</button>}</div>
+            {quickSearch.trim() ? (
+              <div className="quick-food-grid quick-search-results">
+                {Object.entries(quickFoods).flatMap(([category, items]) => items.map((item, index) => ({ ...item, category, index }))).filter((item) => `${item.name} ${item.portion} ${item.category}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((item: any) => <button key={`${item.category}-${item.name}-${item.portion}`} onClick={() => selectQuickFood(item)}><span className="food-sprite" style={foodSpriteStyle(item.category, item.index)} /><strong>{item.name}</strong><small>{item.portion}</small><b>{item.kcal} kcal</b></button>)}
+                {(state.foods || []).filter((food) => `${food.name} ${food.category || ""}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((food) => <button key={food.id} onClick={() => selectQuickFood({ ...food, portion: "מנה אישית", icon: "🍽" })}>{food.image ? <img src={food.image} alt={food.name} /> : <span>🍽</span>}<strong>{food.name}</strong><small>מהמאגר האישי</small><b>{food.kcal} kcal</b></button>)}
+              </div>
+            ) : !quickCategory ? (
               <div className="category-grid">
                 <button onClick={() => openManualMeal()}>
                   <span className="manual-meal-art">🍽</span>
@@ -3186,12 +3181,12 @@ export default function Home() {
               <>
                 <button
                   className="category-back"
-                  onClick={() => setQuickCategory("")}
+                  onClick={() => { setQuickCategory(""); setQuickSearch(""); }}
                 >
                   → חזרה לקטגוריות
                 </button>
                 <div className={`quick-food-grid ${quickCategory}`}>
-                  {quickFoods[quickCategory].map((item, index) => (
+                  {quickFoods[quickCategory].filter((item) => !quickSearch.trim() || `${item.name} ${item.portion}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((item, index) => (
                     <button
                       key={`${item.name}-${item.portion}`}
                       onClick={() => selectQuickFood(item)}
@@ -3206,7 +3201,7 @@ export default function Home() {
                     </button>
                   ))}
                   {(state.foods || [])
-                    .filter((food) => food.category === quickCategory)
+                    .filter((food) => food.category === quickCategory && (!quickSearch.trim() || `${food.name} ${food.category || ""}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))))
                     .map((food) => (
                       <button
                         key={food.id}
@@ -3800,6 +3795,7 @@ export default function Home() {
                           <small>{statuses.fat.label}</small>
                         </span>
                       </div>
+                      <p className={`history-day-score-summary score-${scoreToneFor(Number(day.dailyScore?.score || 0))}`}><strong>סיכום היום</strong><span>{historyScoreText(day)}</span></p>
                       <section className="history-timeline">
                         {[...day.meals]
                           .sort((a: any, b: any) =>
@@ -3953,7 +3949,6 @@ export default function Home() {
           <section className="settings-modal insights-modal">
             <header>
               <div>
-                <p className="eyebrow">Day · Week · Month</p>
                 <h2>מגמות ותובנות</h2>
               </div>
               <button onClick={() => setInsightsOpen(false)}>×</button>
@@ -3987,7 +3982,7 @@ export default function Home() {
                 {insightsData.sugar?.enabled && (
                   <section className="sugar-insights">
                     <header><div><strong>סוכרים תזונתיים משוערים</strong><small>מוצג בגלל מצב הסוכר שסומן בכרטיס האישי</small></div><b>לא גלוקוז בדם</b></header>
-                    <div className="sugar-periods"><span><small>היום</small><strong>{insightsData.sugar.today}g</strong></span><span><small>ממוצע 7 ימים</small><strong>{insightsData.sugar.weeklyAverage}g</strong></span><span><small>ממוצע 30 ימים</small><strong>{insightsData.sugar.monthlyAverage}g</strong></span></div>
+                    <div className="sugar-periods"><span><small>היום</small><strong>{insightsData.sugar.today == null ? "אין נתונים" : `${insightsData.sugar.today}g`}</strong></span><span><small>ממוצע 7 ימים</small><strong>{insightsData.sugar.weeklyAverage == null ? "אין נתונים" : `${insightsData.sugar.weeklyAverage}g`}</strong></span><span><small>ממוצע 30 ימים</small><strong>{insightsData.sugar.monthlyAverage == null ? "אין נתונים" : `${insightsData.sugar.monthlyAverage}g`}</strong></span></div>
                     {insightsData.sugar.days.some((day: any) => day.coverage > 0) ? <div className="sugar-chart" aria-label="גרף צריכת סוכרים תזונתיים ל־30 ימים">{insightsData.sugar.days.map((day: any) => { const maximum = Math.max(1, ...insightsData.sugar.days.map((item: any) => Number(item.sugar || 0))); return <span key={day.date} title={`${day.date}: ${day.sugar} גרם`}><i style={{ height: `${day.coverage ? Math.max(4, day.sugar / maximum * 100) : 0}%` }} /><small>{new Date(`${day.date}T12:00:00`).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</small></span>; })}</div> : <p className="trend-empty">עדיין אין מספיק ארוחות עם נתון סוכר מאומת. ארוחות חדשות ממקורות תזונה תואמים יצברו נתונים אוטומטית.</p>}
                     <p className="sugar-disclaimer">זהו סך הסוכרים במזון לפי נתוני הקטלוג הזמינים, לא סוכר מוסף ולא מדידת גלוקוז. כיסוי הנתונים בחודש: {insightsData.sugar.coverage}%.</p>
                   </section>
@@ -4027,6 +4022,8 @@ export default function Home() {
                   {[
                     { label: "קלוריות ליום", actual: insightsData.summary.averageCalories, target: profile.calories, unit: "kcal", note: "טווח רצוי: 90%–105% מהיעד", tone: "calories" },
                     { label: "חלבון ליום", actual: insightsData.summary.averageProtein, target: profile.protein, unit: "g", note: "לפחות 90% מהיעד תומך בשובע ובשמירת שריר", tone: "protein" },
+                    { label: "פחמימות ליום", actual: insightsData.summary.averageCarbs, target: profile.carbs, unit: "g", note: "ממוצע יומי מול היעד האישי", tone: "carbs" },
+                    { label: "שומן ליום", actual: insightsData.summary.averageFat, target: profile.fat, unit: "g", note: "ממוצע יומי מול היעד האישי", tone: "fat" },
                     { label: "מים ליום", actual: insightsData.summary.averageWater, target: profile.waterMl, unit: "מ״ל", note: "ממוצע השתייה בימים האחרונים", tone: "water" },
                     { label: "פעילות שבועית", actual: insightsData.summary.activeMinutes, target: 150, unit: "דק׳", note: "יעד בסיס שימושי: 150 דקות בשבוע", tone: "activity" },
                   ].map((metric) => { const percent = Math.round(Number(metric.actual || 0) / Math.max(1, Number(metric.target || 0)) * 100); return <article className={`goal-progress ${metric.tone}`} key={metric.label}><div><strong>{metric.label}</strong><b>{Number(metric.actual || 0).toLocaleString()} / {Number(metric.target || 0).toLocaleString()} {metric.unit}</b></div><span><i style={{ width: `${Math.min(100, percent)}%` }} /></span><footer><small>{metric.note}</small><em>{percent}%</em></footer></article>; })}
@@ -4206,45 +4203,6 @@ export default function Home() {
                 )}
               </section>
             ))}
-          </section>
-        </div>
-      )}
-      {cameraChoiceOpen && (
-        <div className="modal-layer">
-          <button
-            className="backdrop"
-            onClick={() => setCameraChoiceOpen(false)}
-          />
-          <section className="settings-modal capture-choice">
-            <header>
-              <div>
-                <p className="eyebrow">ניתוח ארוחה</p>
-                <h2>איך להוסיף תמונה?</h2>
-              </div>
-              <button onClick={() => setCameraChoiceOpen(false)}>×</button>
-            </header>
-            <div>
-              <button
-                onClick={() => {
-                  setCameraChoiceOpen(false);
-                  photoInput.current?.click();
-                }}
-              >
-                <span><AppIcon name="camera" /></span>
-                <strong>צלם עכשיו</strong>
-                <small>פתח את המצלמה האחורית</small>
-              </button>
-              <button
-                onClick={() => {
-                  setCameraChoiceOpen(false);
-                  uploadInput.current?.click();
-                }}
-              >
-                <span><AppIcon name="image" /></span>
-                <strong>בחר מהגלריה</strong>
-                <small>תמונה קיימת בטלפון או במחשב</small>
-              </button>
-            </div>
           </section>
         </div>
       )}
@@ -5007,6 +4965,13 @@ function Onboarding({
             }
           />
         </label>
+        <div className="onboarding-theme-choice">
+          <strong>צבע הממשק</strong>
+          <div>
+            <button type="button" className={values.theme === "dark" ? "selected dark-choice" : "dark-choice"} onClick={() => setValues({ ...values, theme: "dark" })}><i />כהה</button>
+            <button type="button" className={values.theme === "light" ? "selected light-choice" : "light-choice"} onClick={() => setValues({ ...values, theme: "light" })}><i />בהיר</button>
+          </div>
+        </div>
       </div>
     </>,
     <>
@@ -5071,7 +5036,7 @@ function Onboarding({
     </>,
   ];
   return (
-    <main className="onboarding-shell" dir="rtl">
+    <main className={values.theme === "dark" ? "onboarding-shell onboarding-dark-preview" : "onboarding-shell"} dir="rtl">
       <header>
         <img src="/caloreazi-wordmark-transparent.png" alt="CALOREAZI" />
         <span>
