@@ -8,6 +8,14 @@ import { requireUser } from "@/server/auth.js";
 import { aiRoleCandidates, findModel } from "@/server/ai/models.js";
 export const runtime = "nodejs";
 
+export async function PATCH(request: Request) {
+  const state = await readState();
+  const session = requireUser(state, request);
+  if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
+  await updateState((latest) => { const data = ensureUserData(latest, session.userId); if (data.profile) data.profile.coachHiddenBefore = new Date().toISOString(); return latest; });
+  return Response.json({ ok: true });
+}
+
 function dayTotals(day: any) {
   const meals = Array.isArray(day?.meals) ? day.meals : [];
   return meals.reduce((totals: any, meal: any) => ({

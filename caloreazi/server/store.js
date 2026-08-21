@@ -179,7 +179,7 @@ export function userView(state, userId, admin = false) {
     activity: data.activity,
     dailyScore: calculateDayScore(data.today, data.profile, data.activity),
     streak,
-    coachHistory: data.coachHistory.slice(-40),
+    coachHistory: data.coachHistory.filter((item) => !data.profile?.coachHiddenBefore || new Date(item.at || item.createdAt || 0).getTime() > new Date(data.profile.coachHiddenBefore).getTime()).slice(-40),
     ai,
     aiUsage: admin ? state.aiUsage : [],
     foods: (state.foodCatalog || []).filter((food) => food.visibility === "shared" || food.ownerId === userId),

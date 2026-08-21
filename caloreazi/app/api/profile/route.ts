@@ -1,4 +1,4 @@
-import { requireUser } from "@/server/auth.js";
+import { requireUser, verifyPassword } from "@/server/auth.js";
 import { calculateNutritionTargets } from "@/server/nutrition.js";
 import { readState, updateState, userView } from "@/server/store.js";
 import { validTimeZone } from "@/server/local-date.js";
@@ -20,6 +20,11 @@ export async function PUT(request: Request) {
   if (!(age >= 14 && age <= 120) || !(height >= 100 && height <= 250)) return Response.json({ error: "יש לבדוק גיל וגובה" }, { status: 400 });
   if (!(targetWeight >= 25 && targetWeight <= 350)) return Response.json({ error: "יש להזין משקל יעד תקין" }, { status: 400 });
   if (avatar && (!avatar.startsWith("data:image/jpeg;base64,") || avatar.length > 700_000)) return Response.json({ error: "תמונת הפרופיל אינה תקינה או גדולה מדי" }, { status: 400 });
+  const existingUser = initial.users.find((item) => item.id === session.userId);
+  const existingProfile = initial.userData[session.userId]?.profile;
+  const requestedInitialWeight = Number(body.initialWeight);
+  const changesInitialWeight = Number(existingProfile?.initialWeight) > 0 && requestedInitialWeight >= 25 && requestedInitialWeight <= 350 && requestedInitialWeight !== Number(existingProfile.initialWeight);
+  if (changesInitialWeight && (!existingUser || !(await verifyPassword(String(body.initialWeightPassword || ""), existingUser.password)))) return Response.json({ error: "נדרשת הסיסמה הנוכחית כדי לשנות את המשקל ההתחלתי" }, { status: 403 });
 
   const state = await updateState((latest) => {
     const user = latest.users.find((item) => item.id === session.userId);
@@ -44,6 +49,8 @@ export async function PUT(request: Request) {
       tasteProfile: tasteProfile || profile.tasteProfile,
       avatar,
     });
+    const initialWeight = Number(body.initialWeight);
+    if (initialWeight >= 25 && initialWeight <= 350) profile.initialWeight = initialWeight;
     const caloriePlan = calculateNutritionTargets(profile);
     profile.caloriePlan = caloriePlan;
     profile.calories = caloriePlan.calories;

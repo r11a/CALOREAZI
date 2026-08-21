@@ -484,6 +484,7 @@ export default function Home() {
   const [mealPeriod, setMealPeriod] = useState("snack");
   const [mealDateTime, setMealDateTime] = useState(() => localDateTimeInput());
   const [message, setMessage] = useState("");
+  const [coachListening, setCoachListening] = useState(false);
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string; usage?: string }[]
   >([]);
@@ -579,7 +580,6 @@ export default function Home() {
     distanceKm: 0,
     activeCalories: 0,
   });
-  const [trashOpen, setTrashOpen] = useState(false);
   const [trashItems, setTrashItems] = useState<any[]>([]);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -622,6 +622,7 @@ export default function Home() {
   const audioChunks = useRef<Blob[]>([]);
   const recordingStartedAt = useRef(0);
   const speechRecognition = useRef<any>(null);
+  const coachSpeechRecognition = useRef<any>(null);
   const browserTranscript = useRef("");
   const voiceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceProcessingTimer = useRef<ReturnType<typeof setInterval> | null>(
@@ -1170,7 +1171,7 @@ export default function Home() {
   function closeOpenScreens() {
     setCoachOpen(false); setSettingsOpen(false); setAdminLoginOpen(false); setMealOpen(false); setQuickAddOpen(false);
     setWaterOpen(false); setProfileOpen(false); setHistoryOpen(false); setInsightsOpen(false); setActivityOpen(false);
-    setTrashOpen(false); setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false); setTasteWizardOpen(false);
+    setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false); setTasteWizardOpen(false);
     setMacroDetail(""); setMealPreview(null); setPendingQuickFood(null); setEditingFood(null);
   }
   function openNavigationScreen(screen: "home" | "history" | "admin" | "coach") {
@@ -1236,8 +1237,8 @@ export default function Home() {
     }
   }
   async function openTrash() {
-    setProfileOpen(false);
-    setTrashOpen(true);
+    setAdminTab("trash");
+    setSettingsOpen(true);
     try {
       const data = await api("/api/trash");
       setTrashItems(data.items);
@@ -1275,10 +1276,6 @@ export default function Home() {
     } catch (e) {
       setError((e as Error).message);
     }
-  }
-  function returnFromTrashToAdmin() {
-    setTrashOpen(false);
-    void openAdmin();
   }
   async function addMeal(event: FormEvent) {
     event.preventDefault();
@@ -1494,6 +1491,8 @@ export default function Home() {
       age: profile.age,
       height: profile.height,
       targetWeight: profile.targetWeight,
+      initialWeight: profile.initialWeight || 0,
+      initialWeightPassword: "",
       activity: profile.activity,
       diet: profile.diet,
       restrictions: profile.restrictions || "",
@@ -2132,6 +2131,25 @@ export default function Home() {
       setBusy(false);
     }
   }
+  function startCoachDictation() {
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!Recognition) { setError("הכתבה קולית אינה נתמכת בדפדפן הזה."); return; }
+    coachSpeechRecognition.current?.abort?.();
+    const recognition = new Recognition();
+    coachSpeechRecognition.current = recognition;
+    recognition.lang = "he-IL";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onstart = () => setCoachListening(true);
+    recognition.onresult = (event: any) => { const text = Array.from(event.results).map((result: any) => result[0]?.transcript || "").join(" ").trim(); if (text) setMessage(text); };
+    recognition.onerror = () => { setCoachListening(false); setError("לא ניתן היה לזהות את ההכתבה. בדוק הרשאת מיקרופון ונסה שוב."); };
+    recognition.onend = () => setCoachListening(false);
+    recognition.start();
+  }
+  async function clearCoachDisplay() {
+    try { await api("/api/ai/chat", { method: "PATCH" }); setMessages([]); }
+    catch (e) { setError((e as Error).message); }
+  }
 
   if (!state)
     return (
@@ -2469,7 +2487,7 @@ export default function Home() {
                 </small>
               </div>
               <div className="coach-header-actions">
-                <button className="clear-chat" onClick={() => setMessages([])} title="ניקוי התצוגה בלבד; ההיסטוריה נשמרת">נקה מסך</button>
+                <button className="clear-chat" onClick={clearCoachDisplay} title="ניקוי התצוגה בלבד; ההיסטוריה נשמרת בזיכרון המאמן והמלל לא יחזור">נקה מסך</button>
                 <button onClick={() => setCoachOpen(false)} aria-label="סגירת המאמן">×</button>
               </div>
             </header>
@@ -2502,6 +2520,7 @@ export default function Home() {
               <button onClick={() => setMessage("מה חסר לי היום בחלבון, פחמימות, שומן, מים וקלוריות?")}>מה חסר לי היום?</button>
             </div>
             <form onSubmit={sendMessage}>
+              <button type="button" className={`coach-dictation ${coachListening ? "listening" : ""}`} onClick={startCoachDictation} aria-label={coachListening ? "מקשיב להכתבה" : "הכתבה קולית"} title="הכתבה קולית">{coachListening ? "●" : "🎙"}</button>
               <input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
@@ -2629,7 +2648,7 @@ export default function Home() {
               >
                 Audit
               </button>
-              <button onClick={() => { setSettingsOpen(false); void openTrash(); }}>סל מחזור</button>
+              <button className={adminTab === "trash" ? "active" : ""} onClick={() => void openTrash()}>סל מחזור</button>
             </nav>
             {adminTab === "ai" && adminHealth && (
               <section className="health-grid">
@@ -3222,6 +3241,12 @@ export default function Home() {
                 )}
               </div>
             </section>
+            {adminTab === "trash" && <section className="admin-users admin-operations admin-trash" id="admin-trash">
+              <div className="admin-section-title"><div><p className="eyebrow">שחזור ומחיקה</p><h3>סל מחזור</h3><small>הפריטים נשמרים למשך 30 יום לפני מחיקה קבועה.</small></div><button type="button" className="danger" disabled={!trashItems.length} onClick={emptyTrash}>רוקן סל מחזור</button></div>
+              <div className="trash-list">
+                {trashItems.length ? trashItems.map((item) => <article key={item.id}><div><strong>{item.data.name || item.data.type || "פריט"}</strong><small>{item.ownerName} · {item.type === "meal" ? "ארוחה" : "פעילות"} · {new Date(item.deletedAt).toLocaleDateString("he-IL")}</small></div><div className="trash-actions"><button onClick={() => restoreTrash(item.id)}>שחזר</button><button className="danger" onClick={() => permanentlyDeleteTrash(item.id)}>מחק לצמיתות</button></div></article>) : <p>אין פריטים שנמחקו.</p>}
+              </div>
+            </section>}
             {adminTab === "ai" && aiStatus && <p className="settings-status">{aiStatus}</p>}
             <footer>
               <button onClick={() => saveAi(false)} disabled={busy}>
@@ -3492,13 +3517,17 @@ export default function Home() {
               <label className="initial-weight-field">
                 <span>משקל התחלתי <b>נקודת ייחוס קבועה</b></span>
                 <input
-                  type="text"
-                  value={initialWeight > 0 ? `${initialWeight.toFixed(1)} ק״ג` : "לא נשמר"}
-                  readOnly
-                  aria-readonly="true"
+                  type="number"
+                  min="25"
+                  max="350"
+                  step="0.1"
+                  value={profileForm.initialWeight || ""}
+                  placeholder="הזן משקל התחלתי"
+                  onChange={(e) => setProfileForm({ ...profileForm, initialWeight: Number(e.target.value) })}
                 />
-                <small>נקבע ברישום ואינו משתנה כשמוסיפים מדידות חדשות.</small>
+                <small>ניתן לתקן ידנית. מדידות משקל נוכחי לא ישנו את נקודת הייחוס.</small>
               </label>
+              {initialWeight > 0 && Number(profileForm.initialWeight) !== initialWeight && <label className="initial-weight-password">סיסמה לאישור שינוי<input type="password" autoComplete="current-password" value={profileForm.initialWeightPassword || ""} onChange={(e) => setProfileForm({ ...profileForm, initialWeightPassword: e.target.value })} placeholder="הסיסמה הנוכחית" /><small>השינוי יישמר רק לאחר אימות הסיסמה.</small></label>}
               <label className="current-weight-field">
                 <span>משקל נוכחי <b>נשמר בהיסטוריה</b></span>
                 <input
@@ -3635,18 +3664,6 @@ export default function Home() {
                     ? "ממשק כהה — לחץ למעבר לבהיר"
                     : "ממשק בהיר — לחץ למעבר לכהה"}
                 </small>
-              </div>
-              <b>‹</b>
-            </button>
-            <button
-              className="profile-sharing"
-              type="button"
-              onClick={openTrash}
-            >
-              <span>♲</span>
-              <div>
-                <strong>פריטים שנמחקו</strong>
-                <small>שחזור ארוחות ופעילויות למשך 30 יום</small>
               </div>
               <b>‹</b>
             </button>
@@ -4148,44 +4165,6 @@ export default function Home() {
                 </section>
               </>
             )}
-          </section>
-        </div>
-      )}
-      {trashOpen && (
-        <div className="modal-layer">
-          <button className="backdrop" onClick={() => setTrashOpen(false)} />
-          <section className="settings-modal compact-modal">
-            <header>
-              <div>
-                <p className="eyebrow">Recycle Bin</p>
-                <h2>פריטים שנמחקו</h2>
-              </div>
-              <button onClick={() => setTrashOpen(false)}>×</button>
-            </header>
-            <p className="modal-help">
-              הפריטים נשמרים למשך 30 יום לפני מחיקה קבועה.
-            </p>
-            <div className="trash-toolbar"><button type="button" onClick={returnFromTrashToAdmin}>חזרה למרכז הניהול</button><button type="button" className="danger" disabled={!trashItems.length} onClick={emptyTrash}>רוקן סל מחזור</button></div>
-            <div className="trash-list">
-              {trashItems.length ? (
-                trashItems.map((item) => (
-                  <article key={item.id}>
-                    <div>
-                      <strong>
-                        {item.data.name || item.data.type || "פריט"}
-                      </strong>
-                      <small>
-                        {item.type === "meal" ? "ארוחה" : "פעילות"} ·{" "}
-                        {new Date(item.deletedAt).toLocaleDateString("he-IL")}
-                      </small>
-                    </div>
-                    <div className="trash-actions"><button onClick={() => restoreTrash(item.id)}>שחזר</button><button className="danger" onClick={() => permanentlyDeleteTrash(item.id)}>מחק לצמיתות</button></div>
-                  </article>
-                ))
-              ) : (
-                <p>אין פריטים שנמחקו.</p>
-              )}
-            </div>
           </section>
         </div>
       )}
