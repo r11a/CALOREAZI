@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.1
+
+- Unified photo, voice and manual meal capture around one editable review-and-confirm flow.
+- Added focused “Fix with AI” corrections that update the current draft without saving it automatically.
+- Reduced meal-photo upload size and shortened result polling for faster perceived recognition.
+- Added calm consistency badges that reward progress without punishing broken streaks.
+
 ## 1.9.0
 
 - הורחבו בדיקות שמירת הארוחות ליצירה, עריכה, חישוב יומי ושמירה בתאריך היסטורי.
