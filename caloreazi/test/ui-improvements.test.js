@@ -131,3 +131,14 @@ test("meals can inherit one lightweight image across today and history without b
   assert.match(page, /imageCompleted/);
   assert.match(page, /loading="lazy" decoding="async"/);
 });
+
+test("home meal suggestions combine macro gaps with an optional taste wizard", () => {
+  assert.match(page, /mealSuggestionCatalog/);
+  assert.match(page, /mealSuggestions/);
+  assert.match(page, /מה כדאי לאכול עכשיו/);
+  assert.match(page, /tasteQuestions/);
+  assert.match(page, /setTasteChoice/);
+  assert.match(page, /tasteProfile/);
+  assert.match(css, /meal-suggestions-panel/);
+  assert.match(css, /taste-wizard/);
+});

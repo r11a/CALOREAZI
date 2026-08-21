@@ -54,6 +54,21 @@ const goalLabels: Record<string, string> = {
   gain: "עלייה מבוקרת במשקל",
   healthy: "אכילה בריאה יותר",
 };
+const mealSuggestionCatalog = [
+  { name: "יוגורט, שיבולת שועל ופירות", periods: ["breakfast", "snack"], kcal: 340, protein: 23, carbs: 43, fat: 8, tags: ["חלבי", "מתוק", "פירות", "מהיר"] },
+  { name: "חביתה, קוטג׳ וסלט", periods: ["breakfast", "dinner"], kcal: 390, protein: 34, carbs: 18, fat: 20, tags: ["ביצים", "חלבי", "מלוח", "ירקות"] },
+  { name: "כריך טונה וירקות", periods: ["breakfast", "lunch", "dinner"], kcal: 430, protein: 38, carbs: 45, fat: 11, tags: ["דגים", "מלוח", "מהיר"] },
+  { name: "חזה עוף, אורז וסלט", periods: ["lunch", "dinner"], kcal: 610, protein: 52, carbs: 66, fat: 14, tags: ["עוף", "אורז", "ירקות", "חם"] },
+  { name: "סלמון, בטטה וירקות", periods: ["lunch", "dinner"], kcal: 590, protein: 42, carbs: 48, fat: 24, tags: ["דגים", "ירקות", "חם"] },
+  { name: "קערת עדשים, טחינה וירקות", periods: ["lunch", "dinner"], kcal: 520, protein: 25, carbs: 67, fat: 18, tags: ["קטניות", "טבעוני", "ירקות", "חם"] },
+  { name: "קוטג׳, פרי ושקדים", periods: ["snack", "breakfast"], kcal: 280, protein: 22, carbs: 28, fat: 10, tags: ["חלבי", "פירות", "מהיר"] },
+  { name: "חומוס, ביצה וירקות", periods: ["lunch", "dinner", "snack"], kcal: 410, protein: 20, carbs: 39, fat: 20, tags: ["קטניות", "ביצים", "ירקות", "מלוח"] },
+];
+const tasteQuestions = [
+  { title: "מקורות חלבון", options: ["עוף", "דגים", "ביצים", "חלבי", "קטניות", "טבעוני"] },
+  { title: "סגנון וטעמים", options: ["מלוח", "מתוק", "חריף", "חם", "קר", "מהיר"] },
+  { title: "תוספות אהובות", options: ["אורז", "לחם", "פירות", "ירקות", "טחינה", "שקדים"] },
+];
 const periodLabels: Record<string, string> = {
   breakfast: "ארוחת בוקר",
   lunch: "ארוחת צהריים",
@@ -533,6 +548,10 @@ export default function Home() {
   const [waterTargetValue, setWaterTargetValue] = useState(2000);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileForm, setProfileForm] = useState<any>({});
+  const [tasteWizardOpen, setTasteWizardOpen] = useState(false);
+  const [tasteWizardStep, setTasteWizardStep] = useState(0);
+  const [tasteDraft, setTasteDraft] = useState<any>({ likes: [], dislikes: [], prepTime: "medium" });
+  const [suggestionPeriod, setSuggestionPeriod] = useState("lunch");
   const [now, setNow] = useState(() => new Date());
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historySelectedDate, setHistorySelectedDate] = useState("");
@@ -718,6 +737,15 @@ export default function Home() {
   ];
   const scoreImprovement = [...scoreGuidance].sort((a, b) => (b.max - b.value) - (a.max - a.value))[0];
   const scoreHeadline = dailyScore >= 80 ? "יום מאוזן מאוד — המשך כך." : dailyScore >= 60 ? `כיוון טוב — ${scoreImprovement.tip}` : dailyScore >= 40 ? `יש בסיס טוב. ${scoreImprovement.tip}` : `אפשר לשפר כבר היום: ${scoreImprovement.tip}`;
+  const mealSuggestions = useMemo(() => {
+    const taste = profile?.tasteProfile || { likes: [], dislikes: [] }; const likes = taste.likes || []; const dislikes = taste.dislikes || []; const blocked = `${profile?.restrictions || ""} ${profile?.foodAllergies || ""}`.toLocaleLowerCase("he");
+    const proteinGap = Math.max(0, Number(profile?.protein || 0) - macros.protein); const carbsGap = Math.max(0, Number(profile?.carbs || 0) - macros.carbs); const fatGap = Math.max(0, Number(profile?.fat || 0) - macros.fat);
+    return mealSuggestionCatalog.filter((meal) => meal.periods.includes(suggestionPeriod) && !meal.tags.some((tag) => dislikes.includes(tag) || blocked.includes(tag.toLocaleLowerCase("he"))) && !(profile?.diet === "vegan" && meal.tags.some((tag) => ["עוף", "דגים", "ביצים", "חלבי"].includes(tag))) && !(profile?.diet === "vegetarian" && meal.tags.some((tag) => ["עוף", "דגים"].includes(tag)))).map((meal) => {
+      const preference = meal.tags.filter((tag) => likes.includes(tag)).length * 18; const nutrition = Math.min(proteinGap, meal.protein) * 1.4 + Math.min(carbsGap, meal.carbs) * .25 + Math.min(fatGap, meal.fat) * .35;
+      const reason = proteinGap > 20 && meal.protein >= 25 ? `משלימה כ־${meal.protein}g חלבון מהחוסר היומי` : carbsGap > 35 && meal.carbs >= 35 ? "מתאימה לחוסר הנוכחי בפחמימות" : "מאוזנת ביחס למה שנאכל עד עכשיו";
+      return { ...meal, rank: preference + nutrition, reason, personal: meal.tags.some((tag) => likes.includes(tag)) };
+    }).sort((a, b) => b.rank - a.rank).slice(0, 3);
+  }, [profile, macros, suggestionPeriod]);
   const historyDays = useMemo(() => [...(state?.history || []), ...(state?.today ? [{ ...state.today, dailyScore: state.dailyScore }] : [])], [state?.history, state?.today, state?.dailyScore]);
   const activeHistoryDate = historySelectedDate || state?.today?.date || "";
   const activeHistoryDay = historyDays.find((day) => day.date === activeHistoryDate) || historyDays[0];
@@ -1084,7 +1112,7 @@ export default function Home() {
   function closeOpenScreens() {
     setCoachOpen(false); setSettingsOpen(false); setAdminLoginOpen(false); setMealOpen(false); setQuickAddOpen(false);
     setWaterOpen(false); setProfileOpen(false); setHistoryOpen(false); setInsightsOpen(false); setActivityOpen(false);
-    setTrashOpen(false); setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false);
+    setTrashOpen(false); setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false); setTasteWizardOpen(false);
     setPendingQuickFood(null); setEditingFood(null);
   }
   function openNavigationScreen(screen: "home" | "history" | "admin" | "coach") {
@@ -1401,6 +1429,7 @@ export default function Home() {
       customProtein: profile.protein,
       customCarbs: profile.carbs,
       customFat: profile.fat,
+      tasteProfile: profile.tasteProfile || { likes: [], dislikes: [], prepTime: "medium" },
       avatar: profile.avatar || "",
     });
     setWeightValue(latestWeight);
@@ -1426,6 +1455,21 @@ export default function Home() {
     } finally {
       setBusy(false);
     }
+  }
+  function openTasteWizard() {
+    const current = profile?.tasteProfile || { likes: [], dislikes: [], prepTime: "medium" };
+    setProfileForm({ name: state?.owner?.name || "", age: profile.age, height: profile.height, targetWeight: profile.targetWeight, activity: profile.activity, diet: profile.diet, restrictions: profile.restrictions || "", diabetesStatus: profile.diabetesStatus || "none", hypertension: Boolean(profile.hypertension), foodAllergies: profile.foodAllergies || "", relevantMedications: profile.relevantMedications || "", pregnancyStatus: profile.pregnancyStatus || "none", trainingDayBonus: profile.trainingDayBonus || 0, targetMode: profile.targetMode || "automatic", customCalories: profile.calories, customProtein: profile.protein, customCarbs: profile.carbs, customFat: profile.fat, avatar: profile.avatar || "", tasteProfile: current });
+    setTasteDraft(structuredClone(current)); setTasteWizardStep(0); setProfileOpen(false); setTasteWizardOpen(true);
+  }
+  async function saveTasteWizard() {
+    setBusy(true);
+    try {
+      const latest = await api("/api/profile", { method: "PUT", body: JSON.stringify({ ...profileForm, tasteProfile: { ...tasteDraft, completedAt: new Date().toISOString() }, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }) });
+      setState(latest); setProfileForm((current: any) => ({ ...current, tasteProfile: tasteDraft })); setTasteWizardOpen(false);
+    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  }
+  function setTasteChoice(option: string, choice: "like" | "neutral" | "dislike") {
+    setTasteDraft((current: any) => ({ ...current, likes: choice === "like" ? [...new Set([...(current.likes || []), option])] : (current.likes || []).filter((item: string) => item !== option), dislikes: choice === "dislike" ? [...new Set([...(current.dislikes || []), option])] : (current.dislikes || []).filter((item: string) => item !== option) }));
   }
   async function loadAvatar(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -2213,6 +2257,13 @@ export default function Home() {
         </aside>
       )}
       <section className="content-grid">
+        <div className="main-feed">
+        <section className="panel meal-suggestions-panel">
+          <header><div><h2>מה כדאי לאכול עכשיו?</h2><p>לפי החוסרים היום והטעם האישי שלך</p></div><button type="button" onClick={openTasteWizard}>העדפות</button></header>
+          <div className="suggestion-periods">{[["breakfast","בוקר"],["lunch","צהריים"],["dinner","ערב"],["snack","בין ארוחות"]].map(([key,label]) => <button type="button" className={suggestionPeriod === key ? "selected" : ""} onClick={() => setSuggestionPeriod(key)} key={key}>{label}</button>)}</div>
+          <div className="meal-suggestion-list">{mealSuggestions.map((meal) => <article key={meal.name}><div><strong>{meal.name}</strong><small>{meal.reason}{meal.personal ? " · מתאים להעדפות שלך" : ""}</small></div><span><b>{meal.kcal}</b> kcal</span><footer>{meal.protein}g חלבון · {meal.carbs}g פחמימות · {meal.fat}g שומן</footer></article>)}</div>
+          {!profile?.tasteProfile?.completedAt && <button className="taste-survey-callout" type="button" onClick={openTasteWizard}>התאם את ההמלצות אליי · שאלון קצר ולא חובה</button>}
+        </section>
         <div className="panel meals-panel">
           <header>
             <div>
@@ -2313,7 +2364,7 @@ export default function Home() {
             </button>
           )}
         </div>
-        <div className="side-stack">
+        </div><div className="side-stack">
           <section className="panel water-panel">
             <header>
               <div><p className="eyebrow">שתייה</p><h2>מים היום</h2></div>
@@ -3313,6 +3364,14 @@ export default function Home() {
           </section>
         </div>
       )}
+      {tasteWizardOpen && (
+        <div className="modal-layer"><button className="backdrop" onClick={() => setTasteWizardOpen(false)} /><section className="settings-modal taste-wizard">
+          <header><div><h2>הטעם האישי שלי</h2></div><button onClick={() => setTasteWizardOpen(false)}>×</button></header>
+          <div className="taste-wizard-progress"><i style={{ width: `${((tasteWizardStep + 1) / (tasteQuestions.length + 1)) * 100}%` }} /><span>{tasteWizardStep + 1}/{tasteQuestions.length + 1}</span></div>
+          {tasteWizardStep < tasteQuestions.length ? <section><h3>{tasteQuestions[tasteWizardStep].title}</h3><p>לכל פריט אפשר לבחור אוהב, ניטרלי או לא אוהב.</p><div className="taste-options">{tasteQuestions[tasteWizardStep].options.map((option) => { const choice = tasteDraft.likes?.includes(option) ? "like" : tasteDraft.dislikes?.includes(option) ? "dislike" : "neutral"; return <article key={option}><strong>{option}</strong><div><button type="button" className={choice === "dislike" ? "selected dislike" : ""} onClick={() => setTasteChoice(option, "dislike")}>לא אוהב</button><button type="button" className={choice === "neutral" ? "selected" : ""} onClick={() => setTasteChoice(option, "neutral")}>ניטרלי</button><button type="button" className={choice === "like" ? "selected like" : ""} onClick={() => setTasteChoice(option, "like")}>אוהב</button></div></article>; })}</div></section> : <section className="taste-finish"><h3>עוד פרט קטן</h3><label>כמה זמן מתאים לך להשקיע בדרך כלל?<select value={tasteDraft.prepTime || "medium"} onChange={(event) => setTasteDraft({ ...tasteDraft, prepTime: event.target.value })}><option value="quick">עד 10 דקות</option><option value="medium">עד חצי שעה</option><option value="long">אין מגבלה</option></select></label><div><span><b>{tasteDraft.likes?.length || 0}</b> אהובים</span><span><b>{tasteDraft.dislikes?.length || 0}</b> לא אהובים</span></div><p>המידע יישמר בפרופיל וישמש את המלצות הארוחות ואת המאמן. אפשר לשנות אותו בכל עת.</p></section>}
+          <footer><button type="button" onClick={() => tasteWizardStep ? setTasteWizardStep(tasteWizardStep - 1) : setTasteWizardOpen(false)}>{tasteWizardStep ? "חזרה" : "ביטול"}</button><button className="primary" type="button" disabled={busy} onClick={() => tasteWizardStep < tasteQuestions.length ? setTasteWizardStep(tasteWizardStep + 1) : saveTasteWizard()}>{tasteWizardStep < tasteQuestions.length ? "המשך" : busy ? "שומר…" : "שמור העדפות"}</button></footer>
+        </section></div>
+      )}
       {profileOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setProfileOpen(false)} />
@@ -3491,6 +3550,7 @@ export default function Home() {
                 </b>
               </span>
             </div>
+            <button className="taste-profile-entry" type="button" onClick={openTasteWizard}><span>♡</span><div><strong>שאלון טעמים והעדפות</strong><small>{profile?.tasteProfile?.completedAt ? `${profile.tasteProfile.likes?.length || 0} העדפות אהובות נשמרו · אפשר לעדכן` : "שאלון קצר ולא חובה להתאמת המלצות הארוחות וה־AI"}</small></div><b>←</b></button>
             <button
               className="profile-sharing"
               type="button"

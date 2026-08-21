@@ -15,6 +15,7 @@ export async function PUT(request: Request) {
   const height = Number(body.height);
   const targetWeight = Number(body.targetWeight);
   const avatar = String(body.avatar || "");
+  const tasteProfile = body.tasteProfile && typeof body.tasteProfile === "object" ? { likes: [...new Set((Array.isArray(body.tasteProfile.likes) ? body.tasteProfile.likes : []).map((item) => String(item).slice(0, 40)))].slice(0, 30), dislikes: [...new Set((Array.isArray(body.tasteProfile.dislikes) ? body.tasteProfile.dislikes : []).map((item) => String(item).slice(0, 40)))].slice(0, 30), prepTime: ["quick", "medium", "long"].includes(body.tasteProfile.prepTime) ? body.tasteProfile.prepTime : "medium", completedAt: body.tasteProfile.completedAt || null } : undefined;
   if (name.length < 2) return Response.json({ error: "יש להזין שם תקין" }, { status: 400 });
   if (!(age >= 14 && age <= 120) || !(height >= 100 && height <= 250)) return Response.json({ error: "יש לבדוק גיל וגובה" }, { status: 400 });
   if (!(targetWeight >= 25 && targetWeight <= 350)) return Response.json({ error: "יש להזין משקל יעד תקין" }, { status: 400 });
@@ -40,6 +41,7 @@ export async function PUT(request: Request) {
       timeZone: validTimeZone(body.timeZone || profile.timeZone),
       trainingDayBonus: Math.min(600, Math.max(0, Number(body.trainingDayBonus) || 0)),
       targetMode: body.targetMode === "custom" ? "custom" : "automatic",
+      tasteProfile: tasteProfile || profile.tasteProfile,
       avatar,
     });
     const caloriePlan = calculateNutritionTargets(profile);
