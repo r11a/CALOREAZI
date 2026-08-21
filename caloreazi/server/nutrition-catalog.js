@@ -23,6 +23,9 @@ const foods = [
   ["apple", "תפוח", ["תפוח עץ", "apple"], 52, 0.3, 13.8, 0.2],
   ["banana", "בננה", ["banana"], 89, 1.1, 22.8, 0.3],
   ["orange", "תפוז", ["orange"], 47, 0.9, 11.8, 0.1],
+  ["coffee-black-brewed", "קפה שחור", ["אספרסו", "קפה ללא חלב", "black coffee", "brewed coffee", "espresso"], 2, 0.1, 0, 0],
+  ["coffee-with-milk", "קפה עם חלב", ["קפה הפוך", "לאטה", "קפוצ'ינו", "coffee with milk", "cafe latte", "cappuccino"], 36, 2, 3.6, 1.6],
+  ["tea-brewed", "תה", ["תה ללא סוכר", "black tea", "brewed tea"], 1, 0, 0.3, 0],
 ].map(([sourceId, name, aliases, kcalPer100, proteinPer100, carbsPer100, fatPer100]) => ({ source: "CALOREAZI_CURATED", sourceId, sourceVersion: "2026-08-20", name, aliases, kcalPer100, proteinPer100, carbsPer100, fatPer100 }));
 
 function normalize(value) { return String(value || "").toLocaleLowerCase("he").replace(/[׳'״".,()]/g, "").replace(/\s+/g, " ").trim(); }
@@ -48,6 +51,7 @@ export function enrichVisionItems(items) {
 
 const usdaCache = new Map();
 function nutrientValue(food, names) { const nutrient = (food.foodNutrients || []).find((item) => names.includes(String(item.nutrientName || item.nutrient?.name || "").toLowerCase())); return Math.max(0, Number(nutrient?.value ?? nutrient?.amount) || 0); }
+export function energyKcal(food) { const nutrients = food.foodNutrients || []; const kcal = nutrients.find((item) => String(item.nutrientName || item.nutrient?.name || "").toLowerCase() === "energy" && String(item.unitName || item.nutrient?.unitName || "").toUpperCase() === "KCAL"); if (kcal) return Math.max(0, Number(kcal.value ?? kcal.amount) || 0); const kj = nutrients.find((item) => String(item.nutrientName || item.nutrient?.name || "").toLowerCase() === "energy" && String(item.unitName || item.nutrient?.unitName || "").toUpperCase() === "KJ"); return kj ? Math.max(0, (Number(kj.value ?? kj.amount) || 0) / 4.184) : 0; }
 async function findUsdaFood(name) {
   const apiKey = process.env.CALOREAZI_USDA_API_KEY || "DEMO_KEY";
   const query = String(name || "").trim();
@@ -56,7 +60,7 @@ async function findUsdaFood(name) {
   const response = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(apiKey)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query, pageSize: 5, dataType: ["Foundation", "SR Legacy"] }), signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`USDA FoodData Central returned ${response.status}`);
   const food = (await response.json()).foods?.[0];
-  const result = food ? { source: "USDA_FDC", sourceId: String(food.fdcId), sourceVersion: food.publicationDate || "live", name: food.description, aliases: [], kcalPer100: nutrientValue(food, ["energy"]), proteinPer100: nutrientValue(food, ["protein"]), carbsPer100: nutrientValue(food, ["carbohydrate, by difference"]), fatPer100: nutrientValue(food, ["total lipid (fat)"]) } : null;
+  const result = food ? { source: "USDA_FDC", sourceId: String(food.fdcId), sourceVersion: food.publicationDate || "live", name: food.description, aliases: [], kcalPer100: energyKcal(food), proteinPer100: nutrientValue(food, ["protein"]), carbsPer100: nutrientValue(food, ["carbohydrate, by difference"]), fatPer100: nutrientValue(food, ["total lipid (fat)"]) } : null;
   usdaCache.set(cacheKey, result); return result;
 }
 

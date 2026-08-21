@@ -24,7 +24,11 @@ try {
   const login = await json("/api/auth/session", { method: "POST", headers: { "Content-Type": "application/json", Origin: base }, body: JSON.stringify({ login: "member@example.test", password: "MemberPassword123!" }) });
   assert.equal(login.response.status, 200, JSON.stringify(login.body)); const memberCookie = cookie(login.response); assert.ok(memberCookie);
   const memberMeal = await json("/api/meals", { method: "POST", headers: { "Content-Type": "application/json", Cookie: memberCookie, Origin: base }, body: JSON.stringify({ name: "Member meal", kcal: 250, protein: 20, carbs: 20, fat: 8, period: "lunch" }) });
-  assert.equal(memberMeal.response.status, 200); const memberMealId = memberMeal.body.today.meals[0].id;
+  assert.equal(memberMeal.response.status, 200); const memberMealId = memberMeal.body.savedMealId;
+  assert.ok(memberMealId, "meal API did not return the persisted id");
+  const stateAfterMealSave = await json("/api/state", { headers: { Cookie: memberCookie } });
+  const mealsAfterRoundTrip = [stateAfterMealSave.body.today, ...(stateAfterMealSave.body.history || [])].flatMap((day) => day?.meals || []);
+  assert.equal(mealsAfterRoundTrip.some((meal) => meal.id === memberMealId), true, "meal disappeared after database round-trip");
   const crossDelete = await json("/api/meals", { method: "DELETE", headers: { "Content-Type": "application/json", Cookie: adminCookie, Origin: base }, body: JSON.stringify({ id: memberMealId }) });
   assert.equal(crossDelete.response.status, 200);
   const memberState = await json("/api/state", { headers: { Cookie: memberCookie } });

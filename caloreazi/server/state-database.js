@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { localDateAt } from "./local-date.js";
+import { localDateAt, userTimeZone } from "./local-date.js";
 
 const execFileAsync = promisify(execFile);
 export function databaseStateEnabled() { return Boolean(process.env.CALOREAZI_DATABASE_URL); }
@@ -52,18 +52,17 @@ const readSql = `SELECT encode(convert_to(json_build_object(
 )::text,'UTF8'),'base64')`;
 
 function emptyData(profile = null) { return { profile, today: { date: "", waterMl: 0, meals: [] }, history: [], measurements: [], favorites: [], activity: [], foodCalibration: [], coachHistory: [] }; }
-function hydrate(raw) {
+export function hydrateDatabaseState(raw, now = new Date()) {
   const state = { version: Number(raw.version || 1), owner: null, adminAuth: null, users: raw.users || [], sessions: raw.sessions || [], userData: {}, ai: raw.ai || {}, aiUsage: raw.aiUsage || [], analysisJobs: raw.analysisJobs || [], foodCatalog: raw.foodCatalog || [], partnerships: raw.partnerships || [], trash: raw.trash || [], auditLog: raw.auditLog || [], systemSettings: raw.systemSettings || {} };
   for (const user of state.users) state.userData[user.id] = emptyData(raw.profiles?.[user.id] || null);
   const getData = (id) => state.userData[id] || (state.userData[id] = emptyData());
-  const today = localDateAt();
-  for (const row of raw.days || []) { const data = getData(row.userId); const day = { ...row.payload, meals: [] }; if (day.date === today) data.today = day; else data.history.push(day); }
-  for (const row of raw.meals || []) { const data = getData(row.userId); const localDate = String(row.localDate || row.payload.time || "").slice(0, 10) || today; let day = localDate === today ? data.today : data.history.find((item) => item.date === localDate); if (!day) { day = { date: localDate, waterMl: 0, meals: [] }; if (localDate === today) data.today = day; else data.history.push(day); } day.meals.push(row.payload); }
+  for (const row of raw.days || []) { const date = String(row.payload?.date || ""); if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue; const data = getData(row.userId); const today = localDateAt(now, userTimeZone(data)); const day = { ...row.payload, date, meals: [] }; if (day.date === today) data.today = day; else data.history.push(day); }
+  for (const row of raw.meals || []) { const data = getData(row.userId); const today = localDateAt(now, userTimeZone(data)); const candidate = String(row.localDate || ""); const localDate = /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : localDateAt(row.payload?.time || now, userTimeZone(data)); let day = localDate === today ? data.today : data.history.find((item) => item.date === localDate); if (!day || !day.date) { day = { date: localDate, waterMl: Number(day?.waterMl || 0), meals: day?.meals || [] }; if (localDate === today) data.today = day; else data.history.push(day); } day.meals.push(row.payload); }
   for (const [key, target] of [["measurements","measurements"],["activities","activity"],["favorites","favorites"],["calibrations","foodCalibration"],["coach","coachHistory"]]) for (const row of raw[key] || []) getData(row.userId)[target].push(row.payload);
   return state;
 }
 
-export async function readDatabaseState() { const encoded = await psql(["-c", readSql]); return encoded ? hydrate(JSON.parse(Buffer.from(encoded, "base64").toString("utf8"))) : null; }
+export async function readDatabaseState() { const encoded = await psql(["-c", readSql]); return encoded ? hydrateDatabaseState(JSON.parse(Buffer.from(encoded, "base64").toString("utf8"))) : null; }
 
 async function readRevision() { return Number(await psql(["-c", "SELECT COALESCE((SELECT value #>> '{}' FROM app_settings WHERE key='runtime_revision'),'0')"])); }
 

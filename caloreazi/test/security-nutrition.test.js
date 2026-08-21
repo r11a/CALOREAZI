@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { enrichVisionItems, findNutritionFood } from "../server/nutrition-catalog.js";
+import { energyKcal, enrichVisionItems, findNutritionFood } from "../server/nutrition-catalog.js";
 import { checkRateLimit, requireSameOrigin } from "../server/security.js";
 import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "../server/domains/meals/repository.js";
 import { parseVisionResult } from "../server/meal-analysis.js";
@@ -17,6 +17,17 @@ test("unknown nutrition matches require confirmation and never inherit AI values
   assert.equal(result.nutritionStatus, "needs_confirmation");
   assert.equal(result.items[0].kcalPer100, 0);
   assert.equal(result.items[0].nutritionSource, null);
+});
+
+test("coffee uses curated realistic values instead of vision estimates", () => {
+  assert.equal(findNutritionFood("קפה שחור").kcalPer100, 2);
+  assert.equal(findNutritionFood("קפה עם חלב בספל").sourceId, "coffee-with-milk");
+  assert.equal(findNutritionFood("cappuccino").sourceId, "coffee-with-milk");
+});
+
+test("USDA energy respects units and converts kilojoules to kilocalories", () => {
+  assert.equal(energyKcal({ foodNutrients: [{ nutrientName: "Energy", unitName: "KJ", value: 383 }, { nutrientName: "Energy", unitName: "KCAL", value: 92 }] }), 92);
+  assert.ok(Math.abs(energyKcal({ foodNutrients: [{ nutrientName: "Energy", unitName: "KJ", value: 383 }] }) - 91.54) < .01);
 });
 
 test("vision parser accepts identification fields without nutrition estimates", () => {

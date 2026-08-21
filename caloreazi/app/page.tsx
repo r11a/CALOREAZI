@@ -59,6 +59,11 @@ const periodLabels: Record<string, string> = {
   dinner: "ארוחת ערב",
   snack: "בין הארוחות",
 };
+function localDateTimeInput(date = new Date()) {
+  const local = new Date(date);
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+  return local.toISOString().slice(0, 16);
+}
 const quickFoods: Record<
   string,
   {
@@ -454,11 +459,7 @@ export default function Home() {
   );
   const [generateFoodArtwork, setGenerateFoodArtwork] = useState(false);
   const [mealPeriod, setMealPeriod] = useState("snack");
-  const [mealDateTime, setMealDateTime] = useState(() => {
-    const date = new Date();
-    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-    return date.toISOString().slice(0, 16);
-  });
+  const [mealDateTime, setMealDateTime] = useState(() => localDateTimeInput());
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string; usage?: string }[]
@@ -1066,13 +1067,24 @@ export default function Home() {
         confidence: mealConfidence === "high" ? .9 : mealConfidence === "medium" ? .7 : .45,
       };
       let latest = state;
-      if (!catalogOnly)
-        latest = await api("/api/meals", {
+      let savedMealId = editingMealId;
+      let savedLocalDate = "";
+      if (!catalogOnly) {
+        const saved = await api("/api/meals", {
           method: editingMealId ? "PATCH" : "POST",
           body: JSON.stringify(
             editingMealId ? { ...finalMeal, id: editingMealId } : finalMeal,
           ),
         });
+        savedMealId = saved.savedMealId || savedMealId;
+        savedLocalDate = saved.savedLocalDate || "";
+        latest = await api("/api/state");
+        const persistedMeals = [latest.today, ...(latest.history || [])].flatMap(
+          (day: any) => day?.meals || [],
+        );
+        if (!savedMealId || !persistedMeals.some((meal: any) => meal.id === savedMealId))
+          throw new Error("השמירה לא אומתה במסד הנתונים. הארוחה נשארה פתוחה כדי שלא תאבד — נסה שוב.");
+      }
       if (saveToLibrary || catalogOnly) {
         await api("/api/foods", {
           method: "POST",
@@ -1088,6 +1100,8 @@ export default function Home() {
       }
       setState(latest);
       if (!catalogOnly) setMealResult({ name: finalMeal.name, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId) });
+      if (!catalogOnly && savedLocalDate && savedLocalDate !== latest.today?.date)
+        setError(`הארוחה נשמרה בהיסטוריה בתאריך ${savedLocalDate}, בהתאם לשעה שנבחרה.`);
       setMealOpen(false);
       setEditingMealId("");
       setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 });
@@ -1144,7 +1158,6 @@ export default function Home() {
   }
   function editMeal(meal: any) {
     const date = new Date(meal.time);
-    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
     setEditingMealId(meal.id);
     setMealForm({
       name: meal.name,
@@ -1155,7 +1168,7 @@ export default function Home() {
     });
     setMealItems(structuredClone(meal.items || []));
     setMealPeriod(meal.period || "snack");
-    setMealDateTime(date.toISOString().slice(0, 16));
+    setMealDateTime(localDateTimeInput(date));
     setMealSource(meal.source || "manual");
     setPhotoPreview(meal.image || "");
     setSaveToLibrary(false);
@@ -1300,6 +1313,7 @@ export default function Home() {
     setSaveToLibrary(false);
     setGenerateFoodArtwork(false);
     setPhotoPreview("");
+    setMealDateTime(localDateTimeInput());
     setPhotoStatus("תאר את הארוחה וה-AI יחשב ויפרק אותה לפריטים לפני האישור.");
     setQuickAddOpen(false);
     setMealOpen(true);
@@ -1411,6 +1425,7 @@ export default function Home() {
     setMealSource("manual");
     setManualAiMode(false);
     setPhotoPreview("");
+    setMealDateTime(localDateTimeInput());
     setPhotoStatus("ערכים משוערים למנה המקובלת — אפשר לתקן לפני השמירה.");
     setPendingQuickFood(null);
     setQuickAddOpen(false);
@@ -1474,6 +1489,7 @@ export default function Home() {
     setMealItems(food.items || []);
     setMealSource("manual");
     setPhotoPreview(food.image || "");
+    setMealDateTime(localDateTimeInput());
     setPhotoStatus(
       `מהספרייה ${food.visibility === "shared" ? "המשותפת" : "הפרטית"} · נוצר על ידי ${food.ownerName || "המשתמש"}`,
     );
@@ -1554,6 +1570,7 @@ export default function Home() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    setMealDateTime(localDateTimeInput());
     setBusy(true);
     setPhotoStatus("מנתח את הארוחה בעזרת AI…");
     try {
@@ -1721,6 +1738,7 @@ export default function Home() {
           setMealItems(result.items);
           setAiOriginalItems(structuredClone(result.items));
           setPhotoPreview("");
+          setMealDateTime(localDateTimeInput());
           setPhotoStatus(
             `תמלול: “${result.transcript}”\nזוהו ${result.items.length} פריטים. בדוק שמות, משקל וכמות; החישוב יתבצע רק באישור.`,
           );

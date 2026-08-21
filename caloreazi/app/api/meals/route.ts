@@ -14,6 +14,16 @@ export async function POST(request: Request) {
   const calculated = items.length ? calculateMealFromItems(items) : body;
   const kcal = Math.max(0, Number(calculated.kcal) || 0);
   if (!name || !kcal) return Response.json({ error: "יש להזין שם ארוחה וקלוריות" }, { status: 400 });
+  const beveragePattern = /(קפה|אספרסו|לאטה|קפוצ.?ינו|תה|coffee|espresso|latte|cappuccino|tea)/i;
+  const implausibleBeverage = items.some((item) => {
+    if (!beveragePattern.test(String(item.name || ""))) return false;
+    const grams = Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1);
+    const servingKcal = grams * Math.max(0, Number(item.kcalPer100) || 0) / 100;
+    return grams > 750 || servingKcal > 300;
+  });
+  if (["photo", "voice"].includes(body.source) && implausibleBeverage)
+    return Response.json({ error: "זוהה חישוב לא סביר למשקה. בדוק את סוג הקפה, הכמות והתוספות לפני השמירה." }, { status: 422 });
+  let savedMealId = ""; let savedLocalDate = "";
   const state = await updateState(async (latest) => {
     const data = ensureUserData(latest, session.userId);
     const source = ["photo", "voice"].includes(body.source) ? body.source : "manual";
@@ -22,7 +32,7 @@ export async function POST(request: Request) {
     const meal = { id, name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
     meal.score = calculateMealScore(meal);
     if (body.analysisJobId) { const job = latest.analysisJobs?.find((item) => item.id === body.analysisJobId && item.userId === session.userId); if (job) { job.status = "completed"; job.mealId = meal.id; job.completedAt = new Date().toISOString(); job.updatedAt = job.completedAt; } }
-    const localDate = localDateAt(time, userTimeZone(data));
+    const localDate = localDateAt(time, userTimeZone(data)); savedMealId = meal.id; savedLocalDate = localDate;
     const targetDay = localDate === data.today.date ? data.today : (data.history.find((day) => day.date === localDate) || (() => { const day = { date: localDate, waterMl: 0, meals: [] }; data.history.push(day); return day; })());
     targetDay.meals.push(meal); targetDay.meals.sort((a, b) => String(a.time).localeCompare(String(b.time))); data.history.sort((a, b) => a.date.localeCompare(b.date));
     if (["photo", "voice"].includes(source) && items.length) {
@@ -35,7 +45,7 @@ export async function POST(request: Request) {
     }
     return latest;
   });
-  return Response.json(userView(state, session.userId, session.role === "admin"));
+  return Response.json({ ...userView(state, session.userId, session.role === "admin"), savedMealId, savedLocalDate });
 }
 
 export async function DELETE(request: Request) {
@@ -51,7 +61,7 @@ export async function PATCH(request: Request) {
   const initial = await readState(); const session = requireUser(initial, request);
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
   const body = await request.json(); const id = String(body.id || "");
-  let foundMeal = false;
+  let foundMeal = false; let savedLocalDate = "";
   const state = await updateState((latest) => {
     const found = findOwnedMeal(latest, session.userId, id); if (!found) return latest;
     foundMeal = true;
@@ -70,8 +80,9 @@ export async function PATCH(request: Request) {
     }
     meal.score = calculateMealScore(meal); meal.updatedAt = new Date().toISOString();
     const previousDay = found.day; previousDay.meals = previousDay.meals.filter((item) => item.id !== id); restoreOwnedMeal(latest, session.userId, meal);
+    savedLocalDate = localDateAt(meal.time, userTimeZone(ensureUserData(latest, session.userId)));
     addAudit(latest, { userId: session.userId, action: "meal.updated", target: id }); return latest;
   });
   if (!foundMeal) return Response.json({ error: "הארוחה לא נמצאה" }, { status: 404 });
-  return Response.json(userView(state, session.userId, session.role === "admin"));
+  return Response.json({ ...userView(state, session.userId, session.role === "admin"), savedMealId: id, savedLocalDate });
 }
