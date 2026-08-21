@@ -19,10 +19,11 @@ test("meal rows expose one clear edit action while deletion undo stays available
   assert.match(page, /undoDeleteMeal/);
 });
 
-test("food library filters and mobile accessibility rules are present", () => {
+test("favorites, online food search, weight selection and mobile accessibility are present", () => {
   assert.match(page, /libraryQuery/);
-  assert.match(page, /libraryCategory/);
-  assert.match(page, /libraryVisibility/);
+  assert.match(page, /state\.favorites/);
+  assert.match(page, /onlineFoodResults/);
+  assert.match(page, /quickFoodWeight/);
   assert.match(css, /focus-visible/);
   assert.match(css, /prefers-reduced-motion/);
 });

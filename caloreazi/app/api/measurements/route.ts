@@ -8,6 +8,6 @@ export async function POST(request: Request) {
   const body = await request.json(); const weight = Number(body.weight);
   if (!(weight >= 25 && weight <= 350)) return Response.json({ error: "יש להזין משקל תקין" }, { status: 400 });
   const date = String(body.date || new Date().toISOString().slice(0, 10));
-  const state = await updateState((latest) => { const data = ensureUserData(latest, session.userId); data.measurements = data.measurements.filter((item) => item.date !== date); data.measurements.push({ id: crypto.randomUUID(), date, weight, at: new Date().toISOString() }); data.measurements.sort((a, b) => a.date.localeCompare(b.date)); data.profile.weight = weight; return latest; });
+  const state = await updateState((latest) => { const data = ensureUserData(latest, session.userId); if (!(Number(data.profile.initialWeight) > 0)) data.profile.initialWeight = Number(data.profile.weight) || weight; data.measurements = data.measurements.filter((item) => item.date !== date); data.measurements.push({ id: crypto.randomUUID(), date, weight, at: new Date().toISOString() }); data.measurements.sort((a, b) => a.date.localeCompare(b.date)); data.profile.weight = weight; return latest; });
   return Response.json(userView(state, session.userId, session.role === "admin"));
 }

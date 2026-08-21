@@ -75,6 +75,7 @@ const periodLabels: Record<string, string> = {
   dinner: "ארוחת ערב",
   snack: "בין הארוחות",
 };
+const calculateMealDraft = (items: any[], form: any) => items.length ? items.reduce((total, item) => { const factor = Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1) / 100; return { kcal: total.kcal + Number(item.kcalPer100 || 0) * factor, protein: total.protein + Number(item.proteinPer100 || 0) * factor, carbs: total.carbs + Number(item.carbsPer100 || 0) * factor, fat: total.fat + Number(item.fatPer100 || 0) * factor }; }, { kcal: 0, protein: 0, carbs: 0, fat: 0 }) : form;
 function localDateTimeInput(date = new Date()) {
   const local = new Date(date);
   local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
@@ -467,6 +468,7 @@ export default function Home() {
   const [mealItems, setMealItems] = useState<any[]>([]);
   const [mealValidationErrors, setMealValidationErrors] = useState<Record<string, string>>({});
   const [mealSaveFeedback, setMealSaveFeedback] = useState("");
+  const [mealReviewReady, setMealReviewReady] = useState(false);
   const [aiOriginalItems, setAiOriginalItems] = useState<any[]>([]);
   const [mealSource, setMealSource] = useState<"manual" | "photo" | "voice">(
     "manual",
@@ -524,6 +526,11 @@ export default function Home() {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickCategory, setQuickCategory] = useState("");
   const [quickSearch, setQuickSearch] = useState("");
+  const [onlineFoodResults, setOnlineFoodResults] = useState<any[]>([]);
+  const [onlineFoodStatus, setOnlineFoodStatus] = useState("");
+  const [quickFoodWeight, setQuickFoodWeight] = useState(100);
+  const [barcodeValue, setBarcodeValue] = useState("");
+  const [barcodeStatus, setBarcodeStatus] = useState("");
   const [adminHealth, setAdminHealth] = useState<any>(null);
   const [adminTab, setAdminTab] = useState("ai");
   const [adminBackups, setAdminBackups] = useState<any[]>([]);
@@ -587,6 +594,7 @@ export default function Home() {
   const [partnerOpen, setPartnerOpen] = useState(false);
   const [pendingQuickFood, setPendingQuickFood] = useState<any>(null);
   const [manualDescription, setManualDescription] = useState("");
+  const [manualPortion, setManualPortion] = useState("");
   const [foodCategory, setFoodCategory] = useState("meals");
   const [manualAiMode, setManualAiMode] = useState(false);
   const [catalogOnly, setCatalogOnly] = useState(false);
@@ -596,10 +604,10 @@ export default function Home() {
   const [customFoodStatus, setCustomFoodStatus] = useState("");
   const [foodLibraryOpen, setFoodLibraryOpen] = useState(false);
   const [libraryQuery, setLibraryQuery] = useState("");
-  const [libraryCategory, setLibraryCategory] = useState("all");
-  const [libraryVisibility, setLibraryVisibility] = useState("all");
   const [editingFood, setEditingFood] = useState<any>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
+  const directCameraInput = useRef<HTMLInputElement>(null);
+  const barcodeCameraInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
   const foodImageInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
@@ -681,8 +689,23 @@ export default function Home() {
     if (!mealOpen) {
       setMealValidationErrors({});
       setMealSaveFeedback("");
+      setMealReviewReady(false);
     }
   }, [mealOpen]);
+
+  useEffect(() => {
+    const query = quickSearch.trim();
+    if (!quickAddOpen || query.length < 2) { setOnlineFoodResults([]); setOnlineFoodStatus(""); return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setOnlineFoodStatus("מחפש במאגר המוצרים…");
+      fetch(`/api/foods/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || "החיפוש נכשל"); return data; })
+        .then((data) => { setOnlineFoodResults(data.products || []); setOnlineFoodStatus((data.products || []).length ? `${data.attribution || "מאגר תזונה מקוון"} · ערכים ל־100 גרם` : "לא נמצאו מוצרים תואמים"); })
+        .catch((error) => { if (error.name !== "AbortError") setOnlineFoodStatus("המאגר המקוון אינו זמין כרגע"); });
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [quickSearch, quickAddOpen]);
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState === "visible")
@@ -782,7 +805,11 @@ export default function Home() {
     [state],
   );
   const isAdmin = state?.currentUser?.role === "admin";
-  const weightEntries = state?.measurements || [];
+  const storedWeightEntries = state?.measurements || [];
+  const initialWeight = Number(profile?.initialWeight || 0);
+  const weightEntries = initialWeight > 0 && (!storedWeightEntries.length || Number(storedWeightEntries[0]?.weight) !== initialWeight)
+    ? [{ id: "initial-weight", date: String(profile?.completedAt || state?.today?.date || "").slice(0, 10), weight: initialWeight, initial: true }, ...storedWeightEntries]
+    : storedWeightEntries;
   const latestWeight = weightEntries.at(-1)?.weight || profile?.weight || 0;
   const previousWeight = weightEntries.length > 1 ? Number(weightEntries.at(-2)?.weight) : null;
   const latestWeightDelta = previousWeight === null ? null : Number((Number(latestWeight) - previousWeight).toFixed(1));
@@ -1270,30 +1297,17 @@ export default function Home() {
       window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-meal-field="${Object.keys(validationErrors)[0]}"]`)?.focus());
       return;
     }
+    const reviewCalculation = calculateMealDraft(normalizedItems, normalizedForm);
+    setMealForm({ ...normalizedForm, kcal: Math.round(reviewCalculation.kcal), protein: Math.round(reviewCalculation.protein), carbs: Math.round(reviewCalculation.carbs), fat: Math.round(reviewCalculation.fat) });
+    setMealReviewReady(true);
     setMealSaveFeedback(completedFields.length ? `הושלמו אוטומטית: ${[...new Set(completedFields)].join(", ")}. שומר כעת…` : "שומר כעת…");
     mealSaveInFlight.current = true;
     setBusy(true);
     try {
-      const calculated = normalizedItems.length
-        ? normalizedItems.reduce(
-            (total, item) => {
-              const factor =
-                (Math.max(0, Number(item.grams) || 0) *
-                  Math.max(0.1, Number(item.quantity) || 1)) /
-                100;
-              return {
-                kcal: total.kcal + Number(item.kcalPer100 || 0) * factor,
-                protein:
-                  total.protein + Number(item.proteinPer100 || 0) * factor,
-                carbs: total.carbs + Number(item.carbsPer100 || 0) * factor,
-                fat: total.fat + Number(item.fatPer100 || 0) * factor,
-              };
-            },
-            { kcal: 0, protein: 0, carbs: 0, fat: 0 },
-          )
-        : normalizedForm;
+      const calculated = calculateMealDraft(normalizedItems, normalizedForm);
       const finalMeal = {
         ...normalizedForm,
+        portion: manualPortion.trim(),
         period: mealPeriod,
         occurredAt: new Date(normalizedDateTime).toISOString(),
         kcal: Math.round(calculated.kcal),
@@ -1362,6 +1376,7 @@ export default function Home() {
       setGenerateFoodArtwork(false);
       setMealPeriod("snack");
       setManualDescription("");
+      setManualPortion("");
       setFoodCategory("meals");
       setManualAiMode(false);
       setCatalogOnly(false);
@@ -1435,6 +1450,16 @@ export default function Home() {
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+  async function addMealToFavorites(mealId: string) {
+    try {
+      setState(await api("/api/favorites", { method: "POST", body: JSON.stringify({ mealId }) }));
+    } catch (e) { setError((e as Error).message); }
+  }
+  async function removeFavorite(id: string) {
+    try {
+      setState(await api("/api/favorites", { method: "DELETE", body: JSON.stringify({ id }) }));
+    } catch (e) { setError((e as Error).message); }
   }
   function openProfile() {
     setProfileForm({
@@ -1514,15 +1539,19 @@ export default function Home() {
     window.location.reload();
   }
   async function deleteMyData() {
-    const confirmation = window.prompt(
-      "מחיקה זו מסירה לצמיתות את החשבון, הארוחות, המדידות, השיחות והתמונות. כדי להמשיך הקלד DELETE MY DATA",
+    const password = window.prompt(
+      "שלב 1 מתוך 2: הזן את הסיסמה הנוכחית כדי לאמת את מחיקת החשבון.",
     );
-    if (confirmation !== "DELETE MY DATA") return;
+    if (!password) return;
+    const confirmed = window.confirm(
+      "שלב 2 מתוך 2: למחוק לצמיתות את החשבון וכל הארוחות, המדידות, השיחות והתמונות? לא ניתן לבטל פעולה זו.",
+    );
+    if (!confirmed) return;
     setBusy(true);
     try {
       await api("/api/export", {
         method: "DELETE",
-        body: JSON.stringify({ confirmation }),
+        body: JSON.stringify({ confirmation: "DELETE MY DATA", password }),
       });
       window.location.reload();
     } catch (e) {
@@ -1572,6 +1601,7 @@ export default function Home() {
     setMealSource("manual");
     setManualAiMode(true);
     setManualDescription("");
+    setManualPortion("");
     setFoodCategory(category);
     setCatalogOnly(false);
     setSaveToLibrary(false);
@@ -1648,25 +1678,43 @@ export default function Home() {
       setBusy(false);
     }
   }
-  async function removeCatalogFood(food: any) {
-    if (!window.confirm(`להסיר את ${food.name} מספריית המאכלים?`)) return;
-    setBusy(true);
-    try {
-      await api("/api/foods", {
-        method: "DELETE",
-        body: JSON.stringify({ id: food.id }),
-      });
-      setState(await api("/api/state"));
-      if (editingFood?.id === food.id) setEditingFood(null);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
   function selectQuickFood(item: any) {
     setMealPeriod("snack");
+    setQuickFoodWeight(Number(item.defaultWeight || 100));
     setPendingQuickFood(item);
+  }
+  async function lookupBarcode(value = barcodeValue) {
+    const barcode = String(value || "").replace(/\D/g, "");
+    if (barcode.length < 8) { setBarcodeStatus("יש להזין ברקוד תקין בן 8–14 ספרות"); return; }
+    setBarcodeStatus("מחפש את המוצר…");
+    try {
+      const response = await api(`/api/foods/search?barcode=${encodeURIComponent(barcode)}`);
+      let product = response.product;
+      if (!(Number(product?.kcal) > 0)) {
+        setBarcodeStatus("המוצר זוהה; AI משלים את הערכים החסרים…");
+        const estimate = await api("/api/ai/analyze-text", { method: "POST", body: JSON.stringify({ description: `${product?.name || "מוצר"} ${product?.brand || ""}, ברקוד ${barcode}, ערכים ל-100 גרם` }) });
+        const calculated = calculateMealDraft(estimate.items || [], estimate);
+        product = { ...product, name: estimate.name || product.name, kcal: Math.round(calculated.kcal || 0), protein: Math.round(calculated.protein || 0), carbs: Math.round(calculated.carbs || 0), fat: Math.round(calculated.fat || 0), source: `${product.source || "ברקוד"} + השלמת AI` };
+      }
+      setBarcodeValue(barcode);
+      setBarcodeStatus(Number(response.product?.kcal) > 0 ? response.attribution || "המוצר נמצא" : "המוצר זוהה והערכים החסרים הושלמו על ידי AI");
+      selectQuickFood(product);
+    } catch (error) { setBarcodeStatus((error as Error).message || "הברקוד לא נמצא; אפשר לחפש בשם או להוסיף ידנית"); }
+  }
+  async function scanBarcodeImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; event.target.value = "";
+    if (!file) return;
+    try {
+      const Detector = (window as any).BarcodeDetector;
+      if (!Detector) { setBarcodeStatus("הסריקה האוטומטית אינה נתמכת במכשיר הזה; אפשר להזין את המספר שמתחת לברקוד."); return; }
+      const bitmap = await createImageBitmap(file);
+      const codes = await new Detector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] }).detect(bitmap);
+      bitmap.close();
+      const value = String(codes?.[0]?.rawValue || "");
+      if (!value) { setBarcodeStatus("לא זוהה ברקוד. נסה צילום קרוב, ישר ומואר יותר."); return; }
+      setBarcodeValue(value);
+      await lookupBarcode(value);
+    } catch { setBarcodeStatus("לא ניתן היה לקרוא את הברקוד; אפשר להזין את המספר ידנית."); }
   }
   function confirmQuickFood() {
     const item = pendingQuickFood;
@@ -1677,12 +1725,13 @@ export default function Home() {
       setQuickAddOpen(false);
       return;
     }
+    const factor = item.basis === "100g" ? Math.max(1, quickFoodWeight) / 100 : 1;
     setMealForm({
-      name: `${item.name} · ${item.portion}`,
-      kcal: item.kcal,
-      protein: item.protein,
-      carbs: item.carbs,
-      fat: item.fat,
+      name: `${item.name} · ${item.basis === "100g" ? `${quickFoodWeight} גרם` : item.portion}`,
+      kcal: Math.round(Number(item.kcal || 0) * factor),
+      protein: Math.round(Number(item.protein || 0) * factor * 10) / 10,
+      carbs: Math.round(Number(item.carbs || 0) * factor * 10) / 10,
+      fat: Math.round(Number(item.fat || 0) * factor * 10) / 10,
     });
     setMealItems([]);
     setAiOriginalItems([]);
@@ -1741,23 +1790,6 @@ export default function Home() {
         fatPer100: 0,
       },
     ]);
-  }
-  function useCatalogFood(food: any) {
-    setMealForm({
-      name: food.name,
-      kcal: food.kcal,
-      protein: food.protein,
-      carbs: food.carbs,
-      fat: food.fat,
-    });
-    setMealItems(food.items || []);
-    setMealSource("manual");
-    setPhotoPreview(food.image || "");
-    setMealDateTime(localDateTimeInput());
-    setPhotoStatus(
-      `מהספרייה ${food.visibility === "shared" ? "המשותפת" : "הפרטית"} · נוצר על ידי ${food.ownerName || "המשתמש"}`,
-    );
-    setMealOpen(true);
   }
   async function saveAi(test = false) {
     setBusy(true);
@@ -2124,6 +2156,8 @@ export default function Home() {
       />
     );
 
+  const mealDraftPreview = calculateMealDraft(mealItems, mealForm);
+
   return (
     <main className={dark ? "app-shell theme-dark" : "app-shell"} dir="rtl">
       {!online && (
@@ -2237,6 +2271,7 @@ export default function Home() {
         </div>
       </section>
       <input ref={uploadInput} className="camera-input" type="file" accept="image/*" onChange={analyzePhoto} />
+      <input ref={directCameraInput} className="camera-input" type="file" accept="image/*" capture="environment" onChange={analyzePhoto} />
       {error && (
         <button className="notice" onClick={() => setError("")}>
           {error} ×
@@ -2267,14 +2302,10 @@ export default function Home() {
               <p className="eyebrow">הארוחות שלי</p>
               <h2>מה אכלת היום</h2>
             </div>
-            <button className="manual-add-button"
-              onClick={() => {
-                setQuickCategory("");
-                setQuickAddOpen(true);
-              }}
-            >
-              <AppIcon name="plus" /> הוסף ארוחה ידנית
-            </button>
+            <div className="meal-header-actions">
+              <button type="button" title="צילום ארוחה" aria-label="צילום ארוחה" onClick={() => directCameraInput.current?.click()}><AppIcon name="camera" /></button>
+              <button type="button" title="הוספה ידנית" aria-label="הוספה ידנית" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }}><AppIcon name="plus" /></button>
+            </div>
           </header>
           {state.today.meals.length === 0 ? (
             <div className="empty-state">
@@ -2325,39 +2356,14 @@ export default function Home() {
                 ))}
             </div>
           )}
-          {state.favorites?.length > 0 && (
-            <div className="favorites-strip">
-              <strong>ארוחות מועדפות</strong>
-              <div>
-                {state.favorites.map((favorite) => (
-                  <button
-                    key={favorite.id}
-                    onClick={() => repeatFavorite(favorite.id)}
-                  >
-                    <span>＋</span>
-                    {favorite.meal.name}
-                    <small>{favorite.meal.kcal} kcal</small>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {state.foods?.length > 0 && (
-            <button
-              className="food-library-tile"
-              onClick={() => setFoodLibraryOpen(true)}
-            >
+          <button className="food-library-tile" onClick={() => setFoodLibraryOpen(true)}>
               <span>▦</span>
               <div>
-                <strong>ספריית המאכלים</strong>
-                <small>
-                  {state.foods.length} מאכלים פרטיים ומשותפים · צפייה, עריכה
-                  והסרה
-                </small>
+                <strong>המועדפים שלי</strong>
+                <small>{state.favorites?.length || 0} ארוחות שמורות · הוספה מהירה והסרה מהמועדפים</small>
               </div>
               <b>←</b>
-            </button>
-          )}
+          </button>
         </div>
         </div><div className="side-stack">
           <section className="panel water-panel">
@@ -2434,7 +2440,7 @@ export default function Home() {
             {mealPreview.image ? <img className="meal-preview-image" src={mealPreview.image} alt={mealPreview.name} /> : <div className="meal-preview-placeholder">🍽</div>}
             <div className="meal-preview-values"><span className="calories"><small>קלוריות</small><strong>{mealPreview.kcal}</strong><b>kcal</b></span><span className="protein"><small>חלבון</small><strong>{mealPreview.protein}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{mealPreview.carbs}g</strong></span><span className="fat"><small>שומן</small><strong>{mealPreview.fat}g</strong></span></div>
             {Array.isArray(mealPreview.items) && mealPreview.items.length > 0 && <div className="meal-preview-items"><strong>מרכיבי הארוחה</strong>{mealPreview.items.map((item: any, index: number) => <span key={`${item.name}-${index}`}><b>{item.name}</b><small>{item.grams ? `${item.grams} גרם` : item.quantity ? `כמות ${item.quantity}` : ""}</small></span>)}</div>}
-            <footer><button className="primary" type="button" onClick={() => setMealPreview(null)}>חזרה למה אכלתי היום</button></footer>
+            <footer><button type="button" onClick={() => addMealToFavorites(mealPreview.id)} disabled={state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name)}>{state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name) ? "כבר במועדפים" : "הוסף למועדפים"}</button><button className="primary" type="button" onClick={() => setMealPreview(null)}>חזרה למה אכלתי היום</button></footer>
           </section>
         </div>
       )}
@@ -3231,11 +3237,19 @@ export default function Home() {
               </div>
               <button onClick={() => setQuickAddOpen(false)}>×</button>
             </header>
+            <section className="barcode-search">
+              <button type="button" onClick={() => barcodeCameraInput.current?.click()}><AppIcon name="camera" /><span><strong>סריקת ברקוד</strong><small>צלם את הברקוד שעל האריזה</small></span></button>
+              <div><input inputMode="numeric" value={barcodeValue} onChange={(event) => setBarcodeValue(event.target.value.replace(/\D/g, "").slice(0, 14))} placeholder="או הזן מספר ברקוד" aria-label="מספר ברקוד" /><button type="button" onClick={() => lookupBarcode()}>חפש</button></div>
+              <input ref={barcodeCameraInput} className="camera-input" type="file" accept="image/*" capture="environment" onChange={scanBarcodeImage} />
+              {barcodeStatus && <p>{barcodeStatus}</p>}
+            </section>
             <div className="quick-catalog-search"><AppIcon name="search" /><input autoFocus type="search" value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="חיפוש בארוחות, פירות, ירקות ומשקאות…" aria-label="חיפוש בהוספת אוכל" />{quickSearch && <button type="button" onClick={() => setQuickSearch("")} aria-label="ניקוי החיפוש">×</button>}</div>
             {quickSearch.trim() ? (
               <div className="quick-food-grid quick-search-results">
                 {Object.entries(quickFoods).flatMap(([category, items]) => items.map((item, index) => ({ ...item, category, index }))).filter((item) => `${item.name} ${item.portion} ${item.category}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((item: any) => <button key={`${item.category}-${item.name}-${item.portion}`} onClick={() => selectQuickFood(item)}><span className="food-sprite" style={foodSpriteStyle(item.category, item.index)} /><strong>{item.name}</strong><small>{item.portion}</small><b>{item.kcal} kcal</b></button>)}
                 {(state.foods || []).filter((food) => `${food.name} ${food.category || ""}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((food) => <button key={food.id} onClick={() => selectQuickFood({ ...food, portion: "מנה אישית", icon: "🍽" })}>{food.image ? <img src={food.image} alt={food.name} /> : <span>🍽</span>}<strong>{food.name}</strong><small>מהמאגר האישי</small><b>{food.kcal} kcal</b></button>)}
+                {onlineFoodResults.map((food) => <button key={food.id} onClick={() => selectQuickFood(food)}>{food.image ? <img src={food.image} alt="" /> : <span>▦</span>}<strong>{food.name}</strong><small>{food.brand || food.portion}</small><b>{food.kcal} kcal / 100g</b></button>)}
+                <p className="online-food-status">{onlineFoodStatus}</p>
               </div>
             ) : !quickCategory ? (
               <div className="category-grid">
@@ -3542,6 +3556,9 @@ export default function Home() {
               </div>
             </section>
             <div className="profile-metrics">
+              <span className="initial-weight-metric">
+                משקל רישום <b>{Number(profile.initialWeight || initialWeight || 0) > 0 ? `${Number(profile.initialWeight || initialWeight).toFixed(1)} ק״ג` : "לא נשמר"}</b><small>נקודת ייחוס קבועה</small>
+              </span>
               <span>
                 BMI <b>{profile.caloriePlan?.bmi}</b>
               </span>
@@ -3604,16 +3621,10 @@ export default function Home() {
               </div>
               <b>‹</b>
             </button>
-            <a className="profile-export" href="api/export" download>
-              הורד את הנתונים שלי
-            </a>
-            <button
-              className="profile-export"
-              type="button"
-              onClick={deleteMyData}
-            >
-              מחק לצמיתות את הנתונים והחשבון שלי
-            </button>
+            <section className="profile-data-actions">
+              <a href="api/export" download><strong>ייצוא וגיבוי הנתונים</strong><small>הורדת עותק של הפרופיל, הארוחות והמדידות</small></a>
+              <button type="button" onClick={deleteMyData}><strong>מחיקת החשבון לצמיתות</strong><small>דורש סיסמה ושני שלבי אישור · לא ניתן לשחזר</small></button>
+            </section>
             <footer>
               <button type="button" onClick={switchUser}>
                 החלף משתמש
@@ -3634,50 +3645,25 @@ export default function Home() {
           <section className="settings-modal food-library-modal">
             <header>
               <div>
-                <p className="eyebrow">המאגר האישי</p>
-                <h2>ספריית המאכלים</h2>
+                <p className="eyebrow">גישה מהירה</p>
+                <h2>המועדפים שלי</h2>
               </div>
               <button onClick={() => setFoodLibraryOpen(false)}>×</button>
             </header>
-            <div className="library-filters"><input type="search" value={libraryQuery} onChange={(e) => setLibraryQuery(e.target.value)} placeholder="חיפוש לפי שם" aria-label="חיפוש בספריית המאכלים" /><select value={libraryCategory} onChange={(e) => setLibraryCategory(e.target.value)} aria-label="סינון לפי קטגוריה"><option value="all">כל הסוגים</option><option value="meals">ארוחות</option><option value="fruits">פירות</option><option value="vegetables">ירקות</option><option value="drinks">משקאות</option></select><select value={libraryVisibility} onChange={(e) => setLibraryVisibility(e.target.value)} aria-label="סינון לפי הרשאה"><option value="all">פרטי ומשותף</option><option value="private">פרטי</option><option value="shared">משותף</option></select></div>
+            <div className="library-filters"><input type="search" value={libraryQuery} onChange={(e) => setLibraryQuery(e.target.value)} placeholder="חיפוש במועדפים" aria-label="חיפוש במועדפים" /></div>
             <div className="catalog-list">
-              {state.foods.filter((food) => (!libraryQuery.trim() || String(food.name).includes(libraryQuery.trim())) && (libraryCategory === "all" || food.category === libraryCategory) && (libraryVisibility === "all" || food.visibility === libraryVisibility)).map((food) => (
-                <article key={food.id}>
-                  {food.image ? (
-                    <img src={food.image} alt="" />
-                  ) : (
-                    <span>🍽</span>
-                  )}
+              {(state.favorites || []).filter((favorite) => !libraryQuery.trim() || String(favorite.meal.name).includes(libraryQuery.trim())).map((favorite) => (
+                <article key={favorite.id}>
+                  <span>★</span>
                   <div>
-                    <strong>{food.name}</strong>
-                    <small>
-                      {food.kcal} kcal ·{" "}
-                      {food.visibility === "shared" ? "משותף" : "פרטי"}
-                    </small>
+                    <strong>{favorite.meal.name}</strong>
+                    <small>{favorite.meal.kcal} kcal</small>
                   </div>
-                  <button
-                    onClick={() => {
-                      useCatalogFood(food);
-                      setFoodLibraryOpen(false);
-                    }}
-                  >
-                    הוסף
-                  </button>
-                  {food.ownerId === state.currentUser.id && (
-                    <>
-                      <button onClick={() => setEditingFood({ ...food })}>
-                        ערוך
-                      </button>
-                      <button
-                        className="danger"
-                        onClick={() => removeCatalogFood(food)}
-                      >
-                        הסר
-                      </button>
-                    </>
-                  )}
+                  <button onClick={() => { void repeatFavorite(favorite.id); setFoodLibraryOpen(false); }}>הוסף להיום</button>
+                  <button className="danger" onClick={() => removeFavorite(favorite.id)}>הסר מהמועדפים</button>
                 </article>
               ))}
+              {!state.favorites?.length && <p>עדיין אין מועדפים. אפשר להוסיף ארוחה למועדפים מתוך חלון פרטי הארוחה.</p>}
             </div>
           </section>
         </div>
@@ -4123,7 +4109,7 @@ export default function Home() {
                     { label: "שומן ליום", actual: insightsData.summary.averageFat, target: profile.fat, unit: "g", note: "ממוצע יומי מול היעד האישי", tone: "fat" },
                     { label: "מים ליום", actual: insightsData.summary.averageWater, target: profile.waterMl, unit: "מ״ל", note: "ממוצע השתייה בימים האחרונים", tone: "water" },
                     { label: "פעילות שבועית", actual: insightsData.summary.activeMinutes, target: 150, unit: "דק׳", note: "יעד בסיס שימושי: 150 דקות בשבוע", tone: "activity" },
-                  ].map((metric) => { const percent = Math.round(Number(metric.actual || 0) / Math.max(1, Number(metric.target || 0)) * 100); return <article className={`goal-progress ${metric.tone}`} key={metric.label}><div><strong>{metric.label}</strong><b>{Number(metric.actual || 0).toLocaleString()} / {Number(metric.target || 0).toLocaleString()} {metric.unit}</b></div><span><i style={{ width: `${Math.min(100, percent)}%` }} /></span><footer><small>{metric.note}</small><em>{percent}%</em></footer></article>; })}
+                  ].map((metric) => { const percent = Math.round(Number(metric.actual || 0) / Math.max(1, Number(metric.target || 0)) * 100); const upper = metric.tone === "calories" ? 105 : metric.tone === "activity" || metric.tone === "water" ? 130 : 115; const status = percent < 70 ? "needs-work" : percent < 90 ? "close" : percent <= upper ? "strong" : "over"; const statusLabel = status === "needs-work" ? "דורש שיפור" : status === "close" ? "מתקרב ליעד" : status === "strong" ? "בטווח טוב" : "מעל הטווח"; return <article className={`goal-progress ${metric.tone} metric-${status}`} key={metric.label}><div><strong>{metric.label}</strong><b>{Number(metric.actual || 0).toLocaleString()} / {Number(metric.target || 0).toLocaleString()} {metric.unit}</b></div><span><i style={{ width: `${Math.min(100, percent)}%` }} /></span><footer><small>{metric.note}</small><em>{statusLabel} · {percent}%</em></footer></article>; })}
                 </section>
                 <section className="daily-score-history">
                   <header><strong>ציון יומי — 14 ימים אחרונים</strong><small>לחיצה על יום בלוח ההיסטוריה מציגה את הסיבות לציון</small></header>
@@ -4319,12 +4305,13 @@ export default function Home() {
               <button onClick={() => setPendingQuickFood(null)}>×</button>
             </header>
             <div className="quick-confirm-food">
-              <span>{pendingQuickFood.icon}</span>
+              {pendingQuickFood.image ? <img src={pendingQuickFood.image} alt="" /> : <span>{pendingQuickFood.icon || "▦"}</span>}
               <div>
                 <strong>{pendingQuickFood.portion}</strong>
-                <small>{pendingQuickFood.kcal} קלוריות</small>
+                <small>{pendingQuickFood.basis === "100g" ? `${Math.round(Number(pendingQuickFood.kcal || 0) * quickFoodWeight / 100)} קלוריות לפי ${quickFoodWeight} גרם` : `${pendingQuickFood.kcal} קלוריות`}</small>
               </div>
             </div>
+            {pendingQuickFood.basis === "100g" && <label className="quick-weight-field">משקל שאכלתי (גרם)<input type="number" min="1" max="3000" step="1" value={quickFoodWeight} onChange={(event) => setQuickFoodWeight(Math.max(1, Number(event.target.value) || 1))} /><small>הערכים יחושבו אוטומטית לפי נתוני המוצר ל־100 גרם.</small></label>}
             <label>
               סוג הארוחה
               <select
@@ -4340,7 +4327,7 @@ export default function Home() {
             <footer>
               <button onClick={() => setPendingQuickFood(null)}>ביטול</button>
               <button className="primary" onClick={confirmQuickFood}>
-                כן, הוסף
+                המשך לסיכום
               </button>
             </footer>
           </section>
@@ -4509,7 +4496,7 @@ export default function Home() {
             </header>
             {mealSaveFeedback && (
               <div className={`meal-save-feedback ${Object.keys(mealValidationErrors).length ? "needs-input" : "saving"}`} role="status" aria-live="assertive">
-                <strong>{Object.keys(mealValidationErrors).length ? "נדרשת השלמה לפני השמירה" : "מצב השמירה"}</strong>
+                <strong>{Object.keys(mealValidationErrors).length ? "נדרשת השלמה לפני השמירה" : mealReviewReady ? "סיכום לפני אישור" : "מצב החישוב"}</strong>
                 <span>{mealSaveFeedback}</span>
               </div>
             )}
@@ -4530,7 +4517,7 @@ export default function Home() {
                     }
                   />
                 </label>
-                <div className="manual-ai-actions"><button type="button" className="dictation-action" onClick={dictateManualDescription}><AppIcon name="mic" /> הכתבה</button><button type="button" onClick={analyzeManualDescription} disabled={busy || !manualDescription.trim()}>{busy ? "מחשב…" : catalogOnly ? "צור תמונה וחשב ערכים" : "חשב קלוריות עם AI"}</button></div>
+                <div className="manual-ai-actions"><button type="button" className="dictation-action" onClick={dictateManualDescription}><AppIcon name="mic" /> הכתבה</button><button type="button" onClick={analyzeManualDescription} disabled={busy || !manualDescription.trim()}>{busy ? "מחשב…" : catalogOnly ? "צור תמונה וחשב ערכים" : "חשב ערכים עם AI"}</button>{!catalogOnly && <button type="button" onClick={() => setManualAiMode(false)}>יש לי ערכים</button>}</div>
                 <small>
                   {catalogOnly
                     ? "לאחר החישוב אפשר לבדוק ולתקן את הערכים לפני שמירה בגלריה."
@@ -4564,6 +4551,7 @@ export default function Home() {
                   placeholder="למשל: יוגורט, גרנולה ופירות"
                 />
               </label>
+              {mealSource === "manual" && mealItems.length === 0 && <label className="wide">כמות / משקל<input value={manualPortion} onChange={(event) => setManualPortion(event.target.value)} placeholder="למשל: 150 גרם, כוס אחת או 2 יחידות" /></label>}
               <label className="wide">
                 סוג הארוחה
                 <select
@@ -4762,6 +4750,7 @@ export default function Home() {
                 </>
               )}
             </div>
+            {(mealForm.name || mealItems.length > 0) && <section className="meal-review-summary"><header><div><small>סיכום לפני הוספה</small><strong>{mealForm.name || "ארוחה חדשה"}</strong></div><b>{Math.round(Number(mealDraftPreview.kcal || 0))}<small> kcal</small></b></header><div><span className="protein"><small>חלבון</small><strong>{Math.round(Number(mealDraftPreview.protein || 0))}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{Math.round(Number(mealDraftPreview.carbs || 0))}g</strong></span><span className="fat"><small>שומן</small><strong>{Math.round(Number(mealDraftPreview.fat || 0))}g</strong></span></div><p>בדוק את השם, הכמות והערכים ולחץ על “הוסף לארוחה”.</p></section>}
             <section className="library-options">
               <label>
                 <input
@@ -4769,7 +4758,7 @@ export default function Home() {
                   checked={saveToLibrary}
                   onChange={(e) => setSaveToLibrary(e.target.checked)}
                 />{" "}
-                שמור בספריית המאכלים שלי
+                הוסף גם לקטלוג האישי שלי
               </label>
               {saveToLibrary && (
                 <div>
@@ -4841,9 +4830,7 @@ export default function Home() {
                   ? "שומר…"
                   : catalogOnly
                   ? "שמור בגלריה"
-                  : mealItems.length
-                    ? "אישור, חישוב והוספה"
-                    : "שמור ארוחה"}
+                  : "הוסף לארוחה"}
               </button>
             </footer>
           </form>
