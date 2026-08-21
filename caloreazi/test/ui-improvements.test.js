@@ -91,11 +91,28 @@ test("history opens with a navigable score-colored calendar and one selected day
 });
 
 test("photo and voice use compact fast paths with fallbacks", () => {
-  assert.match(page, /maxSize = 1024, quality = 0\.68/);
-  assert.match(page, /attempt < 6 \? 350 : 700/);
+  assert.match(page, /maxSize = 960, quality = 0\.65/);
+  assert.match(page, /attempt < 8 \? 250 : 500/);
   assert.match(page, /audioBitsPerSecond: 32_000/);
   assert.match(page, /localTranscript/);
   assert.match(page, /JSON\.stringify\(\{ browserTranscript: localTranscript \}\)/);
+});
+
+test("meal capture presents a simple review with optional advanced controls", () => {
+  assert.match(page, /meal-review-intro/);
+  assert.match(page, /מוכן לבדיקה ולאישור/);
+  assert.match(page, /עריכת פרטים וערכים/);
+  assert.match(page, /אישור והוספה ליומן/);
+  assert.match(page, /adjustMealItem/);
+  assert.match(page, /adjustMealForm/);
+  assert.match(css, /number-stepper/);
+  assert.match(css, /min-width:44px/);
+});
+
+test("photo preparation reuses the decoded image and voice does not auto-favorite meals", () => {
+  assert.match(page, /prepareImage\(file, 960, 0\.65, original\)/);
+  assert.match(page, /decodedImage\?: HTMLImageElement/);
+  assert.match(page, /setSaveToLibrary\(false\)/);
 });
 
 test("meal review supports focused AI correction and calm consistency badges", () => {

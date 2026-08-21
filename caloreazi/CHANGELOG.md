@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.0
+
+- Redesigned meal capture as a calm, unified review screen for photo, voice, barcode and manual entry.
+- Kept the essential meal summary visible while moving detailed nutrition fields into an optional advanced editor.
+- Added large `+` and `−` controls for portions, weights, calories and macronutrients alongside exact numeric entry.
+- Added a clear capture → review → confirm progress indicator and one prominent confirmation action.
+- Reused the already-decoded photo, reduced upload payload and shortened polling intervals for faster recognition.
+- Automatically suggests the meal period by local time and no longer adds voice meals to favorites by default.
+- Preserved field-level validation, AI correction, duplicate-submit protection and database persistence verification.
+
 ## 1.9.2
 
 - Fixed an initial-render crash caused by reading streak data before application state finished loading.
