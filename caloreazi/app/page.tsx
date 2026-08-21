@@ -598,11 +598,11 @@ export default function Home() {
       .catch((e) => setError(e.message));
   }, []);
   useEffect(() => {
-    let lastLocalDate = new Date().toLocaleDateString("en-CA");
+    let lastLocalDate = localDateTimeInput().slice(0, 10);
     const timer = window.setInterval(() => {
       const current = new Date();
       setNow(current);
-      const nextLocalDate = current.toLocaleDateString("en-CA");
+      const nextLocalDate = localDateTimeInput(current).slice(0, 10);
       if (nextLocalDate !== lastLocalDate) {
         lastLocalDate = nextLocalDate;
         api("/api/state").then(setState).catch(() => undefined);
