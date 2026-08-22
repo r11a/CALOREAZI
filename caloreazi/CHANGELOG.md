@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.11.0
+
+- Combined the planned 1.11 and 1.12 rounds into one account, onboarding and coaching release.
+- Added editable email and password controls for regular users with current-password verification and session revocation after password changes.
+- Added workout-type selection and clear nutrition-style choices with concise explanations in onboarding and the personal profile.
+- Added an in-profile explanation of the automatic calorie target while preserving the existing safe manual target mode.
+- Replaced the inaccessible Admin item for regular users with a direct Insights navigation item.
+- Coach requests to add food now prepare an AI-calculated meal draft and always require explicit review and confirmation before saving.
+- Improved dark onboarding contrast, mobile barcode viewport behavior and 15-second orange success notifications.
+
 ## 1.10.1
 
 - Photo capture now opens directly into an animated recognition state instead of briefly showing manual-entry controls.

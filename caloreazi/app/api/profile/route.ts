@@ -22,6 +22,11 @@ export async function PUT(request: Request) {
   if (avatar && (!avatar.startsWith("data:image/jpeg;base64,") || avatar.length > 700_000)) return Response.json({ error: "תמונת הפרופיל אינה תקינה או גדולה מדי" }, { status: 400 });
   const existingUser = initial.users.find((item) => item.id === session.userId);
   const existingProfile = initial.userData[session.userId]?.profile;
+  const requestedEmail = String(body.email || existingUser?.email || "").trim().toLowerCase();
+  const changesEmail = Boolean(existingUser && requestedEmail !== String(existingUser.email || "").toLowerCase());
+  if (changesEmail && !/^\S+@\S+\.\S+$/.test(requestedEmail)) return Response.json({ error: "יש להזין כתובת אימייל תקינה" }, { status: 400 });
+  if (changesEmail && initial.users.some((item) => item.id !== session.userId && String(item.email || "").toLowerCase() === requestedEmail)) return Response.json({ error: "כתובת האימייל כבר משויכת למשתמש אחר" }, { status: 409 });
+  if (changesEmail && (!existingUser || !(await verifyPassword(String(body.accountPassword || ""), existingUser.password)))) return Response.json({ error: "נדרשת הסיסמה הנוכחית כדי לשנות אימייל" }, { status: 403 });
   const requestedInitialWeight = Number(body.initialWeight);
   const changesInitialWeight = Number(existingProfile?.initialWeight) > 0 && requestedInitialWeight >= 25 && requestedInitialWeight <= 350 && requestedInitialWeight !== Number(existingProfile.initialWeight);
   if (changesInitialWeight && (!existingUser || !(await verifyPassword(String(body.initialWeightPassword || ""), existingUser.password)))) return Response.json({ error: "נדרשת הסיסמה הנוכחית כדי לשנות את המשקל ההתחלתי" }, { status: 403 });
@@ -31,12 +36,14 @@ export async function PUT(request: Request) {
     const profile = latest.userData[session.userId]?.profile;
     if (!user || !profile) return latest;
     user.name = name;
+    if (changesEmail) user.email = requestedEmail;
     Object.assign(profile, {
       age,
       height,
       targetWeight,
       activity: body.activity || profile.activity,
       diet: body.diet || profile.diet,
+      workoutTypes: [...new Set((Array.isArray(body.workoutTypes) ? body.workoutTypes : []).filter((item) => ["walking", "running", "strength", "cycling", "swimming", "yoga", "other"].includes(item)))],
       restrictions: String(body.restrictions || ""),
       diabetesStatus: ["none", "borderline", "prediabetes", "diabetes"].includes(body.diabetesStatus) ? body.diabetesStatus : "none",
       hypertension: Boolean(body.hypertension),
