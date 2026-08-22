@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.12.0
+
+- Combined the planned 1.13 and 1.14 meal-history scope into release 1.12.0.
+- Added a dedicated “שכחתי לעדכן” flow to manual meal entry.
+- Supports several meals in one session, each with its own description, day, time and meal period.
+- AI calculates every meal before saving and exposes editable ingredient quantities and gram weights.
+- A final confirmation saves every prepared meal into the correct day and chronological timeline, then refreshes daily totals and history.
+- Added a focused edge-to-edge mobile layout with large quantity controls and clear calculation/save feedback.
+
 ## 1.11.0
 
 - Combined the planned 1.11 and 1.12 rounds into one account, onboarding and coaching release.

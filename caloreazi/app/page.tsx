@@ -88,6 +88,7 @@ const periodLabels: Record<string, string> = {
   snack: "בין הארוחות",
 };
 const calculateMealDraft = (items: any[], form: any) => items.length ? items.reduce((total, item) => { const factor = Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1) / 100; return { kcal: total.kcal + Number(item.kcalPer100 || 0) * factor, protein: total.protein + Number(item.proteinPer100 || 0) * factor, carbs: total.carbs + Number(item.carbsPer100 || 0) * factor, fat: total.fat + Number(item.fatPer100 || 0) * factor }; }, { kcal: 0, protein: 0, carbs: 0, fat: 0 }) : form;
+const newForgottenMeal = () => ({ id: crypto.randomUUID(), description: "", dayOffset: 0, time: new Date().toTimeString().slice(0, 5), period: mealPeriodFor(), name: "", items: [] as any[], calculated: false, error: "" });
 function localDateTimeInput(date = new Date()) {
   const local = new Date(date);
   local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
@@ -534,6 +535,9 @@ export default function Home() {
   const [weightDate, setWeightDate] = useState("");
   const [weightFeedback, setWeightFeedback] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [forgottenOpen, setForgottenOpen] = useState(false);
+  const [forgottenMeals, setForgottenMeals] = useState<any[]>([]);
+  const [forgottenStatus, setForgottenStatus] = useState("");
   const [quickCategory, setQuickCategory] = useState("");
   const [quickSearch, setQuickSearch] = useState("");
   const [onlineFoodResults, setOnlineFoodResults] = useState<any[]>([]);
@@ -1187,6 +1191,7 @@ export default function Home() {
     setCoachOpen(false); setSettingsOpen(false); setAdminLoginOpen(false); setMealOpen(false); setQuickAddOpen(false);
     setWaterOpen(false); setProfileOpen(false); setHistoryOpen(false); setInsightsOpen(false); setActivityOpen(false);
     setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false); setTasteWizardOpen(false);
+    setForgottenOpen(false);
     setMacroDetail(""); setMealPreview(null); setPendingQuickFood(null); setEditingFood(null);
   }
   function openNavigationScreen(screen: "home" | "history" | "admin" | "insights" | "coach") {
@@ -1666,6 +1671,48 @@ export default function Home() {
     setMealValidationErrors({});
     setQuickAddOpen(false);
     setMealOpen(true);
+  }
+  function openForgottenMeals() {
+    setQuickAddOpen(false);
+    setForgottenMeals([newForgottenMeal()]);
+    setForgottenStatus("");
+    setForgottenOpen(true);
+  }
+  function updateForgottenMeal(id: string, changes: any) {
+    setForgottenMeals((meals) => meals.map((meal) => meal.id === id ? { ...meal, ...changes, calculated: changes.calculated !== undefined ? changes.calculated : changes.items !== undefined ? true : meal.calculated, error: "" } : meal));
+  }
+  async function calculateForgottenMeals() {
+    const missing = forgottenMeals.filter((meal) => !meal.description.trim());
+    if (missing.length) { setForgottenStatus("יש לתאר כל ארוחה לפני החישוב."); return; }
+    setBusy(true); setForgottenStatus("מחשב את הארוחות בעזרת AI…");
+    try {
+      const calculated = [];
+      for (const meal of forgottenMeals) {
+        const result = await api("/api/ai/analyze-text", { method: "POST", body: JSON.stringify({ description: meal.description }) });
+        calculated.push({ ...meal, name: result.name || meal.description, items: result.items || [], calculated: true, error: "" });
+      }
+      setForgottenMeals(calculated);
+      setForgottenStatus("החישוב הושלם. אפשר לתקן כמויות ואז לאשר את כל הארוחות.");
+    } catch (e) { setForgottenStatus((e as Error).message); }
+    finally { setBusy(false); }
+  }
+  async function saveForgottenMeals() {
+    if (busy || !forgottenMeals.length || forgottenMeals.some((meal) => !meal.calculated || !meal.items.length)) { setForgottenStatus("יש לחשב את כל הארוחות לפני השמירה."); return; }
+    setBusy(true); setForgottenStatus("שומר ומעדכן את הימים המתאימים…");
+    try {
+      for (const meal of forgottenMeals) {
+        const occurred = new Date();
+        occurred.setDate(occurred.getDate() - Number(meal.dayOffset || 0));
+        const [hours, minutes] = String(meal.time || "12:00").split(":").map(Number);
+        occurred.setHours(hours || 0, minutes || 0, 0, 0);
+        const totals = calculateMealDraft(meal.items, {});
+        await api("/api/meals", { method: "POST", body: JSON.stringify({ name: meal.name || meal.description, period: meal.period, occurredAt: occurred.toISOString(), ...totals, items: meal.items, source: "manual", confidence: .7 }) });
+      }
+      const latest = await api("/api/state");
+      setState(latest); setForgottenOpen(false); setForgottenMeals([]);
+      setMealResult({ name: `${forgottenMeals.length} ארוחות נשמרו`, kcal: Math.round(forgottenMeals.reduce((sum, meal) => sum + calculateMealDraft(meal.items, {}).kcal, 0)), protein: 0, carbs: 0, fat: 0 });
+    } catch (e) { setForgottenStatus((e as Error).message); }
+    finally { setBusy(false); }
   }
   function openCustomFood() {
     setCustomFoodName("");
@@ -3410,6 +3457,11 @@ export default function Home() {
                   <strong>ארוחה ידנית</strong>
                   <small>AI יחשב לפי התיאור שלך</small>
                 </button>
+                <button className="forgotten-meal-entry" onClick={openForgottenMeals}>
+                  <span className="manual-meal-art">◷</span>
+                  <strong>שכחתי לעדכן</strong>
+                  <small>הוסף כמה ארוחות להיום או לימים קודמים</small>
+                </button>
                 <button onClick={() => setVoiceOpen(true)}>
                   <span className="manual-meal-art">🎙️</span>
                   <strong>הקלט ארוחה</strong>
@@ -3492,6 +3544,28 @@ export default function Home() {
                 </div>
               </>
             )}
+          </section>
+        </div>
+      )}
+      {forgottenOpen && (
+        <div className="modal-layer forgotten-layer">
+          <button className="backdrop" onClick={() => !busy && setForgottenOpen(false)} />
+          <section className="settings-modal forgotten-modal">
+            <header><div><h2>שכחתי לעדכן</h2><small>אפשר להוסיף כמה ארוחות ולשמור אותן יחד ביום ובשעה הנכונים</small></div><button type="button" disabled={busy} onClick={() => setForgottenOpen(false)}>×</button></header>
+            <div className="forgotten-meal-list">
+              {forgottenMeals.map((meal, mealIndex) => {
+                const totals = calculateMealDraft(meal.items, {});
+                return <article className={meal.calculated ? "calculated" : ""} key={meal.id}>
+                  <header><strong>ארוחה {mealIndex + 1}</strong>{forgottenMeals.length > 1 && <button type="button" onClick={() => setForgottenMeals((meals) => meals.filter((item) => item.id !== meal.id))}>הסר</button>}</header>
+                  <label className="wide">פירוט הארוחה<textarea value={meal.description} onChange={(event) => updateForgottenMeal(meal.id, { description: event.target.value, items: [], name: "", calculated: false })} placeholder="למשל: קפה עם מעט חלב, כריך גבינה וסלט" /></label>
+                  <div className="forgotten-when"><label>מתי<select value={meal.dayOffset} onChange={(event) => updateForgottenMeal(meal.id, { dayOffset: Number(event.target.value), calculated: meal.calculated })}><option value={0}>היום</option><option value={1}>אתמול</option><option value={2}>שלשום</option></select></label><label>שעה<input type="time" value={meal.time} onChange={(event) => updateForgottenMeal(meal.id, { time: event.target.value, calculated: meal.calculated })} /></label><label>סוג ארוחה<select value={meal.period} onChange={(event) => updateForgottenMeal(meal.id, { period: event.target.value, calculated: meal.calculated })}>{Object.entries(periodLabels).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label></div>
+                  {meal.calculated && <section className="forgotten-review"><div><strong>{meal.name}</strong><b>{Math.round(totals.kcal)} kcal</b></div>{meal.items.map((item: any, itemIndex: number) => <div className="forgotten-item" key={`${meal.id}-${itemIndex}`}><label>מרכיב<input value={item.name || ""} onChange={(event) => updateForgottenMeal(meal.id, { items: meal.items.map((current: any, index: number) => index === itemIndex ? { ...current, name: event.target.value } : current) })} /></label><label>כמות<div className="forgotten-stepper"><button type="button" onClick={() => updateForgottenMeal(meal.id, { items: meal.items.map((current: any, index: number) => index === itemIndex ? { ...current, quantity: Math.max(.25, Number(current.quantity || 1) - 1) } : current) })}>−</button><input type="number" min=".25" step=".25" value={item.quantity || 1} onChange={(event) => updateForgottenMeal(meal.id, { items: meal.items.map((current: any, index: number) => index === itemIndex ? { ...current, quantity: Number(event.target.value) } : current) })} /><button type="button" onClick={() => updateForgottenMeal(meal.id, { items: meal.items.map((current: any, index: number) => index === itemIndex ? { ...current, quantity: Number(current.quantity || 1) + 1 } : current) })}>＋</button></div></label><label>גרם<input type="number" min="1" value={item.grams || 0} onChange={(event) => updateForgottenMeal(meal.id, { items: meal.items.map((current: any, index: number) => index === itemIndex ? { ...current, grams: Number(event.target.value) } : current) })} /></label></div>)}</section>}
+                </article>;
+              })}
+            </div>
+            <button className="forgotten-add" type="button" onClick={() => setForgottenMeals((meals) => [...meals, newForgottenMeal()])}>＋ הוסף ארוחה נוספת</button>
+            {forgottenStatus && <p className="forgotten-status" role="status">{forgottenStatus}</p>}
+            <footer><button type="button" disabled={busy} onClick={calculateForgottenMeals}>{busy ? "מחשב…" : "חשב קלוריות עם AI"}</button><button className="primary" type="button" disabled={busy || forgottenMeals.some((meal) => !meal.calculated)} onClick={saveForgottenMeals}>אישור והוספת הכל ליומן</button></footer>
           </section>
         </div>
       )}

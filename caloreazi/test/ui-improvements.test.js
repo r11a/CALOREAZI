@@ -197,3 +197,14 @@ test("home meal suggestions combine macro gaps with an optional taste wizard", (
   assert.match(css, /meal-suggestions-panel/);
   assert.match(css, /taste-wizard/);
 });
+
+test("forgotten meals support several dated AI-calculated drafts before confirmation", () => {
+  assert.match(page, /שכחתי לעדכן/);
+  assert.match(page, /calculateForgottenMeals/);
+  assert.match(page, /saveForgottenMeals/);
+  assert.match(page, /שלשום/);
+  assert.match(page, /הוסף ארוחה נוספת/);
+  assert.match(page, /אישור והוספת הכל ליומן/);
+  assert.match(css, /forgotten-modal/);
+  assert.match(css, /forgotten-stepper/);
+});
