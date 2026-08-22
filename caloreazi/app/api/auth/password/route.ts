@@ -10,7 +10,7 @@ export async function PUT(request: Request) {
   const currentPassword = String(body.currentPassword || "");
   const newPassword = String(body.newPassword || "");
   const user = current.users.find((item) => item.id === session.userId);
-  if (user?.role !== "admin") return Response.json({ error: "הפעולה זמינה למנהל בלבד" }, { status: 403 });
+  if (!user) return Response.json({ error: "המשתמש לא נמצא" }, { status: 404 });
   if (!(await verifyPassword(currentPassword, user.password))) return Response.json({ error: "הסיסמה הנוכחית שגויה" }, { status: 400 });
   if (newPassword.length < 10) return Response.json({ error: "הסיסמה החדשה חייבת להכיל לפחות 10 תווים" }, { status: 400 });
   if (currentPassword === newPassword) return Response.json({ error: "יש לבחור סיסמה חדשה ושונה" }, { status: 400 });

@@ -45,6 +45,7 @@ const emptyOnboarding = {
   targetWeight: 76,
   activity: "light",
   workouts: 2,
+  workoutTypes: [] as string[],
   diet: "none",
   restrictions: "",
   theme: "dark",
@@ -56,6 +57,15 @@ const goalLabels: Record<string, string> = {
   gain: "עלייה מבוקרת במשקל",
   healthy: "אכילה בריאה יותר",
 };
+const workoutTypeLabels: Record<string, string> = { walking: "הליכה", running: "ריצה", strength: "אימון כוח", cycling: "רכיבה", swimming: "שחייה", yoga: "יוגה / גמישות", other: "אחר" };
+const dietStyles = [
+  ["none", "מאוזנת", "ללא הגבלה מיוחדת, עם גיוון בין קבוצות המזון"],
+  ["mediterranean", "ים־תיכונית", "ירקות, קטניות, דגים, שמן זית ודגנים מלאים"],
+  ["lowCarb", "דלת פחמימות", "פחות פחמימות, עם דגש על חלבון ושומן איכותי"],
+  ["vegetarian", "צמחונית", "ללא בשר ודגים"],
+  ["vegan", "טבעונית", "ללא מזון מן החי"],
+  ["kosher", "כשרה", "שמירה על כללי כשרות"],
+];
 const mealSuggestionCatalog = [
   { name: "יוגורט, שיבולת שועל ופירות", periods: ["breakfast", "snack"], kcal: 340, protein: 23, carbs: 43, fat: 8, tags: ["חלבי", "מתוק", "פירות", "מהיר"] },
   { name: "חביתה, קוטג׳ וסלט", periods: ["breakfast", "dinner"], kcal: 390, protein: 34, carbs: 18, fat: 20, tags: ["ביצים", "חלבי", "מלוח", "ירקות"] },
@@ -515,6 +525,11 @@ export default function Home() {
   const [photoQuality, setPhotoQuality] = useState<{ level: "good" | "warning"; message: string } | null>(null);
   const [mealConfidence, setMealConfidence] = useState<"low" | "medium" | "high">("low");
   const [mealResult, setMealResult] = useState<any>(null);
+  useEffect(() => {
+    if (!mealResult) return;
+    const timer = window.setTimeout(() => setMealResult(null), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [mealResult]);
   const [weightValue, setWeightValue] = useState(0);
   const [weightDate, setWeightDate] = useState("");
   const [weightFeedback, setWeightFeedback] = useState("");
@@ -1174,10 +1189,11 @@ export default function Home() {
     setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false); setTasteWizardOpen(false);
     setMacroDetail(""); setMealPreview(null); setPendingQuickFood(null); setEditingFood(null);
   }
-  function openNavigationScreen(screen: "home" | "history" | "admin" | "coach") {
+  function openNavigationScreen(screen: "home" | "history" | "admin" | "insights" | "coach") {
     closeOpenScreens();
     if (screen === "history") setHistoryOpen(true);
     if (screen === "admin") void openAdmin();
+    if (screen === "insights") void openInsights();
     if (screen === "coach") setCoachOpen(true);
   }
 
@@ -1491,12 +1507,15 @@ export default function Home() {
     setProfileTab("basic");
     setProfileForm({
       name: state?.owner?.name || "",
+      email: state?.owner?.email || "",
+      accountPassword: "",
       age: profile.age,
       height: profile.height,
       targetWeight: profile.targetWeight,
       initialWeight: profile.initialWeight || 0,
       initialWeightPassword: "",
       activity: profile.activity,
+      workoutTypes: profile.workoutTypes || [],
       diet: profile.diet,
       restrictions: profile.restrictions || "",
       diabetesStatus: profile.diabetesStatus || "none",
@@ -2197,6 +2216,21 @@ export default function Home() {
           usage: `${data.usage.totalTokens} tokens · $${data.usage.estimatedCost.toFixed(4)}`,
         },
       ]);
+      if (/(?:תכניס|תוסיף|הוסף|הכנס).*(?:ארוחה|אוכל|ליומן|לארוחות)/i.test(text)) {
+        const draft = await api("/api/ai/analyze-text", { method: "POST", body: JSON.stringify({ description: text }) });
+        setEditingMealId("");
+        setMealSource("manual");
+        setMealPeriod(mealPeriodFor());
+        setManualDescription(text);
+        setMealForm({ name: draft.name, kcal: 0, protein: 0, carbs: 0, fat: 0 });
+        setMealItems(draft.items || []);
+        setAiOriginalItems(structuredClone(draft.items || []));
+        setMealReviewReady(true);
+        setMealDetailsOpen(false);
+        setPhotoStatus("המאמן הכין טיוטה. בדוק את הסיכום ולחץ אישור כדי לשמור ביומן.");
+        setCoachOpen(false);
+        setMealOpen(true);
+      }
       const latest = await api("/api/state");
       setState(latest);
     } catch (e) {
@@ -2536,9 +2570,9 @@ export default function Home() {
         >
           <AppIcon name="camera" />
         </button>
-        <button className={settingsOpen || adminLoginOpen ? "active" : ""} onClick={() => openNavigationScreen("admin")}>
-          <span><AppIcon name={isAdmin ? "settings" : "lock"} /></span>
-          {isAdmin ? "ניהול" : "Admin"}
+        <button className={isAdmin ? (settingsOpen || adminLoginOpen ? "active" : "") : (insightsOpen ? "active" : "")} onClick={() => openNavigationScreen(isAdmin ? "admin" : "insights")}>
+          <span><AppIcon name={isAdmin ? "settings" : "activity"} /></span>
+          {isAdmin ? "ניהול" : "תובנות"}
         </button>
         <button className={coachOpen ? "active" : ""} onClick={() => openNavigationScreen("coach")}>
           <span><AppIcon name="coach" /></span>מאמן
@@ -3652,6 +3686,8 @@ export default function Home() {
                   <option value="very">פעיל מאוד</option>
                 </select>
               </label>
+              <fieldset className="wide profile-choice-field"><legend>סוגי אימון מועדפים</legend><div className="profile-choice-chips">{Object.entries(workoutTypeLabels).map(([key,label]) => <button type="button" key={key} className={(profileForm.workoutTypes || []).includes(key) ? "selected" : ""} onClick={() => setProfileForm({ ...profileForm, workoutTypes: (profileForm.workoutTypes || []).includes(key) ? profileForm.workoutTypes.filter((item: string) => item !== key) : [...(profileForm.workoutTypes || []), key] })}>{label}</button>)}</div></fieldset>
+              <label className="wide">סגנון תזונה<select value={profileForm.diet || "none"} onChange={(e) => setProfileForm({ ...profileForm, diet: e.target.value })}>{dietStyles.map(([key,title,description]) => <option key={key} value={key}>{title} — {description}</option>)}</select></label>
               <label className="wide">
                 מגבלות והעדפות
                 <input
@@ -3691,6 +3727,7 @@ export default function Home() {
                   <label>פחמימות<input type="number" value={profileForm.customCarbs || ""} onChange={(e) => setProfileForm({ ...profileForm, customCarbs: Number(e.target.value) })} /></label>
                   <label>שומן<input type="number" value={profileForm.customFat || ""} onChange={(e) => setProfileForm({ ...profileForm, customFat: Number(e.target.value) })} /></label>
                 </>}
+                <details className="wide calorie-plan-explainer"><summary>איך חושב יעד הקלוריות?</summary><p>היעד מבוסס על חילוף החומרים הבסיסי, רמת הפעילות והמטרה שבחרת. במצב אוטומטי נשמר גם סף בטיחות; במצב מותאם הערך שהזנת הוא הקובע.</p>{profile.caloriePlan && <ul><li>BMR: {profile.caloriePlan.bmr} קלוריות</li><li>תחזוקה משוערת: {profile.caloriePlan.maintenance} קלוריות</li><li>יעד נוכחי: {profile.calories} קלוריות</li></ul>}</details>
               </div>
             </section>
             <div className="profile-metrics">
@@ -3717,6 +3754,12 @@ export default function Home() {
             </div>
             </section>}
             {profileTab === "account" && <section className="profile-tab-panel account-panel"><header><span>⚙</span><div><strong>העדפות וחשבון</strong><small>תצוגה, שיתוף, גיבוי וניהול מידע</small></div></header>
+            <section className="account-credentials">
+              <strong>פרטי התחברות</strong>
+              <label>כתובת אימייל<input type="email" value={profileForm.email || ""} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} /></label>
+              {profileForm.email !== state.owner.email && <label>סיסמה נוכחית לאישור שינוי<input type="password" autoComplete="current-password" value={profileForm.accountPassword || ""} onChange={(e) => setProfileForm({ ...profileForm, accountPassword: e.target.value })} /></label>}
+              <div className="password-change-grid"><label>סיסמה נוכחית<input type="password" autoComplete="current-password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} /></label><label>סיסמה חדשה<input type="password" autoComplete="new-password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} /></label><label>אימות סיסמה חדשה<input type="password" autoComplete="new-password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} /></label><button type="button" disabled={busy || !passwordForm.currentPassword || passwordForm.newPassword.length < 10 || passwordForm.newPassword !== passwordForm.confirmPassword} onClick={(event) => void changeAdminPassword(event as any)}>שנה סיסמה</button></div>
+            </section>
             <button className="taste-profile-entry" type="button" onClick={openTasteWizard}><span>♡</span><div><strong>שאלון טעמים והעדפות</strong><small>{profile?.tasteProfile?.completedAt ? `${profile.tasteProfile.likes?.length || 0} העדפות אהובות נשמרו · אפשר לעדכן` : "שאלון קצר ולא חובה להתאמת המלצות הארוחות וה־AI"}</small></div><b>←</b></button>
             <button
               className="profile-sharing"
@@ -5192,24 +5235,14 @@ function Onboarding({
             onChange={(e) => setValues({ ...values, workouts: e.target.value })}
           />
         </label>
+        <fieldset className="onboarding-choice-field"><legend>איזה אימון מתאים לך?</legend><div className="profile-choice-chips">{Object.entries(workoutTypeLabels).map(([key,label]) => <button type="button" key={key} className={(values.workoutTypes || []).includes(key) ? "selected" : ""} onClick={() => setValues({ ...values, workoutTypes: (values.workoutTypes || []).includes(key) ? values.workoutTypes.filter((item: string) => item !== key) : [...(values.workoutTypes || []), key] })}>{label}</button>)}</div></fieldset>
       </div>
     </>,
     <>
       <p className="eyebrow">התאמה אישית</p>
       <h1>העדפות ומגבלות</h1>
       <div className="field-stack">
-        <label>
-          סגנון תזונה
-          <select
-            value={values.diet}
-            onChange={(e) => setValues({ ...values, diet: e.target.value })}
-          >
-            <option value="none">ללא העדפה מיוחדת</option>
-            <option value="vegetarian">צמחונות</option>
-            <option value="vegan">טבעונות</option>
-            <option value="kosher">כשר</option>
-          </select>
-        </label>
+        <fieldset className="diet-style-grid"><legend>סגנון תזונה</legend>{dietStyles.map(([key,title,description]) => <button type="button" key={key} className={values.diet === key ? "selected" : ""} onClick={() => setValues({ ...values, diet: key })}><strong>{title}</strong><small>{description}</small></button>)}</fieldset>
         <label>
           אלרגיות, רגישויות או מזונות להימנע מהם
           <textarea
