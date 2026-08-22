@@ -126,3 +126,30 @@
   .meal-meta{flex-wrap:wrap;gap:5px!important}
   .meal-meta time{font-size:12px}.meal-meta em{font-size:10px}
 }
+.admin-user-credentials {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.admin-user-credentials summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.admin-user-credentials[open] {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-user-credentials label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.admin-user-credentials input {
+  width: 100%;
+  min-height: 48px;
+}

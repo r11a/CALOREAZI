@@ -454,6 +454,7 @@ export default function Home() {
   const [adminPassword, setAdminPassword] = useState("");
   const [loginForm, setLoginForm] = useState({ login: "", password: "" });
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [adminUserEdits, setAdminUserEdits] = useState<Record<string, { email: string; password: string }>>({});
   const [newUser, setNewUser] = useState({ name: "", email: "", password: "" });
   const [mealOpen, setMealOpen] = useState(false);
   const [editingMealId, setEditingMealId] = useState("");
@@ -526,6 +527,8 @@ export default function Home() {
   const [photoQuality, setPhotoQuality] = useState<{ level: "good" | "warning"; message: string } | null>(null);
   const [mealConfidence, setMealConfidence] = useState<"low" | "medium" | "high">("low");
   const [mealResult, setMealResult] = useState<any>(null);
+  const [calorieOverage, setCalorieOverage] = useState<any>(null);
+  const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification === "undefined" ? "unsupported" : Notification.permission);
   useEffect(() => {
     if (!mealResult) return;
     const timer = window.setTimeout(() => setMealResult(null), 15_000);
@@ -571,6 +574,8 @@ export default function Home() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileTab, setProfileTab] = useState<"basic" | "health" | "goals" | "account">("basic");
   const [profileForm, setProfileForm] = useState<any>({});
+  const [newCycleOpen, setNewCycleOpen] = useState(false);
+  const [newCycleForm, setNewCycleForm] = useState({ currentWeight: 0, targetWeight: 0, goal: "lose" });
   const [tasteWizardOpen, setTasteWizardOpen] = useState(false);
   const [tasteWizardStep, setTasteWizardStep] = useState(0);
   const [tasteDraft, setTasteDraft] = useState<any>({ likes: [], dislikes: [], prepTime: "medium" });
@@ -586,12 +591,15 @@ export default function Home() {
   const [insightsData, setInsightsData] = useState<any>(null);
   const [activityOpen, setActivityOpen] = useState(false);
   const [activityForm, setActivityForm] = useState({
+    description: "",
     type: "הליכה",
     minutes: 30,
     steps: 0,
     distanceKm: 0,
     activeCalories: 0,
+    intensity: "medium",
   });
+  const [activityAiStatus, setActivityAiStatus] = useState("");
   const [trashItems, setTrashItems] = useState<any[]>([]);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -606,6 +614,7 @@ export default function Home() {
     daily: true,
     meals: true,
     weight: false,
+    trends: false,
   });
   const [partnerOpen, setPartnerOpen] = useState(false);
   const [pendingQuickFood, setPendingQuickFood] = useState<any>(null);
@@ -817,6 +826,11 @@ export default function Home() {
     ...(currentStreak >= 7 ? [{ icon: "★", label: "שבוע של עקביות" }] : []),
     ...(dailyScore >= 80 ? [{ icon: "◎", label: "יום מאוזן" }] : []),
   ].slice(0, 3);
+  const calmChallenges = [
+    { label: "לתעד שתי ארוחות", value: Math.min(2, state?.today?.meals?.length || 0), target: 2 },
+    { label: "להתקרב ליעד המים", value: Math.min(Number(profile?.waterMl || 1), Number(state?.today?.waterMl || 0)), target: Number(profile?.waterMl || 1) },
+    { label: "20 דקות תנועה", value: Math.min(20, (state?.activity || []).filter((item: any) => item.date === state?.today?.date).reduce((sum: number, item: any) => sum + Number(item.minutes || 0), 0)), target: 20 },
+  ];
   const mealSuggestions = useMemo(() => {
     const taste = profile?.tasteProfile || { likes: [], dislikes: [] }; const likes = taste.likes || []; const dislikes = taste.dislikes || []; const blocked = `${profile?.restrictions || ""} ${profile?.foodAllergies || ""}`.toLocaleLowerCase("he");
     const proteinGap = Math.max(0, Number(profile?.protein || 0) - macros.protein); const carbsGap = Math.max(0, Number(profile?.carbs || 0) - macros.carbs); const fatGap = Math.max(0, Number(profile?.fat || 0) - macros.fat);
@@ -873,6 +887,8 @@ export default function Home() {
     const y = 136 - ((Number(item.weight) - weightRange.min) / spread) * 104;
     return { ...item, x, y };
   });
+  const waterByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, amount: historyDays.slice(-30).flatMap((day: any) => day.waterEvents || []).filter((event: any) => new Date(event.time).getHours() === hour).reduce((sum: number, event: any) => sum + Number(event.amount || 0), 0) }));
+  const maximumWaterHour = Math.max(1, ...waterByHour.map((item) => item.amount));
   const greeting =
     now.getHours() < 5
       ? "לילה טוב"
@@ -1192,6 +1208,7 @@ export default function Home() {
     setWaterOpen(false); setProfileOpen(false); setHistoryOpen(false); setInsightsOpen(false); setActivityOpen(false);
     setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false); setTasteWizardOpen(false);
     setForgottenOpen(false);
+    setNewCycleOpen(false);
     setMacroDetail(""); setMealPreview(null); setPendingQuickFood(null); setEditingFood(null);
   }
   function openNavigationScreen(screen: "home" | "history" | "admin" | "insights" | "coach") {
@@ -1400,6 +1417,10 @@ export default function Home() {
       }
       setState(latest);
       if (!catalogOnly) setMealResult({ name: finalMeal.name, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId) });
+      if (!catalogOnly && !editingMealId && savedLocalDate === latest.today?.date && consumed + Number(finalMeal.kcal) > dailyCalorieTarget) {
+        setCalorieOverage({ id: savedMealId, meal: finalMeal, overBy: consumed + Number(finalMeal.kcal) - dailyCalorieTarget });
+        if (notificationPermission === "granted") new Notification("CALOREAZI", { body: `חריגה של ${Math.round(consumed + Number(finalMeal.kcal) - dailyCalorieTarget)} קלוריות. אפשר לערוך או לבטל את ההוספה.` });
+      }
       if (!catalogOnly && savedMealId && !photoPreview) void api("/api/meals/image", { method: "POST", body: JSON.stringify({ id: savedMealId, allowGenerate: true }) }).then((imageState) => { setState(imageState); if (imageState.imageCompleted) setMealResult((current: any) => current ? { ...current, imageCompleted: true } : current); }).catch(() => undefined);
       if (!catalogOnly && savedLocalDate && savedLocalDate !== latest.today?.date)
         setError(`הארוחה נשמרה בהיסטוריה בתאריך ${savedLocalDate}, בהתאם לשעה שנבחרה.`);
@@ -1535,6 +1556,7 @@ export default function Home() {
       customCarbs: profile.carbs,
       customFat: profile.fat,
       tasteProfile: profile.tasteProfile || { likes: [], dislikes: [], prepTime: "medium" },
+      acquaintance: profile.acquaintance || { bloodType: "", occupation: "", sleepHours: 0, stressLevel: 0, motivation: "", eatingChallenges: "" },
       avatar: profile.avatar || "",
     });
     setWeightValue(latestWeight);
@@ -1560,6 +1582,38 @@ export default function Home() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function updateAdminUserCredentials(user: any) {
+    const draft = adminUserEdits[user.id] || { email: user.email || "", password: "" };
+    setBusy(true);
+    setAiStatus("");
+    try {
+      await api("/api/admin/users", {
+        method: "PATCH",
+        body: JSON.stringify({ id: user.id, email: draft.email, password: draft.password }),
+      });
+      setAdminUsers(await api("/api/admin/users"));
+      setAdminUserEdits((current) => ({ ...current, [user.id]: { email: draft.email.trim(), password: "" } }));
+      setAiStatus(`פרטי ההתחברות של ${user.name} עודכנו ✓`);
+    } catch (e) {
+      setAiStatus((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function calculateActivityWithAi() {
+    if (!activityForm.description.trim()) { setActivityAiStatus("תאר את הפעילות, הקצב והמשך שלה."); return; }
+    setBusy(true); setActivityAiStatus("מחשב לפי התיאור והמשקל שלך…");
+    try { const draft = await api("/api/ai/activity-draft", { method: "POST", body: JSON.stringify({ description: activityForm.description }) }); setActivityForm({ ...activityForm, ...draft, description: activityForm.description }); setActivityAiStatus(`${draft.explanation} · בדוק ואשר לפני השמירה.`); }
+    catch (e) { setActivityAiStatus((e as Error).message); }
+    finally { setBusy(false); }
+  }
+  async function startNewCycle(event: FormEvent) {
+    event.preventDefault(); setBusy(true);
+    try { const latest = await api("/api/profile/cycle", { method: "POST", body: JSON.stringify(newCycleForm) }); setState(latest); setNewCycleOpen(false); setProfileOpen(false); setMealResult({ name: "סבב חדש התחיל — ההיסטוריה הקודמת נשמרה", kcal: 0, protein: 0, carbs: 0, fat: 0 }); }
+    catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
   }
   function openTasteWizard() {
     const current = profile?.tasteProfile || { likes: [], dislikes: [], prepTime: "medium" };
@@ -1622,14 +1676,14 @@ export default function Home() {
           body: JSON.stringify(partnerForm),
         }),
       );
-      setPartnerForm({ email: "", userIds: [], daily: true, meals: true, weight: false });
+      setPartnerForm({ email: "", userIds: [], daily: true, meals: true, weight: false, trends: false });
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
-  async function updatePartnership(id: string, action: "accept" | "revoke") {
+  async function updatePartnership(id: string, action: "accept" | "reject" | "revoke") {
     try {
       setState(
         await api("/api/partnerships", {
@@ -2308,6 +2362,11 @@ export default function Home() {
     try { await api("/api/ai/chat", { method: "PATCH" }); setMessages([]); }
     catch (e) { setError((e as Error).message); }
   }
+  async function enableNotifications() {
+    if (typeof Notification === "undefined") { setError("התראות אינן נתמכות בדפדפן הזה."); return; }
+    const permission = await Notification.requestPermission(); setNotificationPermission(permission);
+    if (permission === "granted") new Notification("CALOREAZI", { body: "ההתראות הופעלו. נציג רק תזכורות שימושיות ולא התראות מלחיצות." });
+  }
 
   if (!state)
     return (
@@ -2381,11 +2440,13 @@ export default function Home() {
       <section className="welcome">
         <div><h1>{greeting}, {state.owner.name}</h1><p>{scoreHeadline}</p></div>
       </section>
+      {(state.partnerships || []).filter((link) => link.direction === "incoming" && link.status === "pending").map((link) => <aside className="partnership-invite-card" key={link.id}><span>♡</span><div><strong>{link.other?.username || link.other?.name} בחר לשתף איתך את התהליך</strong><small>ההזמנה תישאר כאן עד שתבחר</small></div><button onClick={() => updatePartnership(link.id, "accept")}>אשר</button><button className="reject" onClick={() => updatePartnership(link.id, "reject")}>דחה</button></aside>)}
       {consistencyBadges.length > 0 && (
         <div className="consistency-badges" aria-label="הישגים בקצב שלך">
           {consistencyBadges.map((badge) => <span key={badge.label}><b>{badge.icon}</b>{badge.label}</span>)}
         </div>
       )}
+      <details className="calm-challenges"><summary><span>◇</span><div><strong>יעדים רגועים להיום</strong><small>בלי לחץ ובלי רצף שנשבר — כל צעד נחשב</small></div></summary><div>{calmChallenges.map((challenge) => <span key={challenge.label}><small>{challenge.label}</small><i><b style={{ width: `${Math.min(100, challenge.value / Math.max(1, challenge.target) * 100)}%` }} /></i><em>{Math.round(challenge.value)} / {challenge.target}</em></span>)}</div></details>
       <details className={`daily-score-details score-${scoreTone}`}>
         <summary aria-label="פתיחת הסבר על הציון היומי">
           <div className="daily-score-bar" role="progressbar" aria-label="ציון יומי" aria-valuemin={0} aria-valuemax={100} aria-valuenow={dailyScore}>
@@ -2625,6 +2686,7 @@ export default function Home() {
           <span><AppIcon name="coach" /></span>מאמן
         </button>
       </nav>
+      {calorieOverage && <div className="modal-layer overage-layer"><button className="backdrop" onClick={() => setCalorieOverage(null)} /><section className="settings-modal overage-modal"><header><div><h2>חריגה מהיעד היומי</h2><small>הארוחה נשמרה, אבל אפשר עדיין לתקן את הבחירה</small></div></header><div className="overage-ring"><strong>+{Math.round(calorieOverage.overBy)}</strong><small>קלוריות מעל היעד</small></div><p>אין צורך להילחץ מיום אחד. אפשר להשאיר את הארוחה, לערוך כמויות או לבטל את ההוספה.</p><footer><button type="button" onClick={() => setCalorieOverage(null)}>השאר ביומן</button><button type="button" onClick={() => { const meal = calorieOverage.meal; setCalorieOverage(null); editMeal({ ...meal, id: calorieOverage.id, time: meal.occurredAt }); }}>ערוך ארוחה</button><button className="danger" type="button" onClick={async () => { await deleteMeal(calorieOverage.id); setCalorieOverage(null); }}>בטל את ההוספה</button></footer></section></div>}
       {mealPreview && (
         <div className="modal-layer meal-preview-layer">
           <button className="backdrop" onClick={() => setMealPreview(null)} aria-label="סגירת פרטי הארוחה" />
@@ -3154,6 +3216,36 @@ export default function Home() {
                         {user.disabled ? "הפעל" : "השבת"}
                       </button>
                     )}
+                    <details className="admin-user-credentials">
+                      <summary>עדכון פרטי התחברות</summary>
+                      <label>
+                        אימייל
+                        <input
+                          type="email"
+                          value={adminUserEdits[user.id]?.email ?? user.email ?? ""}
+                          onChange={(event) => setAdminUserEdits((current) => ({ ...current, [user.id]: { email: event.target.value, password: current[user.id]?.password || "" } }))}
+                        />
+                      </label>
+                      <label>
+                        סיסמה חדשה (אופציונלי)
+                        <input
+                          type="password"
+                          minLength={10}
+                          autoComplete="new-password"
+                          value={adminUserEdits[user.id]?.password || ""}
+                          onChange={(event) => setAdminUserEdits((current) => ({ ...current, [user.id]: { email: current[user.id]?.email ?? user.email ?? "", password: event.target.value } }))}
+                        />
+                      </label>
+                      <button
+                        className="primary"
+                        type="button"
+                        disabled={busy || !(adminUserEdits[user.id]?.email ?? user.email)}
+                        onClick={() => updateAdminUserCredentials(user)}
+                      >
+                        שמור מייל ו/או סיסמה
+                      </button>
+                      <small>שינוי ינתק את ההפעלות הפעילות של המשתמש מטעמי אבטחה.</small>
+                    </details>
                   </article>
                 ))}
               </div>
@@ -3788,6 +3880,7 @@ export default function Home() {
                 <label className="wide">תרופות רלוונטיות לתזונה<input value={profileForm.relevantMedications || ""} onChange={(e) => setProfileForm({ ...profileForm, relevantMedications: e.target.value })} placeholder="רק מידע שחשוב להמלצות מזון ותיאבון" /></label>
               </div>
             </section>
+            <details className="acquaintance-form"><summary>נעים להכיר <small>שאלון מעמיק ולא חובה</small></summary><div className="settings-grid"><label>סוג דם<select value={profileForm.acquaintance?.bloodType || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, bloodType: e.target.value } })}><option value="">לא ידוע / מעדיף לא לציין</option>{["A+","A-","B+","B-","AB+","AB-","O+","O-"].map((type) => <option key={type}>{type}</option>)}</select></label><label>עיסוק ושגרת יום<input value={profileForm.acquaintance?.occupation || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, occupation: e.target.value } })} /></label><label>שעות שינה ממוצעות<input type="number" min="0" max="16" step=".5" value={profileForm.acquaintance?.sleepHours || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, sleepHours: Number(e.target.value) } })} /></label><label>רמת מתח 0–10<input type="number" min="0" max="10" value={profileForm.acquaintance?.stressLevel || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, stressLevel: Number(e.target.value) } })} /></label><label className="wide">מה חשוב לך להשיג?<textarea value={profileForm.acquaintance?.motivation || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, motivation: e.target.value } })} /></label><label className="wide">מה בדרך כלל מקשה עליך?<textarea value={profileForm.acquaintance?.eatingChallenges || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, eatingChallenges: e.target.value } })} /></label></div></details>
             </section>}
             {profileTab === "goals" && <section className="profile-tab-panel"><header><span>◎</span><div><strong>יעדים ומדדים</strong><small>טווחים, משקל ומצב ההתקדמות</small></div></header>
             <section className="health-profile">
@@ -3850,6 +3943,7 @@ export default function Home() {
               </div>
               <b>‹</b>
             </button>
+            <button className="profile-sharing new-cycle-entry" type="button" onClick={() => { setNewCycleForm({ currentWeight: Number(latestWeight || profile.weight), targetWeight: Number(profile.targetWeight), goal: profile.goal || "lose" }); setNewCycleOpen(true); }}><span>↻</span><div><strong>התחל סבב חדש</strong><small>הגדר נקודת פתיחה ומטרה חדשות; כל ההיסטוריה הקודמת נשמרת</small></div><b>‹</b></button>
             <button
               className="profile-sharing"
               type="button"
@@ -3866,6 +3960,7 @@ export default function Home() {
               </div>
               <b>‹</b>
             </button>
+            <button className="profile-sharing" type="button" onClick={enableNotifications}><span>◉</span><div><strong>התראות לנייד</strong><small>{notificationPermission === "granted" ? "ההתראות מאושרות" : notificationPermission === "denied" ? "ההרשאה נחסמה בהגדרות הדפדפן" : "הפעל תזכורות שימושיות וחריגות חשובות"}</small></div><b>‹</b></button>
             <section className="profile-data-actions">
               <a href="api/export" download><strong>ייצוא וגיבוי הנתונים</strong><small>הורדת עותק של הפרופיל, הארוחות והמדידות</small></a>
               <button type="button" onClick={deleteMyData}><strong>מחיקת החשבון לצמיתות</strong><small>דורש סיסמה ושני שלבי אישור · לא ניתן לשחזר</small></button>
@@ -3932,6 +4027,7 @@ export default function Home() {
               </button>
             </header>
             <div className="settings-grid">
+              <label className="wide">תיאור חופשי<textarea value={activityForm.description} onChange={(e) => setActivityForm({ ...activityForm, description: e.target.value })} placeholder="למשל: הליכה מהירה 40 דקות עם עליות" /></label><button className="wide activity-ai-button" type="button" onClick={calculateActivityWithAi} disabled={busy}>חשב פעילות עם AI</button>{activityAiStatus && <p className="wide activity-ai-status">{activityAiStatus}</p>}
               <label className="wide">
                 שם
                 <input
@@ -4074,6 +4170,7 @@ export default function Home() {
                     carbs: goalStatus(totals.carbs, goals.carbs),
                     fat: goalStatus(totals.fat, goals.fat),
                   };
+                  const timelineEntries = [...day.meals.map((meal: any) => ({ ...meal, kind: "meal" })), ...(day.waterEvents || []).map((event: any) => ({ ...event, kind: "water", name: "כוס מים" }))].sort((a: any, b: any) => String(a.time).localeCompare(String(b.time)));
                   return (
                     <details key={day.date} open>
                       <summary>
@@ -4127,11 +4224,7 @@ export default function Home() {
                       </div>
                       <p className={`history-day-score-summary score-${scoreToneFor(Number(day.dailyScore?.score || 0))}`}><strong>סיכום היום</strong><span>{historyScoreText(day)}</span></p>
                       <section className="history-timeline">
-                        {[...day.meals]
-                          .sort((a: any, b: any) =>
-                            String(a.time).localeCompare(String(b.time)),
-                          )
-                          .map((meal: any) => (
+                        {timelineEntries.map((meal: any) => meal.kind === "water" ? <article className="timeline-water" key={meal.id}><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><i /><span className="timeline-icon">💧</span><div><em>שתייה</em><strong>כוס מים</strong><small>{meal.amount} מ״ל</small></div><b>{meal.amount}<small> מ״ל</small></b></article> : (
                             <article
                               className={`timeline-${meal.period || "snack"}`}
                               key={meal.id}
@@ -4144,7 +4237,7 @@ export default function Home() {
                               </time>
                               <i />
                               {meal.image ? (
-                                <img src={meal.image} alt="" loading="lazy" decoding="async" />
+                                <button className="timeline-image-button" type="button" onClick={() => setMealPreview(meal)} aria-label={`הצגת ${meal.name}`}><img src={meal.image} alt="" loading="lazy" decoding="async" /></button>
                               ) : (
                                 <span className="timeline-icon">🍽</span>
                               )}
@@ -4215,6 +4308,7 @@ export default function Home() {
                   }
                 />
               </label>
+              <label>עצימות<select value={activityForm.intensity} onChange={(e) => setActivityForm({ ...activityForm, intensity: e.target.value })}><option value="low">קלה</option><option value="medium">בינונית</option><option value="high">גבוהה</option></select></label>
               <label>
                 צעדים
                 <input
@@ -4309,6 +4403,7 @@ export default function Home() {
               <p className="modal-help">מחשב מגמות…</p>
             ) : (
               <>
+                <section className="water-hours-insight"><header><strong>מתי שותים הכי הרבה?</strong><small>התפלגות השתייה לפי שעות ב־30 הימים האחרונים</small></header><div>{waterByHour.map((item) => <span key={item.hour} title={`${String(item.hour).padStart(2,"0")}:00 · ${item.amount} מ״ל`}><i style={{ height: `${item.amount ? Math.max(6, item.amount / maximumWaterHour * 100) : 2}%` }} /><small>{item.hour % 3 === 0 ? String(item.hour).padStart(2,"0") : ""}</small></span>)}</div>{!waterByHour.some((item) => item.amount > 0) && <p>הגרף יתחיל להיבנות מהוספות המים הבאות.</p>}</section>
                 {insightsData.sugar?.enabled && (
                   <section className="sugar-insights">
                     <header><div><strong>סוכרים תזונתיים משוערים</strong><small>מוצג בגלל מצב הסוכר שסומן בכרטיס האישי</small></div><b>לא גלוקוז בדם</b></header>
@@ -4378,6 +4473,7 @@ export default function Home() {
           </section>
         </div>
       )}
+      {newCycleOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setNewCycleOpen(false)} /><form className="settings-modal new-cycle-modal" onSubmit={startNewCycle}><header><div><h2>התחלת סבב חדש</h2><small>הארוחות, המדידות והסבבים הקודמים יישמרו במלואם</small></div><button type="button" onClick={() => setNewCycleOpen(false)}>×</button></header><div className="settings-grid"><label>משקל פתיחה חדש<input type="number" min="25" max="350" step=".1" value={newCycleForm.currentWeight} onChange={(e) => setNewCycleForm({ ...newCycleForm, currentWeight: Number(e.target.value) })} /></label><label>משקל יעד<input type="number" min="25" max="350" step=".1" value={newCycleForm.targetWeight} onChange={(e) => setNewCycleForm({ ...newCycleForm, targetWeight: Number(e.target.value) })} /></label><label className="wide">מטרה<select value={newCycleForm.goal} onChange={(e) => setNewCycleForm({ ...newCycleForm, goal: e.target.value })}>{Object.entries(goalLabels).map(([key,label]) => <option value={key} key={key}>{label}</option>)}</select></label></div><p className="modal-help">הפעולה משנה את נקודת הייחוס מכאן והלאה בלבד ואינה מוחקת נתון היסטורי.</p><footer><button type="button" onClick={() => setNewCycleOpen(false)}>ביטול</button><button className="primary" disabled={busy}>התחל סבב חדש</button></footer></form></div>}
       {partnerOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setPartnerOpen(false)} />
@@ -4436,8 +4532,9 @@ export default function Home() {
                       })
                     }
                   />{" "}
-                  משקל ומגמה
+                  משקל
                 </label>
+                <label><input type="checkbox" checked={partnerForm.trends} onChange={(e) => setPartnerForm({ ...partnerForm, trends: e.target.checked })} /> מגמות וציונים</label>
               </div>
               <button className="primary" disabled={busy || !partnerForm.userIds.length}>
                 שלח הזמנה ל־{partnerForm.userIds.length || 0} משתמשים
@@ -4464,6 +4561,7 @@ export default function Home() {
                           אשר
                         </button>
                       )}
+                    {link.direction === "incoming" && link.status === "pending" && <button className="reject" onClick={() => updatePartnership(link.id, "reject")}>דחה</button>}
                     <button
                       onClick={() => updatePartnership(link.id, "revoke")}
                     >

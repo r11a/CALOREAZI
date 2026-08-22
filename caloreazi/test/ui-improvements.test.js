@@ -5,6 +5,7 @@ import test from "node:test";
 const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 const expansionCss = await readFile(new URL("../app/expansion.css", import.meta.url), "utf8");
+const adminUsersRoute = await readFile(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8");
 
 test("health profile is editable and explicitly bounded as non-medical advice", () => {
   for (const field of ["diabetesStatus", "hypertension", "foodAllergies", "relevantMedications", "pregnancyStatus"])
@@ -207,4 +208,40 @@ test("forgotten meals support several dated AI-calculated drafts before confirma
   assert.match(page, /אישור והוספת הכל ליומן/);
   assert.match(css, /forgotten-modal/);
   assert.match(css, /forgotten-stepper/);
+});
+
+test("internal sharing exposes persistent decisions and four independent permissions", () => {
+  assert.match(page, /partnership-invite-card/);
+  assert.match(page, /updatePartnership\(link\.id, "reject"\)/);
+  assert.match(page, /partnerForm\.trends/);
+  assert.match(page, /מגמות וציונים/);
+  assert.match(css, /partnership-invite-card/);
+});
+
+test("expanded tracking keeps cycles, water events and calm goals", () => {
+  assert.match(page, /נעים להכיר/);
+  assert.match(page, /startNewCycle/);
+  assert.match(page, /calculateActivityWithAi/);
+  assert.match(page, /calmChallenges/);
+  assert.match(page, /timeline-water/);
+  assert.match(page, /waterByHour/);
+  assert.match(page, /timeline-image-button/);
+  assert.match(css, /water-hours-insight/);
+});
+
+test("mobile notifications are opt-in and calorie overage remains reversible", () => {
+  assert.match(page, /Notification\.requestPermission/);
+  assert.match(page, /calorieOverage/);
+  assert.match(page, /ערוך ארוחה/);
+  assert.match(page, /בטל את ההוספה/);
+  assert.match(css, /overage-modal/);
+});
+
+test("admin can securely update a user email or password", () => {
+  assert.match(page, /updateAdminUserCredentials/);
+  assert.match(page, /שמור מייל ו\/או סיסמה/);
+  assert.match(page, /autoComplete="new-password"/);
+  assert.match(adminUsersRoute, /user\.email_changed/);
+  assert.match(adminUsersRoute, /האימייל כבר משויך למשתמש אחר/);
+  assert.match(adminUsersRoute, /סיסמה חדשה חייבת להכיל לפחות 10 תווים/);
 });
