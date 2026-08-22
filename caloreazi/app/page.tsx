@@ -441,6 +441,12 @@ async function api(url: string, options?: RequestInit) {
   return data;
 }
 
+function urlBase64ToUint8Array(value: string) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const binary = window.atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
 export default function Home() {
   const [state, setState] = useState<AppState | null>(null);
   const [error, setError] = useState("");
@@ -692,7 +698,7 @@ export default function Home() {
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
     if ("serviceWorker" in navigator)
-      navigator.serviceWorker.register("sw.js").catch(() => undefined);
+      navigator.serviceWorker.register("./sw.js").catch(() => undefined);
     update();
     return () => {
       window.removeEventListener("online", update);
@@ -2363,9 +2369,22 @@ export default function Home() {
     catch (e) { setError((e as Error).message); }
   }
   async function enableNotifications() {
-    if (typeof Notification === "undefined") { setError("התראות אינן נתמכות בדפדפן הזה."); return; }
-    const permission = await Notification.requestPermission(); setNotificationPermission(permission);
-    if (permission === "granted") new Notification("CALOREAZI", { body: "ההתראות הופעלו. נציג רק תזכורות שימושיות ולא התראות מלחיצות." });
+    if (typeof Notification === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) { setError("התראות Push אינן נתמכות בדפדפן הזה."); return; }
+    const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches || Boolean((navigator as any).standalone);
+    if (isIos && !isStandalone) { setError("באייפון יש להוסיף את CALOREAZI למסך הבית ולפתוח אותה מהאייקון לפני הפעלת התראות."); return; }
+    setBusy(true); setError("");
+    try {
+      const permission = await Notification.requestPermission(); setNotificationPermission(permission);
+      if (permission !== "granted") throw new Error("הרשאת ההתראות לא אושרה. ניתן לשנות זאת בהגדרות ההתראות של iPhone.");
+      const registration = await navigator.serviceWorker.ready;
+      const configuration = await api("/api/notifications");
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(configuration.publicKey) });
+      await api("/api/notifications", { method: "POST", body: JSON.stringify({ subscription: subscription.toJSON() }) });
+      setAiStatus("התראות מסך נעול הופעלו ונשלחה התראת בדיקה ✓");
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
   }
 
   if (!state)
@@ -3960,7 +3979,7 @@ export default function Home() {
               </div>
               <b>‹</b>
             </button>
-            <button className="profile-sharing" type="button" onClick={enableNotifications}><span>◉</span><div><strong>התראות לנייד</strong><small>{notificationPermission === "granted" ? "ההתראות מאושרות" : notificationPermission === "denied" ? "ההרשאה נחסמה בהגדרות הדפדפן" : "הפעל תזכורות שימושיות וחריגות חשובות"}</small></div><b>‹</b></button>
+            <button className="profile-sharing" type="button" onClick={enableNotifications} disabled={busy}><span>◉</span><div><strong>התראות למסך הנעילה</strong><small>{notificationPermission === "granted" ? "Push פעיל גם כשה־PWA סגורה" : notificationPermission === "denied" ? "ההרשאה נחסמה בהגדרות ה־iPhone" : "הפעל Push אמיתי וקבל התראת בדיקה"}</small></div><b>‹</b></button>
             <section className="profile-data-actions">
               <a href="api/export" download><strong>ייצוא וגיבוי הנתונים</strong><small>הורדת עותק של הפרופיל, הארוחות והמדידות</small></a>
               <button type="button" onClick={deleteMyData}><strong>מחיקת החשבון לצמיתות</strong><small>דורש סיסמה ושני שלבי אישור · לא ניתן לשחזר</small></button>
@@ -4239,7 +4258,7 @@ export default function Home() {
                               {meal.image ? (
                                 <button className="timeline-image-button" type="button" onClick={() => setMealPreview(meal)} aria-label={`הצגת ${meal.name}`}><img src={meal.image} alt="" loading="lazy" decoding="async" /></button>
                               ) : (
-                                <span className="timeline-icon">🍽</span>
+                                <button className="timeline-image-button timeline-icon" type="button" onClick={() => setMealPreview(meal)} aria-label={`הצגת ${meal.name}`}>🍽</button>
                               )}
                               <div>
                                 <em>{periodLabels[meal.period || "snack"]}</em>

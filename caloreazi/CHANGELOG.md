@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.13.1
+
+- Added standards-based Web Push subscriptions for installed iPhone PWAs.
+- Added encrypted server-side VAPID key storage and per-user device subscriptions.
+- Added background notification display and notification-click handling in the service worker.
+- Replaced the foreground-only permission check with a server-delivered lock-screen test notification.
+- Added clear iPhone guidance when CALOREAZI is opened in Safari instead of from its Home Screen icon.
+- Made both meal photos and generic meal icons in the history timeline open a detailed meal view above the history screen.
+
 ## 1.13.0
 
 - Added internal sharing invitations by username with persistent accept/reject actions, independent daily-data, meal, weight and trend permissions, and revocation at any time.
