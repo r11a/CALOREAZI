@@ -58,6 +58,17 @@ const goalLabels: Record<string, string> = {
   healthy: "אכילה בריאה יותר",
 };
 const workoutTypeLabels: Record<string, string> = { walking: "הליכה", running: "ריצה", strength: "אימון כוח", cycling: "רכיבה", swimming: "שחייה", yoga: "יוגה / גמישות", other: "אחר" };
+const notificationPreferenceDefaults = { enabled: true, mealReminders: true, waterReminders: true, dailySummary: true, insights: true, coachTips: true, weeklyTrends: true, weightReminder: true, achievements: false, breakfastTime: "09:00", lunchTime: "14:00", dinnerTime: "20:00", waterTime: "16:30", summaryTime: "21:15", coachTime: "11:30", weeklyTime: "10:00", quietStart: "22:30", quietEnd: "07:00", maxPerDay: 3 };
+const notificationTypeOptions = [
+  ["mealReminders", "תזכורות ארוחות", "רק כאשר לא נרשמה ארוחה בזמן שבחרת"],
+  ["waterReminders", "תזכורות שתייה", "רק כאשר קצב השתייה נמוך ביחס ליעד"],
+  ["dailySummary", "סיכום יומי", "ציון, קלוריות ותמונת מצב בסוף היום"],
+  ["insights", "תובנות חכמות", "מידע שימושי לפי הארוחות והפערים של אותו יום"],
+  ["coachTips", "המלצות המאמן", "המלצה מתחלפת ומותאמת לנתונים שלך"],
+  ["weeklyTrends", "מגמות שבועיות", "ממוצעים ושינויים חשובים פעם בשבוע"],
+  ["weightReminder", "תזכורת שקילה", "רק אם לא הוזן משקל במשך יותר מ־14 יום"],
+  ["achievements", "הישגים רגועים", "חיזוק חיובי על יום מאוזן, בלי לחץ או ענישה"],
+] as const;
 const dietStyles = [
   ["none", "מאוזנת", "ללא הגבלה מיוחדת, עם גיוון בין קבוצות המזון"],
   ["mediterranean", "ים־תיכונית", "ירקות, קטניות, דגים, שמן זית ודגנים מלאים"],
@@ -447,6 +458,16 @@ function urlBase64ToUint8Array(value: string) {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
+function sameApplicationServerKey(current: ArrayBuffer | null, expected: Uint8Array) {
+  if (!current) return false;
+  const actual = new Uint8Array(current);
+  return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
+}
+
+function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string) {
+  return Promise.race([promise, new Promise<T>((_, reject) => window.setTimeout(() => reject(new Error(message)), milliseconds))]);
+}
+
 export default function Home() {
   const [state, setState] = useState<AppState | null>(null);
   const [error, setError] = useState("");
@@ -535,6 +556,7 @@ export default function Home() {
   const [mealResult, setMealResult] = useState<any>(null);
   const [calorieOverage, setCalorieOverage] = useState<any>(null);
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+  const [notificationStatus, setNotificationStatus] = useState("");
   useEffect(() => {
     if (!mealResult) return;
     const timer = window.setTimeout(() => setMealResult(null), 15_000);
@@ -578,7 +600,7 @@ export default function Home() {
   const [waterValue, setWaterValue] = useState(0);
   const [waterTargetValue, setWaterTargetValue] = useState(2000);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profileTab, setProfileTab] = useState<"basic" | "health" | "goals" | "account">("basic");
+  const [profileTab, setProfileTab] = useState<"basic" | "health" | "goals" | "notifications" | "account">("basic");
   const [profileForm, setProfileForm] = useState<any>({});
   const [newCycleOpen, setNewCycleOpen] = useState(false);
   const [newCycleForm, setNewCycleForm] = useState({ currentWeight: 0, targetWeight: 0, goal: "lose" });
@@ -1563,6 +1585,7 @@ export default function Home() {
       customFat: profile.fat,
       tasteProfile: profile.tasteProfile || { likes: [], dislikes: [], prepTime: "medium" },
       acquaintance: profile.acquaintance || { bloodType: "", occupation: "", sleepHours: 0, stressLevel: 0, motivation: "", eatingChallenges: "" },
+      notificationPreferences: { ...notificationPreferenceDefaults, ...(profile.notificationPreferences || {}) },
       avatar: profile.avatar || "",
     });
     setWeightValue(latestWeight);
@@ -2369,21 +2392,30 @@ export default function Home() {
     catch (e) { setError((e as Error).message); }
   }
   async function enableNotifications() {
-    if (typeof Notification === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) { setError("התראות Push אינן נתמכות בדפדפן הזה."); return; }
+    setNotificationStatus("");
+    if (typeof Notification === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) { setNotificationStatus("התראות Push אינן נתמכות בדפדפן הזה."); return; }
     const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches || Boolean((navigator as any).standalone);
-    if (isIos && !isStandalone) { setError("באייפון יש להוסיף את CALOREAZI למסך הבית ולפתוח אותה מהאייקון לפני הפעלת התראות."); return; }
+    if (isIos && !isStandalone) { setNotificationStatus("באייפון יש להוסיף את CALOREAZI למסך הבית ולפתוח אותה מהאייקון לפני הפעלת התראות."); return; }
     setBusy(true); setError("");
     try {
-      const permission = await Notification.requestPermission(); setNotificationPermission(permission);
+      setNotificationStatus("מבקש הרשאה מ־iPhone…");
+      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission(); setNotificationPermission(permission);
       if (permission !== "granted") throw new Error("הרשאת ההתראות לא אושרה. ניתן לשנות זאת בהגדרות ההתראות של iPhone.");
-      const registration = await navigator.serviceWorker.ready;
+      setNotificationStatus("מכין את שירות ההתראות…");
+      const installed = await withTimeout(navigator.serviceWorker.register("./sw.js"), 12_000, "שירות ההתראות לא נטען. סגור את ה־PWA, פתח מחדש ונסה שוב.");
+      await withTimeout(installed.update(), 12_000, "עדכון שירות ההתראות התעכב. בדוק חיבור ונסה שוב.").catch(() => undefined);
+      const registration = await withTimeout(navigator.serviceWorker.ready, 12_000, "שירות ההתראות עדיין לא פעיל. סגור את ה־PWA, פתח מחדש ונסה שוב.");
+      setNotificationStatus("רושם את המכשיר בצורה מאובטחת…");
       const configuration = await api("/api/notifications");
+      const applicationServerKey = urlBase64ToUint8Array(configuration.publicKey);
       let subscription = await registration.pushManager.getSubscription();
-      if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(configuration.publicKey) });
+      if (subscription && !sameApplicationServerKey(subscription.options.applicationServerKey, applicationServerKey)) { await subscription.unsubscribe(); subscription = null; }
+      if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
+      setNotificationStatus("שולח התראת בדיקה מהשרת…");
       await api("/api/notifications", { method: "POST", body: JSON.stringify({ subscription: subscription.toJSON() }) });
-      setAiStatus("התראות מסך נעול הופעלו ונשלחה התראת בדיקה ✓");
-    } catch (e) { setError((e as Error).message); }
+      setNotificationStatus("ההתראות פעילות — נשלחה התראת בדיקה למסך הנעילה ✓");
+    } catch (e) { setNotificationStatus((e as Error).message || "הפעלת ההתראות נכשלה. נסה שוב."); }
     finally { setBusy(false); }
   }
 
@@ -3773,7 +3805,7 @@ export default function Home() {
                 </button>
               </div>
             </div>
-            <nav className="profile-tabs" aria-label="חלקי הפרופיל">{[["basic","👤","אישי"],["health","♥","בריאות"],["goals","◎","יעדים"],["account","⚙","חשבון"]].map(([key,icon,label]) => <button key={key} type="button" className={profileTab === key ? "active" : ""} onClick={() => setProfileTab(key as typeof profileTab)}><span>{icon}</span>{label}</button>)}</nav>
+            <nav className="profile-tabs" aria-label="חלקי הפרופיל">{[["basic","👤","אישי"],["health","♥","בריאות"],["goals","◎","יעדים"],["notifications","🔔","התראות"],["account","⚙","חשבון"]].map(([key,icon,label]) => <button key={key} type="button" className={profileTab === key ? "active" : ""} onClick={() => setProfileTab(key as typeof profileTab)}><span>{icon}</span>{label}</button>)}</nav>
             {profileTab === "basic" && <section className="profile-tab-panel"><header><span>👤</span><div><strong>הפרטים הבסיסיים שלי</strong><small>נתונים המשמשים לחישוב יעדים ומעקב</small></div></header>
             <div className="settings-grid">
               <label>
@@ -3939,6 +3971,21 @@ export default function Home() {
               </span>
             </div>
             </section>}
+            {profileTab === "notifications" && <section className="profile-tab-panel notification-settings-panel"><header><span>🔔</span><div><strong>התראות חכמות</strong><small>רק מה שבחרת, בזמן רלוונטי ובהתאם ליום שלך</small></div></header>
+              <label className="notification-master"><input type="checkbox" checked={profileForm.notificationPreferences?.enabled !== false} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, enabled: event.target.checked } })} /><span><strong>הפעלת התראות אוטומטיות</strong><small>המתזמן מכבד שעות שקטות ומגבלת התראות יומית</small></span></label>
+              <div className="notification-type-list">{notificationTypeOptions.map(([key,title,description]) => <label key={key}><input type="checkbox" checked={Boolean(profileForm.notificationPreferences?.[key])} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, [key]: event.target.checked } })} /><span><strong>{title}</strong><small>{description}</small></span></label>)}</div>
+              <section className="notification-times"><header><strong>זמנים מועדפים</strong><small>הודעה תישלח רק אם היא עדיין רלוונטית</small></header><div>
+                <label>ארוחת בוקר<input type="time" value={profileForm.notificationPreferences?.breakfastTime || "09:00"} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, breakfastTime: event.target.value } })} /></label>
+                <label>ארוחת צהריים<input type="time" value={profileForm.notificationPreferences?.lunchTime || "14:00"} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, lunchTime: event.target.value } })} /></label>
+                <label>ארוחת ערב<input type="time" value={profileForm.notificationPreferences?.dinnerTime || "20:00"} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, dinnerTime: event.target.value } })} /></label>
+                <label>תזכורת מים<input type="time" value={profileForm.notificationPreferences?.waterTime || "16:30"} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, waterTime: event.target.value } })} /></label>
+                <label>המלצת מאמן<input type="time" value={profileForm.notificationPreferences?.coachTime || "11:30"} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, coachTime: event.target.value } })} /></label>
+                <label>סיכום יום<input type="time" value={profileForm.notificationPreferences?.summaryTime || "21:15"} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, summaryTime: event.target.value } })} /></label>
+              </div></section>
+              <section className="quiet-hours"><header><strong>שעות שקטות</strong><small>בשעות האלה לא תישלח אף התראה</small></header><div><label>התחלה<input type="time" value={profileForm.notificationPreferences?.quietStart || "22:30"} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, quietStart: event.target.value } })} /></label><label>סיום<input type="time" value={profileForm.notificationPreferences?.quietEnd || "07:00"} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, quietEnd: event.target.value } })} /></label><label>מקסימום ביום<select value={profileForm.notificationPreferences?.maxPerDay || 3} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, maxPerDay: Number(event.target.value) } })}><option value={2}>2 התראות</option><option value={3}>3 התראות</option><option value={5}>5 התראות</option></select></label></div></section>
+              <button className="notification-enable-button" type="button" onClick={enableNotifications} disabled={busy}>{busy ? "מפעיל…" : notificationPermission === "granted" ? "בדוק שוב התראות למסך הנעילה" : "הפעל התראות למסך הנעילה"}</button>
+              <p className={`notification-live-status ${notificationStatus.includes("✓") ? "success" : ""}`} aria-live="polite">{notificationStatus || (notificationPermission === "granted" ? "הרשאת iPhone קיימת. לחץ כדי לוודא שהחיבור לשרת תקין." : "לאחר הלחיצה iPhone יבקש ממך לאשר התראות.")}</p>
+            </section>}
             {profileTab === "account" && <section className="profile-tab-panel account-panel"><header><span>⚙</span><div><strong>העדפות וחשבון</strong><small>תצוגה, שיתוף, גיבוי וניהול מידע</small></div></header>
             <section className="account-credentials">
               <strong>פרטי התחברות</strong>
@@ -3979,7 +4026,6 @@ export default function Home() {
               </div>
               <b>‹</b>
             </button>
-            <button className="profile-sharing" type="button" onClick={enableNotifications} disabled={busy}><span>◉</span><div><strong>התראות למסך הנעילה</strong><small>{notificationPermission === "granted" ? "Push פעיל גם כשה־PWA סגורה" : notificationPermission === "denied" ? "ההרשאה נחסמה בהגדרות ה־iPhone" : "הפעל Push אמיתי וקבל התראת בדיקה"}</small></div><b>‹</b></button>
             <section className="profile-data-actions">
               <a href="api/export" download><strong>ייצוא וגיבוי הנתונים</strong><small>הורדת עותק של הפרופיל, הארוחות והמדידות</small></a>
               <button type="button" onClick={deleteMyData}><strong>מחיקת החשבון לצמיתות</strong><small>דורש סיסמה ושני שלבי אישור · לא ניתן לשחזר</small></button>

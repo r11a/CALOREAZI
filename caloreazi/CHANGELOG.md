@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.13.2
+
+- Added a dedicated notification tab to the user profile with an individual checkbox for meal, water, daily-summary, insight, coach, weekly-trend, weight and calm-achievement notifications.
+- Added editable meal, water, coach and daily-summary times, a daily notification limit and absolute quiet hours that work across midnight.
+- Added a server-side smart scheduler that evaluates actual user data, timezone and relevance before sending background Push notifications.
+- Added visible step-by-step feedback when enabling lock-screen notifications, including actionable iPhone and service-worker errors.
+- Automatically renews stale Push subscriptions when the server key changes and removes expired Apple Push endpoints.
+- Added scheduler tests for quiet hours, delivery windows and bounded notification settings.
+
 ## 1.13.1
 
 - Added standards-based Web Push subscriptions for installed iPhone PWAs.
