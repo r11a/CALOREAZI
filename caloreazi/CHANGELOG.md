@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.13.0
+
+- Added internal sharing invitations by username with persistent accept/reject actions, independent daily-data, meal, weight and trend permissions, and revocation at any time.
+- Added the optional “נעים להכיר” profile, new-goal cycles that preserve prior history, AI-assisted activity entry and calm personal challenges.
+- Added water events to the history timeline, meal-image previews, water-by-hour insights and opt-in PWA notifications.
+- Added reversible calorie-overage handling so the triggering meal can be reviewed, edited or removed.
+- Added secure admin controls to update a user's email and/or reset their password, with validation, audit records and active-session revocation.
+
 ## 1.12.0
 
 - Combined the planned 1.13 and 1.14 meal-history scope into release 1.12.0.
