@@ -2,6 +2,7 @@ import { requireUser, verifyPassword } from "@/server/auth.js";
 import { calculateNutritionTargets } from "@/server/nutrition.js";
 import { readState, updateState, userView } from "@/server/store.js";
 import { validTimeZone } from "@/server/local-date.js";
+import { normalizeNotificationPreferences } from "@/server/notification-preferences.js";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,7 @@ export async function PUT(request: Request) {
       targetMode: body.targetMode === "custom" ? "custom" : "automatic",
       tasteProfile: tasteProfile || profile.tasteProfile,
       acquaintance: body.acquaintance && typeof body.acquaintance === "object" ? { bloodType: String(body.acquaintance.bloodType || "").slice(0, 5), occupation: String(body.acquaintance.occupation || "").slice(0, 120), sleepHours: Math.max(0, Math.min(16, Number(body.acquaintance.sleepHours) || 0)), stressLevel: Math.max(0, Math.min(10, Number(body.acquaintance.stressLevel) || 0)), motivation: String(body.acquaintance.motivation || "").slice(0, 500), eatingChallenges: String(body.acquaintance.eatingChallenges || "").slice(0, 500), completedAt: new Date().toISOString() } : profile.acquaintance,
+      notificationPreferences: normalizeNotificationPreferences(body.notificationPreferences || profile.notificationPreferences),
       avatar,
     });
     const initialWeight = Number(body.initialWeight);

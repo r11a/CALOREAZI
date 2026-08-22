@@ -8,6 +8,7 @@ const expansionCss = await readFile(new URL("../app/expansion.css", import.meta.
 const adminUsersRoute = await readFile(new URL("../app/api/admin/users/route.ts", import.meta.url), "utf8");
 const notificationsRoute = await readFile(new URL("../app/api/notifications/route.ts", import.meta.url), "utf8");
 const serviceWorker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
+const notificationScheduler = await readFile(new URL("../server/notification-scheduler.js", import.meta.url), "utf8");
 
 test("health profile is editable and explicitly bounded as non-medical advice", () => {
   for (const field of ["diabetesStatus", "hypertension", "foodAllergies", "relevantMedications", "pregnancyStatus"])
@@ -247,6 +248,20 @@ test("mobile notifications are opt-in and calorie overage remains reversible", (
   assert.match(serviceWorker, /addEventListener\("push"/);
   assert.match(serviceWorker, /showNotification/);
   assert.match(serviceWorker, /notificationclick/);
+});
+
+test("notification preferences are granular, scheduled and respect quiet hours", () => {
+  assert.match(page, /notificationTypeOptions/);
+  assert.match(page, /תזכורות ארוחות/);
+  assert.match(page, /סיכום יומי/);
+  assert.match(page, /המלצות המאמן/);
+  assert.match(page, /מגמות שבועיות/);
+  assert.match(page, /שעות שקטות/);
+  assert.match(page, /notification-live-status/);
+  assert.match(notificationScheduler, /processDueNotifications/);
+  assert.match(notificationScheduler, /notificationIsQuiet\(clock\.minutes/);
+  assert.match(notificationScheduler, /maxPerDay/);
+  assert.match(notificationScheduler, /14 \* 86400000/);
 });
 
 test("admin can securely update a user email or password", () => {
