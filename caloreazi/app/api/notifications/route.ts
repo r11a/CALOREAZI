@@ -5,7 +5,10 @@ import { addAudit, readState, updateState } from "@/server/store.js";
 import { requireSameOrigin } from "@/server/security.js";
 export const runtime = "nodejs";
 
-function validSubscription(value: any) {
+type PushSubscriptionInput = { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
+function errorStatus(error: unknown) { return typeof error === "object" && error !== null && "statusCode" in error ? Number((error as { statusCode?: unknown }).statusCode || 0) : 0; }
+
+function validSubscription(value: PushSubscriptionInput | null | undefined) {
   try { const url = new URL(String(value?.endpoint || "")); return url.protocol === "https:" && Boolean(value?.keys?.p256dh && value?.keys?.auth); }
   catch { return false; }
 }
@@ -38,8 +41,8 @@ export async function POST(request: Request) {
   try {
     const user = state.users.find((item) => item.id === session.userId);
     await sendPush(subscription, { title: "ההתראות מוכנות", body: `${String(user?.name || "").split(/\s+/)[0] || "שלום"}, מעכשיו אפשר לקבל עדכונים גם כשהמכשיר נעול.`, url: "./", tag: "push-ready" });
-  } catch (error: any) {
-    const status = Number(error?.statusCode || 0);
+  } catch (error: unknown) {
+    const status = errorStatus(error);
     if ([404, 410].includes(status)) await updateState((latest) => { latest.systemSettings.webPush.subscriptions = (latest.systemSettings.webPush.subscriptions || []).filter((item) => item.endpoint !== endpoint); return latest; });
     return Response.json({ error: "המנוי נשמר אך התראת הבדיקה לא נמסרה. בדוק הרשאות והתנסה שוב." }, { status: 502 });
   }
@@ -59,7 +62,7 @@ export async function PUT(request: Request) {
   const expired = []; let delivered = 0;
   for (const subscription of subscriptions) {
     try { await sendPush(subscription, { ...message, url: "./", tag: `test-${type}-${Date.now()}` }); delivered += 1; }
-    catch (error: any) { if ([404, 410].includes(Number(error?.statusCode || 0))) expired.push(subscription.endpoint); }
+    catch (error: unknown) { if ([404, 410].includes(errorStatus(error))) expired.push(subscription.endpoint); }
   }
   if (expired.length) await updateState((latest) => { latest.systemSettings.webPush.subscriptions = (latest.systemSettings.webPush.subscriptions || []).filter((item) => !expired.includes(item.endpoint)); return latest; });
   if (!delivered) return Response.json({ error: "ההתראה לא נמסרה. בדוק הרשאות או הפעל מחדש את ההתראות." }, { status: 502 });
