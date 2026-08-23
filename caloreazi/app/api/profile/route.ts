@@ -56,7 +56,7 @@ export async function PUT(request: Request) {
       pregnancyStatus: ["none", "pregnant", "breastfeeding"].includes(body.pregnancyStatus) ? body.pregnancyStatus : "none",
       timeZone: validTimeZone(body.timeZone || profile.timeZone),
       trainingDayBonus: Math.min(600, Math.max(0, Number(body.trainingDayBonus) || 0)),
-      targetMode: body.targetMode === "custom" ? "custom" : "automatic",
+      targetMode: ["custom", "adaptive"].includes(body.targetMode) ? body.targetMode : "automatic",
       tasteProfile: tasteProfile || profile.tasteProfile,
       acquaintance: body.acquaintance && typeof body.acquaintance === "object" ? {
         bloodType: String(body.acquaintance.bloodType || "").slice(0, 5),
@@ -82,10 +82,12 @@ export async function PUT(request: Request) {
     if (initialWeight >= 25 && initialWeight <= 350) profile.initialWeight = initialWeight;
     const caloriePlan = calculateNutritionTargets(profile);
     profile.caloriePlan = caloriePlan;
-    profile.calories = caloriePlan.calories;
-    profile.protein = Math.round(Number(profile.weight) * (profile.goal === "gain" ? 1.8 : 1.6));
-    profile.carbs = Math.round((caloriePlan.calories * .45) / 4);
-    profile.fat = Math.round((caloriePlan.calories * .3) / 9);
+    if (profile.targetMode === "automatic") {
+      profile.calories = caloriePlan.calories;
+      profile.protein = Math.round(Number(profile.weight) * (profile.goal === "gain" ? 1.8 : 1.6));
+      profile.carbs = Math.round((caloriePlan.calories * .45) / 4);
+      profile.fat = Math.round((caloriePlan.calories * .3) / 9);
+    }
     if (profile.targetMode === "custom") {
       profile.calories = Math.min(6000, Math.max(caloriePlan.safetyFloor, Number(body.customCalories) || profile.calories));
       profile.protein = Math.min(400, Math.max(20, Number(body.customProtein) || profile.protein));

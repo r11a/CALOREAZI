@@ -6,6 +6,8 @@ import { generateGeminiCoachReply } from "@/server/ai/gemini.js";
 import { estimateCost, evaluateBudget } from "@/server/ai/usage.js";
 import { requireUser } from "@/server/auth.js";
 import { aiRoleCandidates, findModel } from "@/server/ai/models.js";
+import { evaluateGoalPlan } from "@/server/goal-engine.js";
+import { coachEvidenceContext } from "@/server/coach-sources.js";
 export const runtime = "nodejs";
 
 export async function PATCH(request: Request) {
@@ -53,6 +55,7 @@ export async function POST(request: Request) {
   const weekTotals = week.map(dayTotals);
   const recentActivity = userData.activity.slice(-30);
   const recentConversation = userData.coachHistory.slice(-12);
+  const goalPlan = evaluateGoalPlan({ profile, measurements, days: trackedDays });
   const context = {
     identity: { name: user.name, conversationAlreadyStarted: recentConversation.length > 0 },
     goals: { goal: profile.goal, currentWeightKg: currentWeight, targetWeightKg: Number(profile.targetWeight), remainingKg: Number((currentWeight - Number(profile.targetWeight)).toFixed(1)) },
@@ -63,6 +66,8 @@ export async function POST(request: Request) {
     last7Days: { trackedDays: week.length, averageKcal: average(weekTotals.map((item: any) => item.kcal)), averageProteinG: average(weekTotals.map((item: any) => item.protein)), averageWaterMl: average(week.map((day: any) => Number(day.waterMl || 0))), activityMinutes: recentActivity.filter((item: any) => week.some((day: any) => day.date === item.date)).reduce((sum: number, item: any) => sum + Number(item.minutes || 0), 0) },
     progress: { previousWeightKg: previousWeight, changeFromPreviousKg: previousWeight == null ? null : Number((currentWeight - previousWeight).toFixed(1)), measurements: measurements.slice(-10) },
     learnedCorrections: userData.foodCalibration.slice(-20).map((item: any) => ({ originallyDetected: item.originalName, correctedName: item.name, gramsPerUnit: item.grams, quantity: item.quantity })),
+    goalPlan,
+    evidence: coachEvidenceContext(),
   };
   const instructions = `אתה המאמן האישי המתמשך של CALOREAZI. השב בעברית טבעית, מדויקת ולא שיפוטית, כאדם שמכיר את המשתמש ואת התהליך שלו.
 כללי חובה:
@@ -76,7 +81,11 @@ export async function POST(request: Request) {
 - אין אבחון רפואי. התריע רק כשיש סיכון ממשי; אל תנסח הסתייגות גנרית בכל תשובה.
 - התייחס ל-healthContext בתכנון ארוחות ובהמלצות. בסוכרת/טרום־סוכרת העדף פחמימות עתירות סיבים, חלוקה לאורך היום ושילוב חלבון; אל תבטיח איזון סוכר ואל תציע שינוי תרופות. באלרגיה מתועדת אל תמליץ על המזון האלרגני. בהריון/הנקה או עם תרופות רלוונטיות שמור על המלצות שמרניות והפנה לאיש מקצוע כשנדרש.
 - אם המידע סותר, העדף מדידה חדשה על פרופיל ישן והסבר את הסתירה בקצרה.
-- אם המשתמש מבקש להכניס אוכל או ארוחה ליומן, אמור שהוכנה טיוטה לבדיקה. לעולם אל תטען שהארוחה נשמרה לפני שהמשתמש אישר אותה במסך הסיכום.`;
+- אם המשתמש מבקש להכניס אוכל או ארוחה ליומן, אמור שהוכנה טיוטה לבדיקה. לעולם אל תטען שהארוחה נשמרה לפני שהמשתמש אישר אותה במסך הסיכום.
+- במצב חיטוב, עלייה במסת שריר או ביצועים פעל כמאמן מעקב לתזונת ספורט, לא כדיאטן קליני. התאם כל המלצה ל-goalPlan, לצריכת היום, לפעילות, להעדפות ולמגבלות.
+- אל תמציא יעד קלורי, קצב שינוי או יעד מאקרו. השתמש רק במספרים שב-USER_CONTEXT וב-goalPlan. אם חסר מידע, אמור מה חסר.
+- evidence הוא מאגר מקורות מקצועיים מאושר, לא גלישה חיה. כשנדרש ביסוס ציין ארגון ומזהה מקור מתוכו בלבד; אל תמציא מחקר, DOI, תאריך או ציטוט.
+- הפרד בין מסקנה מנתוני המשתמש לבין מידע כללי. בחשש לזמינות אנרגטית נמוכה, ירידה מהירה או פגיעה בהתאוששות אל תעמיק גירעון והמלץ על בדיקה מקצועית.`;
   const input = `USER_CONTEXT:\n${JSON.stringify(context, null, 2)}\n\nRECENT_CONVERSATION:\n${recentConversation.map((item: any) => `${item.role === "user" ? "משתמש" : "מאמן"}: ${item.text}`).join("\n") || "אין עדיין"}\n\nCURRENT_USER_MESSAGE:\n${String(message).trim()}`;
   try {
     const candidates = aiRoleCandidates(state.ai, "coach"); let role = candidates[0]; let result: any; let lastError: unknown;

@@ -53,10 +53,11 @@ const emptyOnboarding = {
   adminPassword: "",
 };
 const goalLabels: Record<string, string> = {
-  lose: "ירידה הדרגתית במשקל",
-  maintain: "שמירה על המשקל",
-  gain: "עלייה מבוקרת במשקל",
-  healthy: "אכילה בריאה יותר",
+  lose: "חיטוב — ירידה מתונה תוך דגש על שמירת שריר",
+  maintain: "שמירה — משקל והרכב גוף יציבים",
+  gain: "עלייה במסת שריר — עודף מתון ומבוקר",
+  fitness: "ביצועים והתאוששות — תמיכה באימונים",
+  healthy: "אורח חיים מאוזן",
 };
 const workoutTypeLabels: Record<string, string> = { walking: "הליכה", running: "ריצה", strength: "אימון כוח", cycling: "רכיבה", swimming: "שחייה", yoga: "יוגה / גמישות", other: "אחר" };
 const notificationPreferenceDefaults = { enabled: true, morningBrief: true, mealReminders: true, waterReminders: true, dailySummary: true, insights: true, coachTips: true, weeklyTrends: true, weightReminder: true, achievements: false, breakfastTime: "09:00", lunchTime: "14:00", dinnerTime: "20:00", waterTime: "16:30", summaryTime: "21:15", coachTime: "11:30", weeklyTime: "10:00", quietStart: "22:30", quietEnd: "07:00", maxPerDay: 5 };
@@ -1342,10 +1343,18 @@ export default function Home() {
     setWeightDate(state?.today?.date || new Date().toISOString().slice(0, 10));
     setWeightFeedback("");
     try {
-      setInsightsData(await api("/api/insights"));
+      const [insights, goalPlan] = await Promise.all([api("/api/insights"), api("/api/goal-plan")]);
+      setInsightsData({ ...insights, goalPlan });
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+  async function acceptGoalAdjustment() {
+    if (!insightsData?.goalPlan?.proposal || busy) return;
+    setBusy(true);
+    try { const latest = await api("/api/goal-plan", { method: "POST" }); setState(latest); const [insights, goalPlan] = await Promise.all([api("/api/insights"), api("/api/goal-plan")]); setInsightsData({ ...insights, goalPlan }); setWeightFeedback("ההתאמה נשמרה. המנוע ימתין לפחות 14 ימים לפני בדיקה נוספת."); }
+    catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
   }
   async function saveTrendWeight(event: FormEvent) {
     event.preventDefault();
@@ -4542,39 +4551,9 @@ export default function Home() {
                 ×
               </button>
             </header>
-            <div className="settings-grid">
-              <label>
-                סוג פעילות
-                <select
-                  value={activityForm.type}
-                  onChange={(e) =>
-                    setActivityForm({ ...activityForm, type: e.target.value })
-                  }
-                >
-                  <option>הליכה</option>
-                  <option>ריצה</option>
-                  <option>אימון כוח</option>
-                  <option>רכיבה</option>
-                  <option>שחייה</option>
-                  <option>פעילות אחרת</option>
-                </select>
-              </label>
-              <label>
-                משך בדקות
-                <input
-                  type="number"
-                  min="0"
-                  max="600"
-                  value={activityForm.minutes}
-                  onChange={(e) =>
-                    setActivityForm({
-                      ...activityForm,
-                      minutes: Number(e.target.value),
-                    })
-                  }
-                />
-              </label>
-              <label>עצימות<select value={activityForm.intensity} onChange={(e) => setActivityForm({ ...activityForm, intensity: e.target.value })}><option value="low">קלה</option><option value="medium">בינונית</option><option value="high">גבוהה</option></select></label>
+            <div className="activity-quick-types" aria-label="בחירת סוג אימון">{["אימון כוח","הליכה","ריצה","רכיבה","שחייה"].map((type) => <button key={type} type="button" className={activityForm.type === type ? "selected" : ""} onClick={() => setActivityForm({ ...activityForm, type })}>{type}</button>)}</div>
+            <div className="activity-essential-fields"><div className="activity-duration-field"><span>משך האימון</span><div><button type="button" aria-label="הפחת חמש דקות" onClick={() => setActivityForm({ ...activityForm, minutes: Math.max(5, activityForm.minutes - 5) })}>−</button><strong>{activityForm.minutes} דקות</strong><button type="button" aria-label="הוסף חמש דקות" onClick={() => setActivityForm({ ...activityForm, minutes: Math.min(600, activityForm.minutes + 5) })}>+</button></div></div><label>עצימות<select value={activityForm.intensity} onChange={(e) => setActivityForm({ ...activityForm, intensity: e.target.value })}><option value="low">קלה</option><option value="medium">בינונית</option><option value="high">גבוהה</option></select></label></div>
+            <details className="activity-advanced"><summary>פרטים נוספים — לא חובה</summary><div className="settings-grid">
               <label>
                 צעדים
                 <input
@@ -4618,7 +4597,7 @@ export default function Home() {
                   }
                 />
               </label>
-            </div>
+            </div></details>
             <p className="modal-help">
               קלוריות פעילות מוצגות בנפרד ואינן מתווספות אוטומטית לתקציב האכילה.
             </p>
@@ -4643,6 +4622,14 @@ export default function Home() {
               </div>
               <button onClick={() => setInsightsOpen(false)}>×</button>
             </header>
+            {insightsData?.goalPlan && <section className="goal-plan-card">
+              <header><div><small>המסלול שלי</small><h3>{insightsData.goalPlan.mode.label}</h3></div><b>{insightsData.goalPlan.calibration.level}</b></header>
+              <div className="goal-plan-calibration"><span><i style={{ width: `${insightsData.goalPlan.calibration.score}%` }} /></span><strong>{insightsData.goalPlan.calibration.score}/100</strong></div>
+              <div className="goal-plan-metrics"><span><small>קצב המסלול</small><strong>{insightsData.goalPlan.targetWeeklyKg > 0 ? "+" : ""}{insightsData.goalPlan.targetWeeklyKg} ק״ג/שבוע</strong></span><span><small>קצב בפועל</small><strong>{insightsData.goalPlan.observedWeeklyKg == null ? "עוד אין מגמה" : `${insightsData.goalPlan.observedWeeklyKg > 0 ? "+" : ""}${insightsData.goalPlan.observedWeeklyKg} ק״ג/שבוע`}</strong></span><span><small>עקביות תיעוד</small><strong>{insightsData.goalPlan.adherence}%</strong></span><span><small>מדידות</small><strong>{insightsData.goalPlan.measurements}</strong></span></div>
+              <p>{insightsData.goalPlan.status}</p>
+              {insightsData.goalPlan.calibration.missing?.length > 0 && <ul>{insightsData.goalPlan.calibration.missing.map((item: string) => <li key={item}>{item}</li>)}</ul>}
+              {insightsData.goalPlan.proposal && <article className="goal-adjustment-proposal"><strong>{insightsData.goalPlan.proposal.title}</strong><p>{insightsData.goalPlan.proposal.currentCalories.toLocaleString()} ← {insightsData.goalPlan.proposal.suggestedCalories.toLocaleString()} קלוריות</p><small>שינוי קטן של {Math.abs(insightsData.goalPlan.proposal.delta)} קלוריות בלבד. שום יעד לא משתנה ללא אישורך.</small><button type="button" disabled={busy} onClick={acceptGoalAdjustment}>אשר התאמה</button></article>}
+            </section>}
             <section className="weight-trends">
               <div className="weight-trends-heading">
                 <div><strong>מעקב משקל</strong><small>כל עדכון נשמר כמדידה חדשה לפי תאריך ואינו מוחק את ההיסטוריה</small></div>

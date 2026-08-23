@@ -332,6 +332,16 @@ test("coach recommendations rotate, food refresh changes results and score quali
   assert.doesNotMatch(page, /<summary>ניתוח היום לפי מנוע הציון/);
 });
 
+test("adaptive training goal plan is transparent and workouts use a fast path", () => {
+  assert.match(page, /api\("\/api\/goal-plan"\)/);
+  assert.match(page, /המסלול שלי/);
+  assert.match(page, /קצב המסלול/);
+  assert.match(page, /שום יעד לא משתנה ללא אישורך/);
+  assert.match(page, /activity-quick-types/);
+  assert.match(page, /פרטים נוספים — לא חובה/);
+  assert.match(css, /goal-plan-calibration/);
+});
+
 test("admin can securely update a user email or password", () => {
   assert.match(page, /updateAdminUserCredentials/);
   assert.match(page, /שמור מייל ו\/או סיסמה/);

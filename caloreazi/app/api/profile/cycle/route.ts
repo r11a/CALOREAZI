@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const body = await request.json();
   const currentWeight = Number(body.currentWeight);
   const targetWeight = Number(body.targetWeight);
-  const goal = ["lose", "maintain", "gain", "healthy"].includes(body.goal) ? body.goal : "healthy";
+  const goal = ["lose", "maintain", "gain", "fitness", "healthy"].includes(body.goal) ? body.goal : "healthy";
   if (!(currentWeight >= 25 && currentWeight <= 350) || !(targetWeight >= 25 && targetWeight <= 350)) return Response.json({ error: "יש להזין משקל נוכחי ומשקל יעד תקינים" }, { status: 400 });
   const state = await updateState((latest) => {
     const data = ensureUserData(latest, session.userId);

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.18.0
+
+- Added goal modes for cutting, maintenance, lean mass gain, performance and balanced living.
+- Added a conservative adaptive goal engine based on weight trend, logging consistency, minimum data requirements and a 14-day cooldown.
+- Added a transparent “My path” trends card with calibration quality, desired versus observed pace and an approval-only 100 kcal adjustment proposal.
+- Added a fast workout entry flow with workout type, duration controls and intensity; optional details stay collapsed.
+- Specialized the coach for cutting and muscle-gain tracking using a curated ACSM, IOC and ISSN evidence policy, without allowing the model to invent numeric targets or citations.
+
 ## 1.17.0
 
 - המאמן בודק את מצב היום במספר נקודות זמן ושולח המלצה אישית לפי הפער החשוב בפועל, תוך כיבוד שעות שקטות ומגבלת ההודעות.
