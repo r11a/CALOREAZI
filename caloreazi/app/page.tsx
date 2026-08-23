@@ -603,6 +603,7 @@ export default function Home() {
   const [waterValue, setWaterValue] = useState(0);
   const [waterTargetValue, setWaterTargetValue] = useState(2000);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [acquaintanceOpen, setAcquaintanceOpen] = useState(false);
   const [profileTab, setProfileTab] = useState<"basic" | "health" | "goals" | "notifications" | "account">("basic");
   const [profileForm, setProfileForm] = useState<any>({});
   const [newCycleOpen, setNewCycleOpen] = useState(false);
@@ -1588,7 +1589,7 @@ export default function Home() {
       customCarbs: profile.carbs,
       customFat: profile.fat,
       tasteProfile: profile.tasteProfile || { likes: [], dislikes: [], prepTime: "medium" },
-      acquaintance: profile.acquaintance || { bloodType: "", occupation: "", sleepHours: 0, stressLevel: 0, motivation: "", eatingChallenges: "" },
+      acquaintance: profile.acquaintance || { bloodType: "", occupation: "", sleepHours: 0, stressLevel: 0, dailySchedule: "", mealPattern: "", cookingAccess: "", foodBudget: "", hungerTimes: "", emotionalEating: "", digestiveIssues: "", coachingStyle: "", motivation: "", eatingChallenges: "" },
       notificationPreferences: { ...notificationPreferenceDefaults, ...(profile.notificationPreferences || {}) },
       avatar: profile.avatar || "",
     });
@@ -1610,6 +1611,22 @@ export default function Home() {
         });
       setState(latest);
       setProfileOpen(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveAcquaintance() {
+    setBusy(true);
+    try {
+      const latest = await api("/api/profile", {
+        method: "PUT",
+        body: JSON.stringify({ ...profileForm, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+      });
+      setState(latest);
+      setAcquaintanceOpen(false);
+      setError("השאלון נשמר. המאמן וההמלצות יתחשבו רק במידע שבחרת לשתף.");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -3634,7 +3651,7 @@ export default function Home() {
               <div className="barcode-manual-field"><input inputMode="numeric" value={barcodeValue} onChange={(event) => setBarcodeValue(event.target.value.replace(/\D/g, "").slice(0, 14))} placeholder="או הזן מספר ברקוד" aria-label="מספר ברקוד" />{barcodeValue && <button className="barcode-clear" type="button" onClick={() => { setBarcodeValue(""); setBarcodeStatus(""); }} aria-label="ניקוי ברקוד">×</button>}<button type="button" onClick={() => lookupBarcode()}>חפש</button></div>
               {barcodeStatus && <p>{barcodeStatus}</p>}
             </section>
-            <div className="quick-catalog-search"><AppIcon name="search" /><input autoFocus type="search" value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="חיפוש בארוחות, פירות, ירקות ומשקאות…" aria-label="חיפוש בהוספת אוכל" />{quickSearch && <button type="button" onClick={() => setQuickSearch("")} aria-label="ניקוי החיפוש">×</button>}</div>
+            <div className="quick-catalog-search"><AppIcon name="search" /><input type="search" value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="חיפוש בארוחות, פירות, ירקות ומשקאות…" aria-label="חיפוש בהוספת אוכל" />{quickSearch && <button type="button" onClick={() => setQuickSearch("")} aria-label="ניקוי החיפוש">×</button>}</div>
             {quickSearch.trim() ? (
               <div className="quick-food-grid quick-search-results">
                 {Object.entries(quickFoods).flatMap(([category, items]) => items.map((item, index) => ({ ...item, category, index }))).filter((item) => `${item.name} ${item.portion} ${item.category}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((item: any) => <button key={`${item.category}-${item.name}-${item.portion}`} onClick={() => selectQuickFood(item)}><span className="food-sprite" style={foodSpriteStyle(item.category, item.index)} /><strong>{item.name}</strong><small>{item.portion}</small><b>{item.kcal} kcal</b></button>)}
@@ -3985,7 +4002,6 @@ export default function Home() {
                 <label className="wide">תרופות רלוונטיות לתזונה<input value={profileForm.relevantMedications || ""} onChange={(e) => setProfileForm({ ...profileForm, relevantMedications: e.target.value })} placeholder="רק מידע שחשוב להמלצות מזון ותיאבון" /></label>
               </div>
             </section>
-            <details className="acquaintance-form"><summary>נעים להכיר <small>שאלון מעמיק ולא חובה</small></summary><div className="settings-grid"><label>סוג דם<select value={profileForm.acquaintance?.bloodType || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, bloodType: e.target.value } })}><option value="">לא ידוע / מעדיף לא לציין</option>{["A+","A-","B+","B-","AB+","AB-","O+","O-"].map((type) => <option key={type}>{type}</option>)}</select></label><label>עיסוק ושגרת יום<input value={profileForm.acquaintance?.occupation || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, occupation: e.target.value } })} /></label><label>שעות שינה ממוצעות<input type="number" min="0" max="16" step=".5" value={profileForm.acquaintance?.sleepHours || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, sleepHours: Number(e.target.value) } })} /></label><label>רמת מתח 0–10<input type="number" min="0" max="10" value={profileForm.acquaintance?.stressLevel || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, stressLevel: Number(e.target.value) } })} /></label><label className="wide">מה חשוב לך להשיג?<textarea value={profileForm.acquaintance?.motivation || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, motivation: e.target.value } })} /></label><label className="wide">מה בדרך כלל מקשה עליך?<textarea value={profileForm.acquaintance?.eatingChallenges || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, eatingChallenges: e.target.value } })} /></label></div></details>
             </section>}
             {profileTab === "goals" && <section className="profile-tab-panel"><header><span>◎</span><div><strong>יעדים ומדדים</strong><small>טווחים, משקל ומצב ההתקדמות</small></div></header>
             <section className="health-profile">
@@ -4048,6 +4064,28 @@ export default function Home() {
               <div className="password-change-grid"><label>סיסמה נוכחית<input type="password" autoComplete="current-password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} /></label><label>סיסמה חדשה<input type="password" autoComplete="new-password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} /></label><label>אימות סיסמה חדשה<input type="password" autoComplete="new-password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} /></label><button type="button" disabled={busy || !passwordForm.currentPassword || passwordForm.newPassword.length < 10 || passwordForm.newPassword !== passwordForm.confirmPassword} onClick={(event) => void changeAdminPassword(event as any)}>שנה סיסמה</button></div>
             </section>
             <button className="taste-profile-entry" type="button" onClick={openTasteWizard}><span>♡</span><div><strong>שאלון טעמים והעדפות</strong><small>{profile?.tasteProfile?.completedAt ? `${profile.tasteProfile.likes?.length || 0} העדפות אהובות נשמרו · אפשר לעדכן` : "שאלון קצר ולא חובה להתאמת המלצות הארוחות וה־AI"}</small></div><b>←</b></button>
+            <button className="profile-sharing acquaintance-entry" type="button" onClick={() => setAcquaintanceOpen(true)}><span>✦</span><div><strong>נעים להכיר</strong><small>{profile?.acquaintance?.completedAt ? "השאלון נשמר · אפשר לעדכן בכל זמן" : "טופס אישי אופציונלי להתאמה מדויקת יותר"}</small></div><b>‹</b></button>
+            {acquaintanceOpen && <div className="modal-layer acquaintance-layer"><button className="backdrop" type="button" onClick={() => setAcquaintanceOpen(false)} /><section className="settings-modal acquaintance-modal">
+              <header><div><h2>נעים להכיר</h2><small>כל השדות לא חובה — בחר מה נוח לך לשתף</small></div><button type="button" onClick={() => setAcquaintanceOpen(false)}>×</button></header>
+              <div className="acquaintance-intro">המידע עוזר להתאים את התזמון, סוג הארוחות וסגנון הליווי. אפשר לדלג על כל שדה.</div>
+              <div className="settings-grid">
+                <label>סוג דם (אם ידוע)<select value={profileForm.acquaintance?.bloodType || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, bloodType: e.target.value } })}><option value="">לא ידוע / מעדיף לא לציין</option>{["A+","A-","B+","B-","AB+","AB-","O+","O-"].map((type) => <option key={type}>{type}</option>)}</select></label>
+                <label>סדר היום<select value={profileForm.acquaintance?.dailySchedule || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, dailySchedule: e.target.value } })}><option value="">לא בחרתי</option><option value="regular">שעות קבועות יחסית</option><option value="shifts">עבודה במשמרות</option><option value="irregular">משתנה מיום ליום</option><option value="night">פעילות בעיקר בלילה</option></select></label>
+                <label>דפוס ארוחות<select value={profileForm.acquaintance?.mealPattern || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, mealPattern: e.target.value } })}><option value="">לא בחרתי</option><option value="three">שלוש ארוחות</option><option value="small">ארוחות קטנות ותכופות</option><option value="skip">נוטה לדלג על ארוחות</option><option value="late">רוב האכילה בערב</option><option value="variable">משתנה</option></select></label>
+                <label>אפשרות לבשל<select value={profileForm.acquaintance?.cookingAccess || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, cookingAccess: e.target.value } })}><option value="">לא בחרתי</option><option value="daily">מבשל/ת ברוב הימים</option><option value="sometimes">לפעמים</option><option value="rare">כמעט שלא</option><option value="prepared">מעדיף/ה אוכל מוכן</option></select></label>
+                <label>תקציב מזון<select value={profileForm.acquaintance?.foodBudget || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, foodBudget: e.target.value } })}><option value="">לא בחרתי</option><option value="low">חסכוני</option><option value="medium">בינוני</option><option value="flexible">גמיש</option></select></label>
+                <label>שעות שינה ממוצעות<input type="number" min="0" max="16" step=".5" value={profileForm.acquaintance?.sleepHours || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, sleepHours: Number(e.target.value) } })} /></label>
+                <label>רמת מתח 0–10<input type="number" min="0" max="10" value={profileForm.acquaintance?.stressLevel || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, stressLevel: Number(e.target.value) } })} /></label>
+                <label>אכילה רגשית<select value={profileForm.acquaintance?.emotionalEating || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, emotionalEating: e.target.value } })}><option value="">לא בחרתי</option><option value="rare">כמעט שלא</option><option value="sometimes">לפעמים</option><option value="often">לעיתים קרובות</option><option value="unsure">לא בטוח/ה</option></select></label>
+                <label>סגנון ליווי מועדף<select value={profileForm.acquaintance?.coachingStyle || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, coachingStyle: e.target.value } })}><option value="">לא בחרתי</option><option value="practical">קצר ומעשי</option><option value="supportive">מעודד ותומך</option><option value="detailed">מפורט ומבוסס הסבר</option><option value="direct">ישיר וממוקד</option></select></label>
+                <label className="wide">מתי הרעב או החשק הכי חזקים?<input value={profileForm.acquaintance?.hungerTimes || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, hungerTimes: e.target.value } })} placeholder="למשל: אחר הצהריים או אחרי ארוחת ערב" /></label>
+                <label className="wide">רגישויות עיכול חשובות<input value={profileForm.acquaintance?.digestiveIssues || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, digestiveIssues: e.target.value } })} placeholder="למשל: צרבת, נפיחות או רגישות ללקטוז" /></label>
+                <label className="wide">עיסוק ושגרת יום<input value={profileForm.acquaintance?.occupation || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, occupation: e.target.value } })} placeholder="למשל: עבודה משרדית, נהיגה או עבודה פיזית" /></label>
+                <label className="wide">מה חשוב לך להשיג?<textarea value={profileForm.acquaintance?.motivation || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, motivation: e.target.value } })} /></label>
+                <label className="wide">מה בדרך כלל מקשה עליך?<textarea value={profileForm.acquaintance?.eatingChallenges || ""} onChange={(e) => setProfileForm({ ...profileForm, acquaintance: { ...profileForm.acquaintance, eatingChallenges: e.target.value } })} /></label>
+              </div>
+              <footer><button type="button" onClick={() => setAcquaintanceOpen(false)}>ביטול</button><button className="primary" type="button" disabled={busy} onClick={saveAcquaintance}>{busy ? "שומר…" : "שמור את מה שבחרתי"}</button></footer>
+            </section></div>}
             <button
               className="profile-sharing"
               type="button"
@@ -4801,7 +4839,6 @@ export default function Home() {
                 <label>
                   שם
                   <input
-                    autoFocus
                     value={customFoodName}
                     onChange={(e) => setCustomFoodName(e.target.value)}
                     placeholder={

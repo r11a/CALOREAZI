@@ -153,16 +153,20 @@ export function userView(state, userId, admin = false) {
   const ai = admin
     ? { ...state.ai, encryptedKey: undefined, keyConfigured: Boolean(state.ai?.encryptedKey) }
     : { keyConfigured: Boolean(state.ai?.encryptedKey), available: Boolean(state.ai?.encryptedKey) };
+  const usernameFor = (item) => {
+    const username = String(item?.username || "").trim();
+    return username && !username.includes("@") ? username : String(item?.name || "משתמש").trim();
+  };
   const partnerships = (state.partnerships || []).filter((link) => link.ownerId === userId || link.partnerId === userId).map((link) => {
     const otherId = link.ownerId === userId ? link.partnerId : link.ownerId;
     const other = state.users.find((item) => item.id === otherId);
-    return { ...link, other: other ? { id: other.id, name: other.name, username: other.username || other.name } : null, direction: link.ownerId === userId ? "outgoing" : "incoming" };
+    return { ...link, other: other ? { id: other.id, name: other.name, username: usernameFor(other) } : null, direction: link.ownerId === userId ? "outgoing" : "incoming" };
   });
   const sharedProfiles = (state.partnerships || []).filter((link) => link.partnerId === userId && link.status === "accepted").map((link) => {
     const sharedUser = state.users.find((item) => item.id === link.ownerId); const sharedData = ensureUserData(state, link.ownerId);
     const today = link.permissions?.daily || link.permissions?.meals ? structuredClone(sharedData.today) : null; if (today && !link.permissions?.meals) today.meals = []; if (today && !link.permissions?.daily) { today.waterMl = 0; today.waterEvents = []; }
     const recentDays = link.permissions?.trends ? [...sharedData.history, sharedData.today].slice(-30).map((day) => ({ date: day.date, score: calculateDayScore(day, sharedData.profile, sharedData.activity).score })) : [];
-    return { linkId: link.id, user: sharedUser ? { id: sharedUser.id, name: sharedUser.name, username: sharedUser.username || sharedUser.name, avatar: sharedData.profile?.avatar || "" } : null, permissions: link.permissions, today, measurements: link.permissions?.weight ? sharedData.measurements : [], trends: recentDays, profile: link.permissions?.weight ? { weight: sharedData.profile?.weight, targetWeight: sharedData.profile?.targetWeight } : null };
+    return { linkId: link.id, user: sharedUser ? { id: sharedUser.id, name: sharedUser.name, username: usernameFor(sharedUser), avatar: sharedData.profile?.avatar || "" } : null, permissions: link.permissions, today, measurements: link.permissions?.weight ? sharedData.measurements : [], trends: recentDays, profile: link.permissions?.weight ? { weight: sharedData.profile?.weight, targetWeight: sharedData.profile?.targetWeight } : null };
   });
   const trackedDates = [...data.history, data.today].filter((day) => day.meals?.length || day.waterMl).map((day) => day.date).sort().reverse();
   let streak = 0; const cursor = new Date(); const timeZone = userTimeZone(data);
@@ -184,7 +188,7 @@ export function userView(state, userId, admin = false) {
     ai,
     aiUsage: admin ? state.aiUsage : [],
     foods: (state.foodCatalog || []).filter((food) => food.visibility === "shared" || food.ownerId === userId),
-    shareCandidates: state.users.filter((item) => item.id !== userId && !item.disabled).map((item) => ({ id: item.id, name: item.username || item.name })),
+    shareCandidates: state.users.filter((item) => item.id !== userId && !item.disabled).map((item) => ({ id: item.id, name: usernameFor(item) })),
     partnerships,
     sharedProfiles,
     adminConfigured: state.users.some((item) => item.role === "admin" && item.password?.hash),

@@ -37,6 +37,7 @@ export async function PUT(request: Request) {
     const profile = latest.userData[session.userId]?.profile;
     if (!user || !profile) return latest;
     user.name = name;
+    if (!String(user.username || "").trim() || String(user.username).includes("@")) user.username = name;
     if (changesEmail) user.email = requestedEmail;
     Object.assign(profile, {
       age,
@@ -55,7 +56,23 @@ export async function PUT(request: Request) {
       trainingDayBonus: Math.min(600, Math.max(0, Number(body.trainingDayBonus) || 0)),
       targetMode: body.targetMode === "custom" ? "custom" : "automatic",
       tasteProfile: tasteProfile || profile.tasteProfile,
-      acquaintance: body.acquaintance && typeof body.acquaintance === "object" ? { bloodType: String(body.acquaintance.bloodType || "").slice(0, 5), occupation: String(body.acquaintance.occupation || "").slice(0, 120), sleepHours: Math.max(0, Math.min(16, Number(body.acquaintance.sleepHours) || 0)), stressLevel: Math.max(0, Math.min(10, Number(body.acquaintance.stressLevel) || 0)), motivation: String(body.acquaintance.motivation || "").slice(0, 500), eatingChallenges: String(body.acquaintance.eatingChallenges || "").slice(0, 500), completedAt: new Date().toISOString() } : profile.acquaintance,
+      acquaintance: body.acquaintance && typeof body.acquaintance === "object" ? {
+        bloodType: String(body.acquaintance.bloodType || "").slice(0, 5),
+        occupation: String(body.acquaintance.occupation || "").slice(0, 120),
+        sleepHours: Math.max(0, Math.min(16, Number(body.acquaintance.sleepHours) || 0)),
+        stressLevel: Math.max(0, Math.min(10, Number(body.acquaintance.stressLevel) || 0)),
+        dailySchedule: ["regular", "shifts", "irregular", "night"].includes(body.acquaintance.dailySchedule) ? body.acquaintance.dailySchedule : "",
+        mealPattern: ["three", "small", "skip", "late", "variable"].includes(body.acquaintance.mealPattern) ? body.acquaintance.mealPattern : "",
+        cookingAccess: ["daily", "sometimes", "rare", "prepared"].includes(body.acquaintance.cookingAccess) ? body.acquaintance.cookingAccess : "",
+        foodBudget: ["low", "medium", "flexible"].includes(body.acquaintance.foodBudget) ? body.acquaintance.foodBudget : "",
+        hungerTimes: String(body.acquaintance.hungerTimes || "").slice(0, 240),
+        emotionalEating: ["rare", "sometimes", "often", "unsure"].includes(body.acquaintance.emotionalEating) ? body.acquaintance.emotionalEating : "",
+        digestiveIssues: String(body.acquaintance.digestiveIssues || "").slice(0, 300),
+        coachingStyle: ["practical", "supportive", "detailed", "direct"].includes(body.acquaintance.coachingStyle) ? body.acquaintance.coachingStyle : "",
+        motivation: String(body.acquaintance.motivation || "").slice(0, 500),
+        eatingChallenges: String(body.acquaintance.eatingChallenges || "").slice(0, 500),
+        completedAt: Object.entries(body.acquaintance).some(([key, value]) => key !== "completedAt" && String(value || "").trim()) ? new Date().toISOString() : null,
+      } : profile.acquaintance,
       notificationPreferences: normalizeNotificationPreferences(body.notificationPreferences || profile.notificationPreferences),
       avatar,
     });
