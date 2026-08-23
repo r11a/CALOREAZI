@@ -1,4 +1,4 @@
-export type AppIconName = "camera" | "image" | "plus" | "coach" | "sparkles" | "edit" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic";
+export type AppIconName = "camera" | "image" | "plus" | "coach" | "sparkles" | "edit" | "calculator" | "list" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic";
 
 export function AppIcon({ name }: { name: AppIconName }) {
   const paths = {
@@ -8,6 +8,8 @@ export function AppIcon({ name }: { name: AppIconName }) {
     coach: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4Z"/><path d="m18.5 15 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z"/></>,
     sparkles: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4Z"/><path d="m18.5 15 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z"/></>,
     edit: <><path d="M4 20h4l11-11-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></>,
+    calculator: <><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8v3H8zM8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></>,
+    list: <><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="5" cy="6" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="18" r="1"/></>,
     water: <path d="M12 3s5 5.7 5 10a5 5 0 0 1-10 0c0-4.3 5-10 5-10Z"/>,
     activity: <path d="M4 12h3l2-5 4 10 2-5h5"/>,
     home: <><path d="m4 10 8-7 8 7"/><path d="M6 9v11h12V9M10 20v-6h4v6"/></>,

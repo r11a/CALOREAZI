@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.13.7
+
+- Made the home greeting plus button identical in behavior and visual language to the plus button in “What I ate today”.
+- Moved “photograph meal” into the shared primary add menu alongside food search, categories, barcode, voice and manual entry.
+- Placed “calculate values” and “I have values” side by side in manual entry with clear icons and mobile-friendly tap targets.
+
 ## 1.13.6
 
 - Added a prominent manual-add button opposite the personalized greeting on the home screen.

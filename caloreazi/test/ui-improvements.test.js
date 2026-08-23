@@ -36,12 +36,13 @@ test("photo meals automatically complete calories and remain recalculable after 
   assert.match(analyzeTextRoute, /proteinPer100 \* 4/);
 });
 
-test("home greeting and manual entry expose direct meal capture actions", () => {
+test("home greeting opens the shared add menu and that menu exposes meal capture", () => {
   assert.match(page, /welcome-add-button/);
-  assert.match(page, /onClick=\{\(\) => openManualMeal\(\)\}/);
-  assert.match(page, /manual-camera-action/);
+  assert.match(page, /setQuickAddOpen\(true\)/);
+  assert.match(page, /capture-meal-entry/);
   assert.match(page, /צלם ארוחה/);
   assert.match(page, /uploadInput\.current\?\.click\(\)/);
+  assert.doesNotMatch(page, /manual-camera-action/);
 });
 
 test("history meal pictures open the full meal preview and return to history", () => {
@@ -293,4 +294,13 @@ test("admin can securely update a user email or password", () => {
   assert.match(adminUsersRoute, /user\.email_changed/);
   assert.match(adminUsersRoute, /האימייל כבר משויך למשתמש אחר/);
   assert.match(adminUsersRoute, /סיסמה חדשה חייבת להכיל לפחות 10 תווים/);
+});
+
+test("manual meal value choices share one clear icon-led action row", () => {
+  assert.match(page, /manual-value-actions/);
+  assert.match(page, /name="calculator"/);
+  assert.match(page, /חשב ערכים/);
+  assert.match(page, /name="list"/);
+  assert.match(page, /יש לי ערכים/);
+  assert.match(css, /manual-value-actions\{[^}]*grid-template-columns:1fr 1fr/);
 });
