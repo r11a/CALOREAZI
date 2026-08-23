@@ -103,6 +103,16 @@ test("photo capture communicates quality, confidence, offline state and save res
   assert.match(css, /photo-quality/);
 });
 
+test("offline outbox covers core entries and birth date shows the calculated age", () => {
+  assert.match(page, /flushOfflineMutations/);
+  assert.match(page, /queueMutation\("\/api\/meals"/);
+  assert.match(page, /queueMutation\("\/api\/water"/);
+  assert.match(page, /queueMutation\("\/api\/measurements"/);
+  assert.match(page, /queueMutation\("\/api\/activity"/);
+  assert.match(page, /גיל מחושב:/);
+  assert.match(page, /הגיל שלך:/);
+});
+
 test("dashboard explains its dynamic score and separates calorie target from consumption", () => {
   assert.match(page, /daily-score-details score-/);
   assert.match(page, /scoreGuidance/);

@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { flushOfflineCaptures, offlineCaptureCount, queueOfflineCapture } from "./offline-queue";
+import { flushOfflineCaptures, flushOfflineMutations, offlinePendingCount, queueOfflineCapture, queueOfflineMutation } from "./offline-queue";
 import { AppIcon } from "./components/AppIcon";
 
 type AppState = {
@@ -431,6 +431,19 @@ function goalStatus(value: number, target: number) {
   return { className: "goal-over", label: "מעל היעד" };
 }
 
+function exactAge(birthDate: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(birthDate || ""))) return null;
+  const birth = new Date(`${birthDate}T12:00:00`); if (!Number.isFinite(birth.getTime()) || birth > new Date()) return null;
+  const today = new Date(); let age = today.getFullYear() - birth.getFullYear();
+  if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age -= 1;
+  return age >= 0 && age <= 120 ? age : null;
+}
+
+async function queueMutation(url: string, method: string, body: string, id = crypto.randomUUID()) {
+  await queueOfflineMutation({ id, url, method, body, createdAt: new Date().toISOString() });
+  return id;
+}
+
 async function api(url: string, options?: RequestInit) {
   const target = url.startsWith("/") ? url.slice(1) : url;
   const multipart = options?.body instanceof FormData;
@@ -723,15 +736,37 @@ export default function Home() {
   }, []);
   useEffect(() => {
     setOnline(navigator.onLine);
-    const update = () => { setOnline(navigator.onLine); offlineCaptureCount().then(setOfflineQueueCount).catch(() => undefined); if (navigator.onLine) flushOfflineCaptures(async (capture) => { await api("/api/ai/analyze-meal", { method: "POST", headers: { "Idempotency-Key": capture.clientId }, body: JSON.stringify(capture) }); }).then(() => offlineCaptureCount().then(setOfflineQueueCount)).catch(() => undefined); };
+    let syncing = false;
+    const update = async () => {
+      setOnline(navigator.onLine); if (syncing) return;
+      if (!navigator.onLine) { offlinePendingCount().then(setOfflineQueueCount).catch(() => undefined); return; }
+      syncing = true;
+      try {
+        await flushOfflineMutations(async (mutation) => { await api(mutation.url, { method: mutation.method, headers: { "Idempotency-Key": mutation.id }, body: mutation.body }); });
+        await flushOfflineCaptures(async (capture) => {
+          let result = await api("/api/ai/analyze-meal", { method: "POST", headers: { "Idempotency-Key": capture.clientId }, body: JSON.stringify(capture) });
+          if (!result.items && result.jobId) result = await api(`/api/ai/analyze-meal?id=${encodeURIComponent(result.jobId)}`);
+          result = result.result ? { ...result.result, jobId: result.jobId } : result;
+          if (!result.items) throw new Error("הצילום עדיין ממתין לניתוח");
+          setPhotoPreview(capture.imageDataUrl); setMealSource("photo"); setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems(result.items); setAiOriginalItems(structuredClone(result.items)); setMealConfidence(result.confidence || "low"); setMealReviewReady(true); setPhotoStatus("הצילום שסונכרן נותח ומוכן לבדיקה ולאישור."); setMealOpen(true);
+        });
+        const latest = await api("/api/state"); setState(latest);
+      } catch { /* the queue remains durable and will retry */ }
+      finally { syncing = false; offlinePendingCount().then(setOfflineQueueCount).catch(() => undefined); }
+    };
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
+    const visibility = () => { if (document.visibilityState === "visible") void update(); };
+    document.addEventListener("visibilitychange", visibility);
+    const retryTimer = window.setInterval(() => { if (navigator.onLine) void update(); }, 15_000);
     if ("serviceWorker" in navigator)
       navigator.serviceWorker.register("./sw.js").catch(() => undefined);
-    update();
+    void update();
     return () => {
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
+      document.removeEventListener("visibilitychange", visibility);
+      window.clearInterval(retryTimer);
     };
   }, []);
   useEffect(() => {
@@ -1195,6 +1230,11 @@ export default function Home() {
 
   async function addWater(amount = 250) {
     try {
+      if (!navigator.onLine) {
+        await queueMutation("/api/water", "POST", JSON.stringify({ amount }));
+        setState((current: any) => ({ ...current, today: { ...current.today, waterMl: Math.max(0, Number(current.today.waterMl || 0) + amount) } }));
+        setOfflineQueueCount(await offlinePendingCount()); setMealResult({ name: "המים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
+      }
       setState(
         await api("/api/water", {
           method: "POST",
@@ -1213,6 +1253,11 @@ export default function Home() {
   async function saveWater() {
     setBusy(true);
     try {
+      if (!navigator.onLine) {
+        await queueMutation("/api/water", "PUT", JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue }));
+        setState((current: any) => ({ ...current, profile: { ...current.profile, waterMl: waterTargetValue }, today: { ...current.today, waterMl: waterValue } }));
+        setOfflineQueueCount(await offlinePendingCount()); setWaterOpen(false); return;
+      }
       setState(
         await api("/api/water", {
           method: "PUT",
@@ -1270,6 +1315,11 @@ export default function Home() {
     if (!(Number(weightValue) >= 25 && Number(weightValue) <= 350)) { setWeightFeedback("יש להזין משקל בין 25 ל־350 ק״ג."); return; }
     setBusy(true);
     try {
+      if (!navigator.onLine) {
+        await queueMutation("/api/measurements", "POST", JSON.stringify({ weight: Number(weightValue), date: weightDate }));
+        setState((current: any) => ({ ...current, profile: { ...current.profile, weight: Number(weightValue) }, measurements: [...(current.measurements || []).filter((item: any) => item.date !== weightDate), { id: `offline-${crypto.randomUUID()}`, date: weightDate, weight: Number(weightValue), at: new Date().toISOString(), pendingSync: true }] }));
+        setOfflineQueueCount(await offlinePendingCount()); setWeightFeedback(`המשקל נשמר במכשיר ויסונכרן כשהחיבור יחזור.`); return;
+      }
       const latest = await api("/api/measurements", { method: "POST", body: JSON.stringify({ weight: Number(weightValue), date: weightDate }) });
       setState(latest);
       setInsightsData(await api("/api/insights"));
@@ -1284,6 +1334,11 @@ export default function Home() {
     event.preventDefault();
     setBusy(true);
     try {
+      if (!navigator.onLine) {
+        await queueMutation("/api/activity", "POST", JSON.stringify(activityForm));
+        setState((current: any) => ({ ...current, activity: [...(current.activity || []), { ...activityForm, id: `offline-${crypto.randomUUID()}`, date: current.today.date, time: new Date().toISOString(), pendingSync: true }] }));
+        setOfflineQueueCount(await offlinePendingCount()); setActivityOpen(false); return;
+      }
       setState(
         await api("/api/activity", {
           method: "POST",
@@ -1411,20 +1466,22 @@ export default function Home() {
       let savedLocalDate = "";
       if (!catalogOnly) {
         if (!editingMealId && !mealSaveRequestId.current) mealSaveRequestId.current = crypto.randomUUID();
-        const saved = await api("/api/meals", {
-          method: editingMealId ? "PATCH" : "POST",
-          body: JSON.stringify(
-            editingMealId ? { ...finalMeal, id: editingMealId } : { ...finalMeal, clientRequestId: mealSaveRequestId.current },
-          ),
-        });
-        savedMealId = saved.savedMealId || savedMealId;
-        savedLocalDate = saved.savedLocalDate || "";
-        latest = await api("/api/state");
-        const persistedMeals = [latest.today, ...(latest.history || [])].flatMap(
-          (day: any) => day?.meals || [],
-        );
-        if (!savedMealId || !persistedMeals.some((meal: any) => meal.id === savedMealId))
-          throw new Error("השמירה לא אומתה במסד הנתונים. הארוחה נשארה פתוחה כדי שלא תאבד — נסה שוב.");
+        const requestId = mealSaveRequestId.current || crypto.randomUUID();
+        const payload = editingMealId ? { ...finalMeal, id: editingMealId } : { ...finalMeal, clientRequestId: requestId };
+        if (!navigator.onLine) {
+          await queueMutation("/api/meals", editingMealId ? "PATCH" : "POST", JSON.stringify(payload), requestId);
+          savedMealId = editingMealId || `offline-${requestId}`; savedLocalDate = normalizedDateTime.slice(0, 10);
+          const optimisticMeal = { ...finalMeal, id: savedMealId, clientRequestId: requestId, time: finalMeal.occurredAt, pendingSync: true };
+          latest = structuredClone(state);
+          if (savedLocalDate === latest.today.date) latest.today.meals = editingMealId ? latest.today.meals.map((meal: any) => meal.id === editingMealId ? optimisticMeal : meal) : [...latest.today.meals, optimisticMeal];
+          else { const day = latest.history.find((item: any) => item.date === savedLocalDate); if (day) day.meals = [...day.meals, optimisticMeal]; else latest.history.push({ date: savedLocalDate, waterMl: 0, meals: [optimisticMeal] }); }
+          setOfflineQueueCount(await offlinePendingCount());
+        } else {
+          const saved = await api("/api/meals", { method: editingMealId ? "PATCH" : "POST", headers: { "Idempotency-Key": requestId }, body: JSON.stringify(payload) });
+          savedMealId = saved.savedMealId || savedMealId; savedLocalDate = saved.savedLocalDate || ""; latest = await api("/api/state");
+          const persistedMeals = [latest.today, ...(latest.history || [])].flatMap((day: any) => day?.meals || []);
+          if (!savedMealId || !persistedMeals.some((meal: any) => meal.id === savedMealId)) throw new Error("השמירה לא אומתה במסד הנתונים. הארוחה נשארה פתוחה כדי שלא תאבד — נסה שוב.");
+        }
       }
       if (saveToLibrary || catalogOnly) {
         await api("/api/foods", {
@@ -1440,7 +1497,7 @@ export default function Home() {
         latest = await api("/api/state");
       }
       setState(latest);
-      if (!catalogOnly) setMealResult({ name: finalMeal.name, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId) });
+      if (!catalogOnly) setMealResult({ name: navigator.onLine ? finalMeal.name : `${finalMeal.name} · ממתין לסנכרון`, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId) });
       if (!catalogOnly && !editingMealId && savedLocalDate === latest.today?.date && consumed + Number(finalMeal.kcal) > dailyCalorieTarget) {
         setCalorieOverage({ id: savedMealId, meal: finalMeal, overBy: consumed + Number(finalMeal.kcal) - dailyCalorieTarget });
         if (notificationPermission === "granted") new Notification("CALOREAZI", { body: `חריגה של ${Math.round(consumed + Number(finalMeal.kcal) - dailyCalorieTarget)} קלוריות. אפשר לערוך או לבטל את ההוספה.` });
@@ -1593,6 +1650,14 @@ export default function Home() {
     event.preventDefault();
     setBusy(true);
     try {
+      if (!navigator.onLine) {
+        if (profileForm.email !== state.owner.email || profileForm.accountPassword || profileForm.initialWeightPassword) throw new Error("שינוי אימייל, סיסמה או משקל התחלתי דורש חיבור מאובטח לרשת.");
+        const offlineProfile = { ...profileForm, accountPassword: "", initialWeightPassword: "", avatar: profile.avatar || "", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+        await queueMutation("/api/profile", "PUT", JSON.stringify(offlineProfile));
+        if (weightValue && Number(weightValue) !== Number(latestWeight)) await queueMutation("/api/measurements", "POST", JSON.stringify({ weight: weightValue, date: state.today.date }));
+        setState((current: any) => ({ ...current, profile: { ...current.profile, ...offlineProfile, age: exactAge(offlineProfile.birthDate) ?? current.profile.age, weight: weightValue || current.profile.weight } }));
+        setOfflineQueueCount(await offlinePendingCount()); setProfileOpen(false); setMealResult({ name: "הפרטים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
+      }
       let latest = await api("/api/profile", {
         method: "PUT",
         body: JSON.stringify({ ...profileForm, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
@@ -1613,6 +1678,10 @@ export default function Home() {
   async function saveAcquaintance() {
     setBusy(true);
     try {
+      if (!navigator.onLine) {
+        const offlineProfile = { ...profileForm, accountPassword: "", initialWeightPassword: "", avatar: profile.avatar || "", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+        await queueMutation("/api/profile", "PUT", JSON.stringify(offlineProfile)); setState((current: any) => ({ ...current, profile: { ...current.profile, ...offlineProfile } })); setOfflineQueueCount(await offlinePendingCount()); setAcquaintanceOpen(false); return;
+      }
       const latest = await api("/api/profile", {
         method: "PUT",
         body: JSON.stringify({ ...profileForm, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
@@ -2160,7 +2229,7 @@ export default function Home() {
         return;
       }
       const clientId = crypto.randomUUID();
-      if (!navigator.onLine) { await queueOfflineCapture({ imageDataUrl, clientId, createdAt: new Date().toISOString() }); setOfflineQueueCount(await offlineCaptureCount()); setPhotoPreview(imageDataUrl); setMealSource("photo"); setPhotoStatus("הצילום נשמר במכשיר ויישלח אוטומטית לניתוח כשהחיבור יחזור."); setMealOpen(true); return; }
+      if (!navigator.onLine) { await queueOfflineCapture({ imageDataUrl, clientId, createdAt: new Date().toISOString() }); setOfflineQueueCount(await offlinePendingCount()); setPhotoPreview(imageDataUrl); setMealSource("photo"); setPhotoStatus("הצילום נשמר במכשיר ויישלח אוטומטית לניתוח כשהחיבור יחזור."); setMealOpen(true); return; }
       let result = await api("/api/ai/analyze-meal", {
         method: "POST",
         headers: { "Idempotency-Key": clientId },
@@ -2518,8 +2587,7 @@ export default function Home() {
     <main className={dark ? "app-shell theme-dark" : "app-shell"} dir="rtl">
       {!online && (
         <div className="offline-banner">
-          אין כרגע חיבור · הנתונים הקיימים זמינים, פעולות AI יחזרו כשהחיבור
-          יתחדש
+          אין כרגע חיבור · ההזנות נשמרות במכשיר ויסונכרנו אוטומטית כשהחיבור יתחדש
         </div>
       )}
       <header className="topbar">
@@ -2645,7 +2713,7 @@ export default function Home() {
           {error} ×
         </button>
       )}
-      {offlineQueueCount > 0 && <aside className="offline-queue-status" role="status">{offlineQueueCount} {offlineQueueCount === 1 ? "צילום ממתין" : "צילומים ממתינים"} לחיבור ולניתוח</aside>}
+      {offlineQueueCount > 0 && <aside className="offline-queue-status" role="status">{offlineQueueCount} {offlineQueueCount === 1 ? "פעולה ממתינה" : "פעולות ממתינות"} לסנכרון מאובטח</aside>}
       {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הארוחה עודכנה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name} · {mealResult.kcal} קלוריות</span><small>{mealResult.protein}g חלבון · {mealResult.carbs}g פחמימות · {mealResult.fat}g שומן{mealResult.imageCompleted ? " · תמונה הושלמה" : ""}</small></div><button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
       {undoMeal && (
         <aside className="undo-toast" role="status">
@@ -2702,6 +2770,7 @@ export default function Home() {
                           })}
                         </time>
                         <em>{periodLabels[meal.period || "snack"]}</em>
+                        {meal.pendingSync && <em className="pending-sync">ממתין לסנכרון</em>}
                       </span>
                       <strong>{meal.name}</strong>
                       <small>
@@ -3888,7 +3957,7 @@ export default function Home() {
               <label>
                 תאריך לידה
                 <input type="date" value={profileForm.birthDate || ""} onChange={(e) => setProfileForm({ ...profileForm, birthDate: e.target.value })} />
-                <small>הגיל יחושב אוטומטית וישמש לחישוב היעדים.</small>
+                <small>{exactAge(profileForm.birthDate) !== null ? `גיל מחושב: ${exactAge(profileForm.birthDate)} שנים` : "הגיל יחושב אוטומטית וישמש לחישוב היעדים."}</small>
               </label>
               <label>
                 גובה (ס״מ)
@@ -5492,7 +5561,7 @@ function Onboarding({
         <label>
           תאריך לידה
           <input type="date" value={values.birthDate} onChange={(e) => setValues({ ...values, birthDate: e.target.value })} />
-          <small>הגיל מחושב אוטומטית לצורך יעדים מדויקים.</small>
+          <small>{exactAge(values.birthDate) !== null ? `הגיל שלך: ${exactAge(values.birthDate)} שנים` : "הגיל מחושב אוטומטית לצורך יעדים מדויקים."}</small>
         </label>
         <label>
           גובה (ס״מ)

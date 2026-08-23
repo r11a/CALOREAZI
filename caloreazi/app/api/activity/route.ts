@@ -5,9 +5,11 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const initial = await readState(); const session = requireUser(initial, request);
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
+  const mutationKey = String(request.headers.get("idempotency-key") || "").slice(0, 120); const receipt = `${session.userId}:activity:post:${mutationKey}`;
+  if (mutationKey && (initial.systemSettings?.mutationReceipts || []).includes(receipt)) return Response.json(userView(initial, session.userId, session.role === "admin"));
   const body = await request.json(); const type = String(body.type || "").trim(); const minutes = Math.max(0, Number(body.minutes) || 0); const steps = Math.max(0, Math.round(Number(body.steps) || 0));
   if (!type || (!minutes && !steps)) return Response.json({ error: "יש להזין סוג פעילות וזמן או צעדים" }, { status: 400 });
-  const state = await updateState((latest) => { const data = ensureUserData(latest, session.userId); data.activity.push({ id: crypto.randomUUID(), date: new Date().toISOString().slice(0, 10), time: new Date().toISOString(), type: type.slice(0, 60), description: String(body.description || "").slice(0, 700), intensity: ["low","medium","high"].includes(body.intensity) ? body.intensity : "medium", minutes, steps, distanceKm: Math.max(0, Number(body.distanceKm) || 0), activeCalories: Math.max(0, Math.round(Number(body.activeCalories) || 0)) }); data.activity = data.activity.slice(-730); addAudit(latest, { userId: session.userId, action: "activity.created", target: type }); return latest; });
+  const state = await updateState((latest) => { const data = ensureUserData(latest, session.userId); data.activity.push({ id: crypto.randomUUID(), date: new Date().toISOString().slice(0, 10), time: new Date().toISOString(), type: type.slice(0, 60), description: String(body.description || "").slice(0, 700), intensity: ["low","medium","high"].includes(body.intensity) ? body.intensity : "medium", minutes, steps, distanceKm: Math.max(0, Number(body.distanceKm) || 0), activeCalories: Math.max(0, Math.round(Number(body.activeCalories) || 0)) }); data.activity = data.activity.slice(-730); if (mutationKey) latest.systemSettings.mutationReceipts = [...(latest.systemSettings.mutationReceipts || []), receipt].slice(-2000); addAudit(latest, { userId: session.userId, action: "activity.created", target: type }); return latest; });
   return Response.json(userView(state, session.userId, session.role === "admin"));
 }
 
