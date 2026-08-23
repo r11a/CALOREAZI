@@ -12,11 +12,14 @@ function localClock(timeZone, now = new Date()) {
 function minutes(value) { const [hour, minute] = String(value).split(":").map(Number); return hour * 60 + minute; }
 export function notificationIsDue(nowMinutes, value) { const target = minutes(value); return nowMinutes >= target && nowMinutes < target + 5; }
 export function notificationIsQuiet(nowMinutes, start, end) { const from = minutes(start); const until = minutes(end); return from === until ? false : from < until ? nowMinutes >= from && nowMinutes < until : nowMinutes >= from || nowMinutes < until; }
+function morningDeliveryTime(preferences) { return notificationIsQuiet(7 * 60 + 30, preferences.quietStart, preferences.quietEnd) ? preferences.quietEnd : "07:30"; }
 function totals(day) { return (day.meals || []).reduce((sum, meal) => ({ kcal: sum.kcal + Number(meal.kcal || 0), protein: sum.protein + Number(meal.protein || 0), carbs: sum.carbs + Number(meal.carbs || 0), fat: sum.fat + Number(meal.fat || 0) }), { kcal: 0, protein: 0, carbs: 0, fat: 0 }); }
+function previousDate(date) { const value = new Date(`${date}T12:00:00Z`); value.setUTCDate(value.getUTCDate() - 1); return value.toISOString().slice(0, 10); }
 
 function candidateMessages(data, preferences, clock) {
   const day = data.today; const profile = data.profile || {}; const result = []; const consumed = totals(day); const target = Number(profile.calories || 0); const mealPeriods = new Set((day.meals || []).map((meal) => meal.period));
   const add = (type, title, body, url = "./") => result.push({ type, title, body, url });
+  if (preferences.morningBrief && notificationIsDue(clock.minutes, morningDeliveryTime(preferences))) { const yesterday = (data.history || []).find((item) => item.date === previousDate(clock.date)); const yesterdayTotals = totals(yesterday || {}); const yesterdayScore = yesterday ? calculateDayScore(yesterday, profile, data.activity).score : null; const recap = yesterdayScore == null ? "אתמול עדיין לא נרשמו מספיק נתונים לסיכום." : `אתמול: ציון ${yesterdayScore}/100 ו־${Math.round(yesterdayTotals.kcal)} קלוריות.`; add("morning-brief", "בוקר טוב ☀️", `${recap} להיום היעד הוא ${target || "—"} קלוריות — מתחילים יום חדש בקצב שלך.`); }
   if (preferences.mealReminders && notificationIsDue(clock.minutes, preferences.breakfastTime) && !mealPeriods.has("breakfast")) add("meal-breakfast", "בוקר טוב", "עדיין לא נרשמה ארוחת בוקר. אם אכלת, אפשר לעדכן בכמה שניות.");
   if (preferences.mealReminders && notificationIsDue(clock.minutes, preferences.lunchTime) && !mealPeriods.has("lunch")) add("meal-lunch", "תזכורת עדינה", "אכלת צהריים? עדכון קצר יעזור לשמור על תמונת היום מדויקת.");
   if (preferences.mealReminders && notificationIsDue(clock.minutes, preferences.dinnerTime) && !mealPeriods.has("dinner")) add("meal-dinner", "ארוחת ערב", "אם כבר אכלת ערב, כדאי לעדכן לפני שסוגרים את היום.");
