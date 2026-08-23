@@ -17,7 +17,7 @@ async function json(url, options = {}) { const response = await fetch(`${base}${
 
 try {
   await waitForServer();
-  const onboarded = await json("/api/onboarding", { method: "POST", headers: { "Content-Type": "application/json", Origin: base }, body: JSON.stringify({ name: "Admin", email: "admin@example.test", adminPassword: "AdminPassword123!", goal: "maintain", sex: "male", age: 35, height: 180, weight: 80, targetWeight: 80, activity: "moderate" }) });
+  const onboarded = await json("/api/onboarding", { method: "POST", headers: { "Content-Type": "application/json", Origin: base }, body: JSON.stringify({ name: "Admin", email: "admin@example.test", adminPassword: "AdminPassword123!", goal: "maintain", sex: "male", birthDate: "1991-01-15", height: 180, weight: 80, targetWeight: 80, activity: "moderate" }) });
   assert.equal(onboarded.response.status, 200, JSON.stringify(onboarded.body)); const adminCookie = cookie(onboarded.response); assert.ok(adminCookie);
   const created = await json("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json", Cookie: adminCookie, Origin: base }, body: JSON.stringify({ name: "Member", email: "member@example.test", password: "MemberPassword123!" }) });
   assert.equal(created.response.status, 201, JSON.stringify(created.body));
