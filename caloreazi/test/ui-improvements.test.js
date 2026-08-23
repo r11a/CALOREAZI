@@ -331,3 +331,11 @@ test("meal add flows wait for an explicit field tap before opening the keyboard"
   assert.doesNotMatch(page, /<input\s+autoFocus/);
   assert.match(page, /aria-label="חיפוש בהוספת אוכל"/);
 });
+
+test("meal source actions share white icons on orange while food categories stay untouched", () => {
+  assert.match(page, /capture-meal-entry add-source-entry/);
+  assert.match(page, /forgotten-meal-entry add-source-entry/);
+  assert.match(page, /className="add-source-entry" onClick=\{\(\) => setVoiceOpen/);
+  assert.match(css, /category-grid \.add-source-entry \.manual-meal-art\{[^}]*color:#fff[^}]*var\(--orange\)/);
+  assert.doesNotMatch(page, /className="add-source-entry" onClick=\{\(\) => setQuickCategory/);
+});

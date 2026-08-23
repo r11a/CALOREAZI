@@ -3661,23 +3661,23 @@ export default function Home() {
               </div>
             ) : !quickCategory ? (
               <div className="category-grid">
-                <button className="capture-meal-entry" onClick={() => { setQuickAddOpen(false); uploadInput.current?.click(); }}>
+                <button className="capture-meal-entry add-source-entry" onClick={() => { setQuickAddOpen(false); uploadInput.current?.click(); }}>
                   <span className="manual-meal-art"><AppIcon name="camera" /></span>
                   <strong>צלם ארוחה</strong>
                   <small>צילום חדש, גלריה או קובץ</small>
                 </button>
-                <button onClick={() => openManualMeal()}>
-                  <span className="manual-meal-art">🍽</span>
+                <button className="add-source-entry" onClick={() => openManualMeal()}>
+                  <span className="manual-meal-art"><AppIcon name="edit" /></span>
                   <strong>ארוחה ידנית</strong>
                   <small>AI יחשב לפי התיאור שלך</small>
                 </button>
-                <button className="forgotten-meal-entry" onClick={openForgottenMeals}>
-                  <span className="manual-meal-art">◷</span>
+                <button className="forgotten-meal-entry add-source-entry" onClick={openForgottenMeals}>
+                  <span className="manual-meal-art"><AppIcon name="history" /></span>
                   <strong>שכחתי לעדכן</strong>
                   <small>הוסף כמה ארוחות להיום או לימים קודמים</small>
                 </button>
-                <button onClick={() => setVoiceOpen(true)}>
-                  <span className="manual-meal-art">🎙️</span>
+                <button className="add-source-entry" onClick={() => setVoiceOpen(true)}>
+                  <span className="manual-meal-art"><AppIcon name="mic" /></span>
                   <strong>הקלט ארוחה</strong>
                   <small>AI יתמלל ויציג לאישור</small>
                 </button>
