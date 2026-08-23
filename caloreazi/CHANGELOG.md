@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.13.6
+
+- Added a prominent manual-add button opposite the personalized greeting on the home screen.
+- Added a “photograph meal” action inside manual entry that reuses the same phone capture/gallery flow as the main navigation camera.
+
 ## 1.13.5
 
 - Automatically completes missing per-item calories after photo recognition and calculates the actual calories for the detected weight and quantity.

@@ -2538,6 +2538,7 @@ export default function Home() {
       </header>
       <section className="welcome">
         <div><h1>{greeting}, {state.owner.name}</h1><p>{scoreHeadline}</p></div>
+        <button className="welcome-add-button" type="button" onClick={() => openManualMeal()} aria-label="הוספת ארוחה ידנית" title="הוספת ארוחה ידנית"><AppIcon name="plus" /></button>
       </section>
       {(state.partnerships || []).filter((link) => link.direction === "incoming" && link.status === "pending").map((link) => <aside className="partnership-invite-card" key={link.id}><span>♡</span><div><strong>{link.other?.username || link.other?.name} בחר לשתף איתך את התהליך</strong><small>ההזמנה תישאר כאן עד שתבחר</small></div><button onClick={() => updatePartnership(link.id, "accept")}>אשר</button><button className="reject" onClick={() => updatePartnership(link.id, "reject")}>דחה</button></aside>)}
       {consistencyBadges.length > 0 && (
@@ -4945,7 +4946,7 @@ export default function Home() {
                     }
                   />
                 </label>
-                <div className="manual-ai-actions"><button type="button" className="dictation-action" onClick={dictateManualDescription}><AppIcon name="mic" /> הכתבה</button><button type="button" onClick={analyzeManualDescription} disabled={busy || !manualDescription.trim()}>{busy ? "מחשב…" : catalogOnly ? "צור תמונה וחשב ערכים" : "חשב ערכים עם AI"}</button>{!catalogOnly && <button type="button" onClick={() => setManualAiMode(false)}>יש לי ערכים</button>}</div>
+                <div className="manual-ai-actions">{!catalogOnly && <button type="button" className="manual-camera-action" onClick={() => uploadInput.current?.click()}><AppIcon name="camera" /> צלם ארוחה</button>}<button type="button" className="dictation-action" onClick={dictateManualDescription}><AppIcon name="mic" /> הכתבה</button><button type="button" onClick={analyzeManualDescription} disabled={busy || !manualDescription.trim()}>{busy ? "מחשב…" : catalogOnly ? "צור תמונה וחשב ערכים" : "חשב ערכים עם AI"}</button>{!catalogOnly && <button type="button" onClick={() => setManualAiMode(false)}>יש לי ערכים</button>}</div>
                 <small>
                   {catalogOnly
                     ? "לאחר החישוב אפשר לבדוק ולתקן את הערכים לפני שמירה בגלריה."
