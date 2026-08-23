@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.13.3
+
+- Fixed the mobile profile tabs so their icons and labels keep their full height and remain horizontally scrollable on narrow iPhone screens.
+- Expanded the configurable daily notification ceiling to 5, 10, 15 or 20 notifications.
+- Added an optional daily 07:30 morning notification with yesterday's score and calories plus today's calorie target.
+
 ## 1.13.2
 
 - Added a dedicated notification tab to the user profile with an individual checkbox for meal, water, daily-summary, insight, coach, weekly-trend, weight and calm-achievement notifications.

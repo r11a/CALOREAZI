@@ -18,6 +18,10 @@ test("notification delivery uses a bounded five-minute scheduler window", () => 
 test("notification preferences reject invalid times and excessive daily volume", () => {
   const preferences = normalizeNotificationPreferences({ quietStart: "88:91", maxPerDay: 99, coachTips: false });
   assert.equal(preferences.quietStart, "22:30");
-  assert.equal(preferences.maxPerDay, 3);
+  assert.equal(preferences.maxPerDay, 5);
   assert.equal(preferences.coachTips, false);
+});
+
+test("daily notification limit supports five-step choices up to twenty", () => {
+  for (const maxPerDay of [5, 10, 15, 20]) assert.equal(normalizeNotificationPreferences({ maxPerDay }).maxPerDay, maxPerDay);
 });
