@@ -70,6 +70,7 @@ const notificationTypeOptions = [
   ["weightReminder", "תזכורת שקילה", "רק אם לא הוזן משקל במשך יותר מ־14 יום"],
   ["achievements", "הישגים רגועים", "חיזוק חיובי על יום מאוזן, בלי לחץ או ענישה"],
 ] as const;
+const notificationTestTypes: Record<string, string> = { morningBrief: "morning-brief", mealReminders: "meal-lunch", waterReminders: "water", dailySummary: "summary", insights: "insight", coachTips: "coach", weeklyTrends: "weekly", weightReminder: "weight", achievements: "achievement" };
 const dietStyles = [
   ["none", "מאוזנת", "ללא הגבלה מיוחדת, עם גיוון בין קבוצות המזון"],
   ["mediterranean", "ים־תיכונית", "ירקות, קטניות, דגים, שמן זית ודגנים מלאים"],
@@ -558,6 +559,7 @@ export default function Home() {
   const [calorieOverage, setCalorieOverage] = useState<any>(null);
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification === "undefined" ? "unsupported" : Notification.permission);
   const [notificationStatus, setNotificationStatus] = useState("");
+  const [testingNotificationType, setTestingNotificationType] = useState("");
   useEffect(() => {
     if (!mealResult) return;
     const timer = window.setTimeout(() => setMealResult(null), 15_000);
@@ -2419,6 +2421,14 @@ export default function Home() {
     } catch (e) { setNotificationStatus((e as Error).message || "הפעלת ההתראות נכשלה. נסה שוב."); }
     finally { setBusy(false); }
   }
+  async function testNotification(type: string, title: string) {
+    setTestingNotificationType(type); setNotificationStatus(`שולח בדיקת ${title}…`); setError("");
+    try {
+      await api("/api/notifications", { method: "PUT", body: JSON.stringify({ type: notificationTestTypes[type] }) });
+      setNotificationStatus(`התראת „${title}” נשלחה למכשיר ✓`);
+    } catch (e) { setNotificationStatus((e as Error).message || "שליחת ההתראה נכשלה."); }
+    finally { setTestingNotificationType(""); }
+  }
 
   if (!state)
     return (
@@ -3974,7 +3984,7 @@ export default function Home() {
             </section>}
             {profileTab === "notifications" && <section className="profile-tab-panel notification-settings-panel"><header><span>🔔</span><div><strong>התראות חכמות</strong><small>רק מה שבחרת, בזמן רלוונטי ובהתאם ליום שלך</small></div></header>
               <label className="notification-master"><input type="checkbox" checked={profileForm.notificationPreferences?.enabled !== false} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, enabled: event.target.checked } })} /><span><strong>הפעלת התראות אוטומטיות</strong><small>המתזמן מכבד שעות שקטות ומגבלת התראות יומית</small></span></label>
-              <div className="notification-type-list">{notificationTypeOptions.map(([key,title,description]) => <label key={key}><input type="checkbox" checked={Boolean(profileForm.notificationPreferences?.[key])} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, [key]: event.target.checked } })} /><span><strong>{title}</strong><small>{description}</small></span></label>)}</div>
+              <div className="notification-type-list">{notificationTypeOptions.map(([key,title,description]) => <article key={key}><label><input type="checkbox" checked={Boolean(profileForm.notificationPreferences?.[key])} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, [key]: event.target.checked } })} /><span><strong>{title}</strong><small>{description}</small></span></label><button type="button" disabled={Boolean(testingNotificationType)} onClick={() => testNotification(key, title)}>{testingNotificationType === key ? "שולח…" : "שלח לבדיקה"}</button></article>)}</div>
               <section className="notification-times"><header><strong>זמנים מועדפים</strong><small>הודעה תישלח רק אם היא עדיין רלוונטית</small></header><div>
                 <label>ארוחת בוקר<input type="time" value={profileForm.notificationPreferences?.breakfastTime || "09:00"} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, breakfastTime: event.target.value } })} /></label>
                 <label>ארוחת צהריים<input type="time" value={profileForm.notificationPreferences?.lunchTime || "14:00"} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, lunchTime: event.target.value } })} /></label>
