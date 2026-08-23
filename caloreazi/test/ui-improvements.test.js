@@ -36,6 +36,14 @@ test("photo meals automatically complete calories and remain recalculable after 
   assert.match(analyzeTextRoute, /proteinPer100 \* 4/);
 });
 
+test("home greeting and manual entry expose direct meal capture actions", () => {
+  assert.match(page, /welcome-add-button/);
+  assert.match(page, /onClick=\{\(\) => openManualMeal\(\)\}/);
+  assert.match(page, /manual-camera-action/);
+  assert.match(page, /צלם ארוחה/);
+  assert.match(page, /uploadInput\.current\?\.click\(\)/);
+});
+
 test("history meal pictures open the full meal preview and return to history", () => {
   assert.match(page, /openMealPreview\(meal, true\)/);
   assert.match(page, /mealPreviewReturnToHistory/);
