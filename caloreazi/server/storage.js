@@ -34,10 +34,11 @@ export async function storageCapacity(target) { const filesystem = await statfs(
 export async function saveMediaDataUrl(state, dataUrl, id, options = {}) {
   const match = String(dataUrl || "").match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/); if (!match) return null;
   let target; let pendingDestination = null; try { target = await probeStorage(state, "gallery"); } catch (error) { const desired = resolveStorageDir(state, "gallery"); if (desired.destination === "internal") throw error; pendingDestination = { destination: desired.destination, relativePath: desired.relativePath }; target = await probeStorage(state, "gallery", { ...storageSettings(state), galleryDestination: "internal", galleryRelativePath: "gallery-pending" }); } let file = `${id}.webp`; let contentType = "image/webp"; const source = Buffer.from(match[2], "base64"); let buffer = source;
-  try { const sharp = (await import("sharp")).default; const maxSize = Math.max(192, Math.min(1280, Number(options.maxSize) || 640)); const quality = Math.max(55, Math.min(90, Number(options.quality) || 80)); buffer = await sharp(source).resize({ width: maxSize, height: maxSize, fit: "inside", withoutEnlargement: true }).webp({ quality, alphaQuality: 85 }).toBuffer(); }
-  catch { file = `${id}.image`; contentType = match[1]; }
+  let width = null; let height = null;
+  try { const sharp = (await import("sharp")).default; const maxSize = Math.max(192, Math.min(1280, Number(options.maxSize) || 512)); const quality = Math.max(55, Math.min(90, Number(options.quality) || 72)); buffer = await sharp(source).rotate().resize({ width: maxSize, height: maxSize, fit: "inside", withoutEnlargement: true }).webp({ quality, alphaQuality: 80, effort: 4 }).toBuffer(); const metadata = await sharp(buffer).metadata(); width = metadata.width || null; height = metadata.height || null; }
+  catch { if (source.length > 750_000) return null; file = `${id}.image`; contentType = match[1]; }
   await writeFile(path.join(target.resolved, file), buffer, { mode: 0o600 });
-  return { file, contentType, destination: target.destination, relativePath: target.relativePath, size: buffer.length, sha256: createHash("sha256").update(buffer).digest("hex"), ...(pendingDestination ? { pendingDestination, pendingSince: new Date().toISOString() } : {}) };
+  return { file, contentType, destination: target.destination, relativePath: target.relativePath, size: buffer.length, sourceSize: source.length, width, height, sha256: createHash("sha256").update(buffer).digest("hex"), ...(pendingDestination ? { pendingDestination, pendingSince: new Date().toISOString() } : {}) };
 }
 
 export async function syncPendingMedia(state) {

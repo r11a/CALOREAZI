@@ -1,6 +1,6 @@
 {
   "name": "caloreazi",
-  "version": "1.13.9",
+  "version": "1.14.0",
   "private": true,
   "license": "UNLICENSED",
   "engines": {
@@ -19,6 +19,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
     "worker:analysis": "node scripts/analysis-worker.mjs",
+    "benchmark:meals": "node scripts/meal-benchmark.mjs",
     "version:sync": "node scripts/sync-version.mjs",
     "version:check": "node scripts/sync-version.mjs --check"
   },
