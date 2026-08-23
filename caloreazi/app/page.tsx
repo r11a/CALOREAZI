@@ -2538,7 +2538,7 @@ export default function Home() {
       </header>
       <section className="welcome">
         <div><h1>{greeting}, {state.owner.name}</h1><p>{scoreHeadline}</p></div>
-        <button className="welcome-add-button" type="button" onClick={() => openManualMeal()} aria-label="הוספת ארוחה ידנית" title="הוספת ארוחה ידנית"><AppIcon name="plus" /></button>
+        <button className="welcome-add-button" type="button" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }} aria-label="פתיחת תפריט הוספת ארוחה" title="הוספת ארוחה"><AppIcon name="plus" /></button>
       </section>
       {(state.partnerships || []).filter((link) => link.direction === "incoming" && link.status === "pending").map((link) => <aside className="partnership-invite-card" key={link.id}><span>♡</span><div><strong>{link.other?.username || link.other?.name} בחר לשתף איתך את התהליך</strong><small>ההזמנה תישאר כאן עד שתבחר</small></div><button onClick={() => updatePartnership(link.id, "accept")}>אשר</button><button className="reject" onClick={() => updatePartnership(link.id, "reject")}>דחה</button></aside>)}
       {consistencyBadges.length > 0 && (
@@ -3644,6 +3644,11 @@ export default function Home() {
               </div>
             ) : !quickCategory ? (
               <div className="category-grid">
+                <button className="capture-meal-entry" onClick={() => { setQuickAddOpen(false); uploadInput.current?.click(); }}>
+                  <span className="manual-meal-art"><AppIcon name="camera" /></span>
+                  <strong>צלם ארוחה</strong>
+                  <small>צילום חדש, גלריה או קובץ</small>
+                </button>
                 <button onClick={() => openManualMeal()}>
                   <span className="manual-meal-art">🍽</span>
                   <strong>ארוחה ידנית</strong>
@@ -4946,7 +4951,13 @@ export default function Home() {
                     }
                   />
                 </label>
-                <div className="manual-ai-actions">{!catalogOnly && <button type="button" className="manual-camera-action" onClick={() => uploadInput.current?.click()}><AppIcon name="camera" /> צלם ארוחה</button>}<button type="button" className="dictation-action" onClick={dictateManualDescription}><AppIcon name="mic" /> הכתבה</button><button type="button" onClick={analyzeManualDescription} disabled={busy || !manualDescription.trim()}>{busy ? "מחשב…" : catalogOnly ? "צור תמונה וחשב ערכים" : "חשב ערכים עם AI"}</button>{!catalogOnly && <button type="button" onClick={() => setManualAiMode(false)}>יש לי ערכים</button>}</div>
+                <div className="manual-ai-actions">
+                  <button type="button" className="dictation-action" onClick={dictateManualDescription}><AppIcon name="mic" /> הכתבה</button>
+                  <div className="manual-value-actions">
+                    <button type="button" className="calculate-values-action" onClick={analyzeManualDescription} disabled={busy || !manualDescription.trim()}><AppIcon name="calculator" />{busy ? "מחשב…" : catalogOnly ? "צור תמונה וחשב ערכים" : "חשב ערכים"}</button>
+                    {!catalogOnly && <button type="button" className="own-values-action" onClick={() => setManualAiMode(false)}><AppIcon name="list" /> יש לי ערכים</button>}
+                  </div>
+                </div>
                 <small>
                   {catalogOnly
                     ? "לאחר החישוב אפשר לבדוק ולתקן את הערכים לפני שמירה בגלריה."
