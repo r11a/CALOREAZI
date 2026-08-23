@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { flushOfflineCaptures, flushOfflineMutations, offlinePendingCount, queueOfflineCapture, queueOfflineMutation } from "./offline-queue";
+import { flushOfflineCaptures, flushOfflineMutations, listOfflineQueue, offlinePendingCount, queueOfflineCapture, queueOfflineMutation, retryOfflineItem, type OfflineQueueItem } from "./offline-queue";
 import { AppIcon } from "./components/AppIcon";
 
 type AppState = {
@@ -613,6 +613,10 @@ export default function Home() {
   const [databaseStatus, setDatabaseStatus] = useState<any>(null);
   const [online, setOnline] = useState(true);
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
+  const [offlineQueueItems, setOfflineQueueItems] = useState<OfflineQueueItem[]>([]);
+  const [syncCenterOpen, setSyncCenterOpen] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"offline" | "idle" | "syncing" | "success" | "attention">("idle");
+  const [syncRequested, setSyncRequested] = useState(0);
   const [waterOpen, setWaterOpen] = useState(false);
   const [waterValue, setWaterValue] = useState(0);
   const [waterTargetValue, setWaterTargetValue] = useState(2000);
@@ -687,6 +691,7 @@ export default function Home() {
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const mealSaveInFlight = useRef(false);
   const mealSaveRequestId = useRef("");
+  const mealEditBaseUpdatedAt = useRef("");
   const imageCompletionRequested = useRef(new Set<string>());
   const audioChunks = useRef<Blob[]>([]);
   const recordingStartedAt = useRef(0);
@@ -737,13 +742,15 @@ export default function Home() {
   useEffect(() => {
     setOnline(navigator.onLine);
     let syncing = false;
+    const refreshQueue = async () => { const items = await listOfflineQueue(); setOfflineQueueItems(items); setOfflineQueueCount(items.length); if (items.some((item) => item.attempts >= 3)) setSyncStatus("attention"); return items; };
     const update = async () => {
       setOnline(navigator.onLine); if (syncing) return;
-      if (!navigator.onLine) { offlinePendingCount().then(setOfflineQueueCount).catch(() => undefined); return; }
+      if (!navigator.onLine) { setSyncStatus("offline"); refreshQueue().catch(() => undefined); return; }
       syncing = true;
+      setSyncStatus("syncing");
       try {
-        await flushOfflineMutations(async (mutation) => { await api(mutation.url, { method: mutation.method, headers: { "Idempotency-Key": mutation.id }, body: mutation.body }); });
-        await flushOfflineCaptures(async (capture) => {
+        const mutationsSent = await flushOfflineMutations(async (mutation) => { await api(mutation.url, { method: mutation.method, headers: { "Idempotency-Key": mutation.id }, body: mutation.body }); });
+        const capturesSent = await flushOfflineCaptures(async (capture) => {
           let result = await api("/api/ai/analyze-meal", { method: "POST", headers: { "Idempotency-Key": capture.clientId }, body: JSON.stringify(capture) });
           if (!result.items && result.jobId) result = await api(`/api/ai/analyze-meal?id=${encodeURIComponent(result.jobId)}`);
           result = result.result ? { ...result.result, jobId: result.jobId } : result;
@@ -751,8 +758,10 @@ export default function Home() {
           setPhotoPreview(capture.imageDataUrl); setMealSource("photo"); setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems(result.items); setAiOriginalItems(structuredClone(result.items)); setMealConfidence(result.confidence || "low"); setMealReviewReady(true); setPhotoStatus("הצילום שסונכרן נותח ומוכן לבדיקה ולאישור."); setMealOpen(true);
         });
         const latest = await api("/api/state"); setState(latest);
-      } catch { /* the queue remains durable and will retry */ }
-      finally { syncing = false; offlinePendingCount().then(setOfflineQueueCount).catch(() => undefined); }
+        const remaining = await refreshQueue();
+        setSyncStatus(remaining.some((item) => item.attempts >= 3) ? "attention" : remaining.length ? "idle" : mutationsSent + capturesSent > 0 ? "success" : "idle");
+      } catch { const remaining = await refreshQueue().catch(() => []); setSyncStatus(remaining.some((item) => item.attempts >= 3) ? "attention" : "idle"); }
+      finally { syncing = false; }
     };
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
@@ -768,7 +777,7 @@ export default function Home() {
       document.removeEventListener("visibilitychange", visibility);
       window.clearInterval(retryTimer);
     };
-  }, []);
+  }, [syncRequested]);
   useEffect(() => {
     const saved = window.localStorage.getItem("caloreazi-theme");
     if (saved) setDark(saved === "dark");
@@ -1230,8 +1239,9 @@ export default function Home() {
 
   async function addWater(amount = 250) {
     try {
+      const recordedAt = new Date().toISOString();
       if (!navigator.onLine) {
-        await queueMutation("/api/water", "POST", JSON.stringify({ amount }));
+        await queueMutation("/api/water", "POST", JSON.stringify({ amount, recordedAt, localDate: state.today.date }));
         setState((current: any) => ({ ...current, today: { ...current.today, waterMl: Math.max(0, Number(current.today.waterMl || 0) + amount) } }));
         setOfflineQueueCount(await offlinePendingCount()); setMealResult({ name: "המים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
       }
@@ -1254,7 +1264,7 @@ export default function Home() {
     setBusy(true);
     try {
       if (!navigator.onLine) {
-        await queueMutation("/api/water", "PUT", JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue }));
+        await queueMutation("/api/water", "PUT", JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue, localDate: state.today.date }));
         setState((current: any) => ({ ...current, profile: { ...current.profile, waterMl: waterTargetValue }, today: { ...current.today, waterMl: waterValue } }));
         setOfflineQueueCount(await offlinePendingCount()); setWaterOpen(false); return;
       }
@@ -1277,6 +1287,7 @@ export default function Home() {
     setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false); setTasteWizardOpen(false);
     setForgottenOpen(false);
     setNewCycleOpen(false);
+    setSyncCenterOpen(false);
     setMacroDetail(""); setMealPreview(null); setPendingQuickFood(null); setEditingFood(null);
   }
   function openNavigationScreen(screen: "home" | "history" | "admin" | "insights" | "coach") {
@@ -1335,8 +1346,9 @@ export default function Home() {
     setBusy(true);
     try {
       if (!navigator.onLine) {
-        await queueMutation("/api/activity", "POST", JSON.stringify(activityForm));
-        setState((current: any) => ({ ...current, activity: [...(current.activity || []), { ...activityForm, id: `offline-${crypto.randomUUID()}`, date: current.today.date, time: new Date().toISOString(), pendingSync: true }] }));
+        const recordedAt = new Date().toISOString();
+        await queueMutation("/api/activity", "POST", JSON.stringify({ ...activityForm, recordedAt, localDate: state.today.date }));
+        setState((current: any) => ({ ...current, activity: [...(current.activity || []), { ...activityForm, id: `offline-${crypto.randomUUID()}`, date: current.today.date, time: recordedAt, pendingSync: true }] }));
         setOfflineQueueCount(await offlinePendingCount()); setActivityOpen(false); return;
       }
       setState(
@@ -1467,7 +1479,7 @@ export default function Home() {
       if (!catalogOnly) {
         if (!editingMealId && !mealSaveRequestId.current) mealSaveRequestId.current = crypto.randomUUID();
         const requestId = mealSaveRequestId.current || crypto.randomUUID();
-        const payload = editingMealId ? { ...finalMeal, id: editingMealId } : { ...finalMeal, clientRequestId: requestId };
+        const payload = editingMealId ? { ...finalMeal, id: editingMealId, baseUpdatedAt: mealEditBaseUpdatedAt.current } : { ...finalMeal, clientRequestId: requestId };
         if (!navigator.onLine) {
           await queueMutation("/api/meals", editingMealId ? "PATCH" : "POST", JSON.stringify(payload), requestId);
           savedMealId = editingMealId || `offline-${requestId}`; savedLocalDate = normalizedDateTime.slice(0, 10);
@@ -1508,6 +1520,7 @@ export default function Home() {
       setMealOpen(false);
       mealSaveRequestId.current = "";
       setEditingMealId("");
+      mealEditBaseUpdatedAt.current = "";
       setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 });
       setMealItems([]);
       setAiOriginalItems([]);
@@ -1571,6 +1584,7 @@ export default function Home() {
   function editMeal(meal: any) {
     const date = new Date(meal.time);
     setEditingMealId(meal.id);
+    mealEditBaseUpdatedAt.current = String(meal.updatedAt || "");
     setMealDetailsOpen(true);
     setMealForm({
       name: meal.name,
@@ -2218,7 +2232,8 @@ export default function Home() {
         ? { level: "warning" as const, message: "התמונה קטנה או לא ברורה מספיק לזיהוי אמין." }
         : { level: "good" as const, message: "איכות ורזולוציית הצילום מתאימות לניתוח." };
       setPhotoQuality(quality);
-      const imageDataUrl = await prepareImage(file, 960, 0.65, original);
+      let imageDataUrl = await prepareImage(file, navigator.onLine ? 960 : 720, navigator.onLine ? 0.65 : 0.55, original);
+      if (!navigator.onLine && imageDataUrl.length > 1_800_000) imageDataUrl = await prepareImage(file, 560, 0.45, original);
       URL.revokeObjectURL(originalUrl);
       setPhotoPreview(imageDataUrl);
       setMealSource("photo");
@@ -2614,6 +2629,10 @@ export default function Home() {
           </button>
         </div>
       </header>
+      <button className={`sync-indicator sync-${syncStatus}`} type="button" onClick={async () => { setOfflineQueueItems(await listOfflineQueue()); setSyncCenterOpen(true); }} aria-label="פתיחת מרכז הסנכרון">
+        <i />
+        <span>{!online ? "עובדים Offline" : syncStatus === "syncing" ? "מסנכרן…" : syncStatus === "attention" ? "הסנכרון דורש טיפול" : syncStatus === "success" ? "הכול סונכרן" : offlineQueueCount ? `${offlineQueueCount} ממתינים לסנכרון` : "מחובר ומסונכרן"}</span>
+      </button>
       <section className="welcome">
         <div><h1>{greeting}, {state.owner.name}</h1><p>{scoreHeadline}</p></div>
         <button className="welcome-add-button" type="button" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }} aria-label="פתיחת תפריט הוספת ארוחה" title="הוספת ארוחה"><AppIcon name="plus" /></button>
@@ -2713,7 +2732,8 @@ export default function Home() {
           {error} ×
         </button>
       )}
-      {offlineQueueCount > 0 && <aside className="offline-queue-status" role="status">{offlineQueueCount} {offlineQueueCount === 1 ? "פעולה ממתינה" : "פעולות ממתינות"} לסנכרון מאובטח</aside>}
+      {offlineQueueCount > 0 && !syncCenterOpen && <button className="offline-queue-status" type="button" onClick={async () => { setOfflineQueueItems(await listOfflineQueue()); setSyncCenterOpen(true); }}>{offlineQueueCount} {offlineQueueCount === 1 ? "פעולה ממתינה" : "פעולות ממתינות"} לסנכרון · לפרטים</button>}
+      {syncCenterOpen && <div className="modal-layer sync-center-layer"><button className="backdrop" onClick={() => setSyncCenterOpen(false)} /><section className="settings-modal sync-center"><header><div><h2>מרכז הסנכרון</h2><p>{!online ? "אין חיבור כרגע. אפשר להמשיך לעבוד כרגיל." : syncStatus === "syncing" ? "הנתונים נשלחים כעת לפי סדר ההזנה." : offlineQueueItems.length ? "הנתונים שמורים במכשיר ולא ייעלמו." : "כל הנתונים מעודכנים בשרת."}</p></div><button type="button" onClick={() => setSyncCenterOpen(false)} aria-label="סגור">×</button></header><div className="sync-summary"><span className={online ? "connected" : "disconnected"}><i />{online ? "מחובר" : "Offline"}</span><strong>{offlineQueueItems.length}</strong><small>פעולות ממתינות</small></div><div className="sync-items">{offlineQueueItems.map((item) => <article className={item.attempts >= 3 ? "failed" : ""} key={`${item.kind}-${item.id}`}><div><strong>{item.label}</strong><small>נשמר {new Date(item.createdAt).toLocaleString("he-IL")}</small>{item.attempts >= 3 && <><em>לא הצלחנו לסנכרן אחרי {item.attempts} ניסיונות</em>{item.lastError && <small>{item.lastError}</small>}</>}</div>{item.attempts >= 3 ? <button type="button" disabled={!online} onClick={async () => { await retryOfflineItem(item); setOfflineQueueItems(await listOfflineQueue()); setSyncRequested((value) => value + 1); }}>נסה שוב</button> : <span>{syncStatus === "syncing" ? "מסנכרן" : "ממתין"}</span>}</article>)}{!offlineQueueItems.length && <div className="sync-empty"><b>✓</b><strong>הכול מסונכרן</strong><span>אין פעולות שממתינות לשליחה.</span></div>}</div><footer><button type="button" onClick={() => setSyncCenterOpen(false)}>סגור</button><button className="primary" type="button" disabled={!online || !offlineQueueItems.length || syncStatus === "syncing"} onClick={() => setSyncRequested((value) => value + 1)}>סנכרן עכשיו</button></footer></section></div>}
       {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הארוחה עודכנה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name} · {mealResult.kcal} קלוריות</span><small>{mealResult.protein}g חלבון · {mealResult.carbs}g פחמימות · {mealResult.fat}g שומן{mealResult.imageCompleted ? " · תמונה הושלמה" : ""}</small></div><button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
       {undoMeal && (
         <aside className="undo-toast" role="status">

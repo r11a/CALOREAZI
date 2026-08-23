@@ -89,11 +89,12 @@ export async function PATCH(request: Request) {
   const editedValidation = validateMealNutrition({ ...editedNutrition, items: editedItems });
   if (["photo", "voice"].includes(body.source) && !editedValidation.valid)
     return Response.json({ error: editedValidation.issues[0].message, issues: editedValidation.issues, requiresConfirmation: true }, { status: 422 });
-  let foundMeal = false; let savedLocalDate = "";
+  let foundMeal = false; let savedLocalDate = ""; let editConflict = false;
   const state = await updateState((latest) => {
     const found = findOwnedMeal(latest, session.userId, id); if (!found) return latest;
     foundMeal = true;
     const meal = found.meal;
+    if (body.baseUpdatedAt !== undefined && String(meal.updatedAt || "") !== String(body.baseUpdatedAt || "")) { editConflict = true; return latest; }
     if (body.scale !== undefined) {
       const scale = Math.max(.25, Math.min(4, Number(body.scale) || 1));
       ["kcal", "protein", "carbs", "fat"].forEach((field) => { meal[field] = Math.round(Number(meal[field] || 0) * scale * 10) / 10; });
@@ -112,5 +113,6 @@ export async function PATCH(request: Request) {
     addAudit(latest, { userId: session.userId, action: "meal.updated", target: id }); return latest;
   });
   if (!foundMeal) return Response.json({ error: "הארוחה לא נמצאה" }, { status: 404 });
+  if (editConflict) return Response.json({ error: "הארוחה השתנתה במכשיר אחר. פתח אותה מחדש ובחר אילו שינויים לשמור.", conflict: true }, { status: 409 });
   return Response.json({ ...userView(state, session.userId, session.role === "admin"), savedMealId: id, savedLocalDate });
 }

@@ -13,6 +13,10 @@ const analyzeTextRoute = await readFile(new URL("../app/api/ai/analyze-text/rout
 const partnershipsRoute = await readFile(new URL("../app/api/partnerships/route.ts", import.meta.url), "utf8");
 const coachRoute = await readFile(new URL("../app/api/ai/chat/route.ts", import.meta.url), "utf8");
 const store = await readFile(new URL("../server/store.js", import.meta.url), "utf8");
+const offlineQueue = await readFile(new URL("../app/offline-queue.ts", import.meta.url), "utf8");
+const waterRoute = await readFile(new URL("../app/api/water/route.ts", import.meta.url), "utf8");
+const activityRoute = await readFile(new URL("../app/api/activity/route.ts", import.meta.url), "utf8");
+const mealsRoute = await readFile(new URL("../app/api/meals/route.ts", import.meta.url), "utf8");
 
 test("health profile is editable and explicitly bounded as non-medical advice", () => {
   for (const field of ["diabetesStatus", "hypertension", "foodAllergies", "relevantMedications", "pregnancyStatus"])
@@ -113,6 +117,23 @@ test("offline outbox covers core entries and birth date shows the calculated age
   assert.match(page, /הגיל שלך:/);
 });
 
+test("offline sync center exposes queue health, ordered retry and original timestamps", () => {
+  assert.match(page, /מרכז הסנכרון/);
+  assert.match(page, /retryOfflineItem/);
+  assert.match(page, /הסנכרון דורש טיפול/);
+  assert.match(offlineQueue, /listOfflineQueue/);
+  assert.match(offlineQueue, /attempts:/);
+  assert.match(offlineQueue, /createdAt\.localeCompare/);
+  assert.match(waterRoute, /recordedAt/);
+  assert.match(waterRoute, /eventDate/);
+  assert.match(activityRoute, /recordedAt/);
+  assert.match(activityRoute, /localDate/);
+  assert.match(page, /mealEditBaseUpdatedAt/);
+  assert.match(mealsRoute, /editConflict/);
+  assert.match(mealsRoute, /status: 409/);
+  assert.match(css, /sync-center/);
+});
+
 test("dashboard explains its dynamic score and separates calorie target from consumption", () => {
   assert.match(page, /daily-score-details score-/);
   assert.match(page, /scoreGuidance/);
@@ -160,7 +181,7 @@ test("photo capture skips manual entry and shows a focused animated recognition 
 });
 
 test("photo preparation reuses the decoded image and voice does not auto-favorite meals", () => {
-  assert.match(page, /prepareImage\(file, 960, 0\.65, original\)/);
+  assert.match(page, /prepareImage\(file, navigator\.onLine \? 960 : 720/);
   assert.match(page, /decodedImage\?: HTMLImageElement/);
   assert.match(page, /setSaveToLibrary\(false\)/);
 });
