@@ -15,6 +15,7 @@ export const dailyRecords = pgTable("daily_records", {
 
 export const meals = pgTable("meals", {
   id: uuid("id").primaryKey(), userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), dailyRecordId: bigint("daily_record_id", { mode: "number" }).references(() => dailyRecords.id),
+  clientRequestId: text("client_request_id"),
   name: text("name").notNull(), period: text("period").notNull(), source: text("source").notNull(), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   kcal: numeric("kcal", { precision: 10, scale: 2 }).notNull(), proteinG: numeric("protein_g", { precision: 10, scale: 2 }).notNull(), carbsG: numeric("carbs_g", { precision: 10, scale: 2 }).notNull(), fatG: numeric("fat_g", { precision: 10, scale: 2 }).notNull(), deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });

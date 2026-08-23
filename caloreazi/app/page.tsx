@@ -672,6 +672,7 @@ export default function Home() {
   const foodImageInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const mealSaveInFlight = useRef(false);
+  const mealSaveRequestId = useRef("");
   const imageCompletionRequested = useRef(new Set<string>());
   const audioChunks = useRef<Blob[]>([]);
   const recordingStartedAt = useRef(0);
@@ -1420,10 +1421,11 @@ export default function Home() {
       let savedMealId = editingMealId;
       let savedLocalDate = "";
       if (!catalogOnly) {
+        if (!editingMealId && !mealSaveRequestId.current) mealSaveRequestId.current = crypto.randomUUID();
         const saved = await api("/api/meals", {
           method: editingMealId ? "PATCH" : "POST",
           body: JSON.stringify(
-            editingMealId ? { ...finalMeal, id: editingMealId } : finalMeal,
+            editingMealId ? { ...finalMeal, id: editingMealId } : { ...finalMeal, clientRequestId: mealSaveRequestId.current },
           ),
         });
         savedMealId = saved.savedMealId || savedMealId;
@@ -1458,6 +1460,7 @@ export default function Home() {
       if (!catalogOnly && savedLocalDate && savedLocalDate !== latest.today?.date)
         setError(`הארוחה נשמרה בהיסטוריה בתאריך ${savedLocalDate}, בהתאם לשעה שנבחרה.`);
       setMealOpen(false);
+      mealSaveRequestId.current = "";
       setEditingMealId("");
       setMealForm({ name: "", kcal: 0, protein: 0, carbs: 0, fat: 0 });
       setMealItems([]);

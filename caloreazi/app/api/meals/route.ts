@@ -1,14 +1,16 @@
 import { requireUser } from "@/server/auth.js";
 import { calculateMealFromItems, calculateMealScore } from "@/server/nutrition.js";
 import { addAudit, ensureUserData, readState, updateState, userView } from "@/server/store.js";
-import { saveMediaDataUrl } from "@/server/storage.js";
+import { deleteMedia, saveMediaDataUrl } from "@/server/storage.js";
 import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "@/server/domains/meals/repository.js";
 import { localDateAt, userTimeZone } from "@/server/local-date.js";
 import { validateMealNutrition } from "@/server/meal-validation.js";
+import { databaseStateEnabled, insertDatabaseMeal } from "@/server/state-database.js";
 export const runtime = "nodejs";
-type MealRecord = { id: string; name: string; period: string; kcal: number; protein: number; carbs: number; fat: number; sugar: number; sugarTrackedItems: number; items: unknown[]; source: string; image: string; media: unknown; confidence: number; transcript: string; time: string; score?: number; updatedAt?: string };
+type MealRecord = { id: string; clientRequestId?: string; name: string; period: string; kcal: number; protein: number; carbs: number; fat: number; sugar: number; sugarTrackedItems: number; items: unknown[]; source: string; image: string; media: unknown; confidence: number; transcript: string; time: string; score?: number; updatedAt?: string };
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   const initial = await readState(); const session = requireUser(initial, request);
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
   const body = await request.json(); const name = String(body.name || "").trim();
@@ -20,13 +22,37 @@ export async function POST(request: Request) {
   const nutritionValidation = validateMealNutrition({ ...calculated, items });
   if (["photo", "voice"].includes(body.source) && !nutritionValidation.valid)
     return Response.json({ error: nutritionValidation.issues[0].message, issues: nutritionValidation.issues, requiresConfirmation: true }, { status: 422 });
-  let savedMealId = ""; let savedLocalDate = "";
+  const clientRequestId = String(body.clientRequestId || request.headers.get("idempotency-key") || "").trim().slice(0, 120);
+  let savedMealId = ""; let savedLocalDate = ""; let idempotent = false;
+  if (databaseStateEnabled()) {
+    const data = ensureUserData(initial, session.userId);
+    const existing = clientRequestId ? [data.today, ...(data.history || [])].flatMap((day) => (day.meals || []).map((meal) => ({ meal, day }))).find(({ meal }) => meal.clientRequestId === clientRequestId) : null;
+    if (existing) return Response.json({ ...userView(initial, session.userId, session.role === "admin"), savedMealId: existing.meal.id, savedLocalDate: existing.day.date, persistence: { idempotent: true, transactional: true, durationMs: Date.now() - startedAt } });
+    const source = ["photo", "voice"].includes(body.source) ? body.source : "manual";
+    const requestedTime = new Date(body.occurredAt || Date.now()); const time = Number.isFinite(requestedTime.getTime()) && requestedTime.getTime() <= Date.now() ? requestedTime.toISOString() : new Date().toISOString();
+    const id = crypto.randomUUID();
+    const originalImage = /^data:image\/(jpeg|png|webp);base64,/.test(String(body.image || "")) && String(body.image).length <= 8_000_000 ? String(body.image) : "";
+    const media = originalImage ? await saveMediaDataUrl(initial, originalImage, id, { maxSize: 512, quality: 72 }) : null;
+    const meal: MealRecord = { id, ...(clientRequestId ? { clientRequestId } : {}), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
+    meal.score = calculateMealScore(meal);
+    const calibrations = ["photo", "voice"].includes(source) && items.length ? items.flatMap((item: any, index) => { const before = Array.isArray(body.aiOriginalItems) ? body.aiOriginalItems[index] : null; return !before || String(before.name) !== String(item.name) || Number(before.grams) !== Number(item.grams) || Number(before.quantity) !== Number(item.quantity) ? [{ originalName: before?.name || null, name: String(item.name).slice(0, 80), grams: Math.max(1, Number(item.grams) || 1), quantity: Math.max(.1, Number(item.quantity) || 1), previousGrams: before ? Number(before.grams) : null, at: new Date().toISOString() }] : []; }) : [];
+    const localDate = localDateAt(new Date(time), userTimeZone(data));
+    const state = await insertDatabaseMeal({ userId: session.userId, localDate, timeZone: userTimeZone(data), meal, analysisJobId: String(body.analysisJobId || ""), calibrations });
+    const persisted = [state.userData[session.userId]?.today, ...(state.userData[session.userId]?.history || [])].filter(Boolean).flatMap((day) => day.meals || []).find((item) => item.id === id || (clientRequestId && item.clientRequestId === clientRequestId));
+    if (!persisted) throw new Error("השמירה הטרנזקציונית לא אומתה במסד הנתונים");
+    if (persisted.id !== id && media) await deleteMedia(initial, media);
+    return Response.json({ ...userView(state, session.userId, session.role === "admin"), savedMealId: persisted.id, savedLocalDate: localDateAt(persisted.time, userTimeZone(data)), persistence: { idempotent: persisted.id !== id, transactional: true, durationMs: Date.now() - startedAt } });
+  }
   const state = await updateState(async (latest) => {
     const data = ensureUserData(latest, session.userId);
+    if (clientRequestId) {
+      const existing = [data.today, ...(data.history || [])].flatMap((day) => (day.meals || []).map((meal) => ({ meal, day }))).find(({ meal }) => meal.clientRequestId === clientRequestId);
+      if (existing) { savedMealId = existing.meal.id; savedLocalDate = existing.day.date; idempotent = true; return latest; }
+    }
     const source = ["photo", "voice"].includes(body.source) ? body.source : "manual";
-    const originalImage = /^data:image\/(jpeg|png|webp);base64,/.test(String(body.image || "")) && String(body.image).length <= 8_000_000 ? String(body.image) : ""; const id = crypto.randomUUID(); const media = originalImage ? await saveMediaDataUrl(latest, originalImage, id) : null;
+    const originalImage = /^data:image\/(jpeg|png|webp);base64,/.test(String(body.image || "")) && String(body.image).length <= 8_000_000 ? String(body.image) : ""; const id = crypto.randomUUID(); const media = originalImage ? await saveMediaDataUrl(latest, originalImage, id, { maxSize: 512, quality: 72 }) : null;
     const requestedTime = new Date(body.occurredAt || Date.now()); const time = Number.isFinite(requestedTime.getTime()) && requestedTime.getTime() <= Date.now() ? requestedTime.toISOString() : new Date().toISOString();
-    const meal: MealRecord = { id, name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
+    const meal: MealRecord = { id, ...(clientRequestId ? { clientRequestId } : {}), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
     meal.score = calculateMealScore(meal);
     if (body.analysisJobId) { const job = latest.analysisJobs?.find((item) => item.id === body.analysisJobId && item.userId === session.userId); if (job) { job.status = "completed"; job.mealId = meal.id; job.completedAt = new Date().toISOString(); job.updatedAt = job.completedAt; } }
     const localDate = localDateAt(new Date(time), userTimeZone(data)); savedMealId = meal.id; savedLocalDate = localDate;
@@ -42,7 +68,7 @@ export async function POST(request: Request) {
     }
     return latest;
   });
-  return Response.json({ ...userView(state, session.userId, session.role === "admin"), savedMealId, savedLocalDate });
+  return Response.json({ ...userView(state, session.userId, session.role === "admin"), savedMealId, savedLocalDate, persistence: { idempotent, transactional: false, durationMs: Date.now() - startedAt } });
 }
 
 export async function DELETE(request: Request) {
