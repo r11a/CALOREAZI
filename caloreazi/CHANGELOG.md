@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.13.9
+
+- Unified every meal-source action in the primary add menu with a white line icon, orange gradient background and subtle glow.
+- Kept the existing vegetable, fruit and drink category artwork and colors unchanged.
+
 ## 1.13.8
 
 - Fixed legacy sharing candidates so an old email stored as a username is never shown; sharing now uses the current user name and internal user ID only.
