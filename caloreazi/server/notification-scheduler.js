@@ -17,15 +17,27 @@ function morningDeliveryTime(preferences) { return notificationIsQuiet(7 * 60 + 
 function totals(day) { return (day.meals || []).reduce((sum, meal) => ({ kcal: sum.kcal + Number(meal.kcal || 0), protein: sum.protein + Number(meal.protein || 0), carbs: sum.carbs + Number(meal.carbs || 0), fat: sum.fat + Number(meal.fat || 0) }), { kcal: 0, protein: 0, carbs: 0, fat: 0 }); }
 function previousDate(date) { const value = new Date(`${date}T12:00:00Z`); value.setUTCDate(value.getUTCDate() - 1); return value.toISOString().slice(0, 10); }
 
-function candidateMessages(data, preferences, clock, userName) {
+export function candidateMessages(data, preferences, clock, userName) {
   const day = data.today; const profile = data.profile || {}; const result = []; const consumed = totals(day); const target = Number(profile.calories || 0); const mealPeriods = new Set((day.meals || []).map((meal) => meal.period));
-  const add = (type, context = {}, url = "./") => result.push({ type, ...buildNotificationCopy(type, userName, context, clock.date), url });
+  const score = calculateDayScore(day, profile, data.activity); const available = (score.parameters || []).filter((item) => item.available); const weakest = [...available].sort((a, b) => a.percent - b.percent)[0];
+  const add = (type, context = {}, url = "./", deliveryType = type) => result.push({ type: deliveryType, ...buildNotificationCopy(type, userName, context, `${clock.date}:${deliveryType}`), url });
+  const coachingAdvice = () => {
+    if (!day.meals?.length) return "כדאי לתעד את הארוחה הבאה כדי שאוכל לכוון אותך לפי היום האמיתי שלך.";
+    if (weakest?.key === "fiber") return `הסיבים עדיין נמוכים. בארוחה הבאה אפשר לשלב קטניות, ירקות, פרי או דגן מלא.`;
+    if (weakest?.key === "produce") return `חסרים ירקות ופירות ביחס ליעד. תוספת צבעונית אחת בארוחה הבאה תעזור.`;
+    if (weakest?.key === "protein") return `חסרים כ־${Math.max(0, Math.round(Number(profile.protein || 0) - consumed.protein))} גרם חלבון. כדאי לבחור מקור חלבון בארוחה הבאה.`;
+    if (weakest?.key === "water") return `קצב השתייה נמוך מהיעד. כוס מים עכשיו תשמור על קצב נוח.`;
+    if (target && consumed.kcal < target * .55 && clock.minutes >= 16 * 60) return `נותר פער גדול בקלוריות. עדיף לתכנן ארוחה מאוזנת ולא להשלים הכול מאוחר.`;
+    return weakest?.tip || "היום מתקדם בצורה טובה. בחירה אחת מאוזנת בארוחה הבאה תמשיך את הכיוון.";
+  };
   if (preferences.morningBrief && notificationIsDue(clock.minutes, morningDeliveryTime(preferences))) { const yesterday = (data.history || []).find((item) => item.date === previousDate(clock.date)); const yesterdayTotals = totals(yesterday || {}); const yesterdayScore = yesterday ? calculateDayScore(yesterday, profile, data.activity).score : null; const recap = yesterdayScore == null ? "אתמול עדיין לא נרשמו מספיק נתונים." : `אתמול: ציון ${yesterdayScore}/100 ו־${Math.round(yesterdayTotals.kcal)} קלוריות.`; add("morning-brief", { recap, target: target || "—" }); }
   if (preferences.mealReminders && notificationIsDue(clock.minutes, preferences.breakfastTime) && !mealPeriods.has("breakfast")) add("meal-breakfast");
   if (preferences.mealReminders && notificationIsDue(clock.minutes, preferences.lunchTime) && !mealPeriods.has("lunch")) add("meal-lunch");
   if (preferences.mealReminders && notificationIsDue(clock.minutes, preferences.dinnerTime) && !mealPeriods.has("dinner")) add("meal-dinner");
   if (preferences.waterReminders && notificationIsDue(clock.minutes, preferences.waterTime) && Number(day.waterMl || 0) < Number(profile.waterMl || 2000) * .6) add("water", { current: Number(day.waterMl || 0), target: Number(profile.waterMl || 2000) });
-  if (preferences.coachTips && notificationIsDue(clock.minutes, preferences.coachTime) && (day.meals || []).length) { const proteinGap = Math.max(0, Number(profile.protein || 0) - consumed.protein); add("coach", { advice: proteinGap > 20 ? `חסרים כ־${Math.round(proteinGap)} גרם חלבון. כדאי לשלב מקור חלבון בארוחה הבאה.` : "היום מתקדם בצורה מאוזנת. המשך לבחור לפי הרעב שלך." }); }
+  if (preferences.coachTips && notificationIsDue(clock.minutes, preferences.coachTime)) add("coach", { advice: coachingAdvice() }, "./", "coach-personal");
+  if (preferences.coachTips) for (const [time, slot] of [["10:30","morning"],["12:30","noon"],["15:30","afternoon"],["17:30","evening"],["19:30","night"]]) if (notificationIsDue(clock.minutes, time)) add("coach", { advice: coachingAdvice() }, "./", `coach-${slot}`);
+  if (preferences.insights && (day.meals || []).length) for (const [time, slot] of [["12:00","noon"],["16:00","afternoon"],["20:00","evening"]]) if (notificationIsDue(clock.minutes, time)) add("progress", { calories: Math.round(consumed.kcal), target, focus: coachingAdvice() }, "./", `progress-${slot}`);
   if (preferences.insights && notificationIsDue(clock.minutes, "18:30") && (day.meals || []).length >= 2) add("insight", { insight: target && consumed.kcal > target ? "היום עבר את היעד. אפשר לבחור בהמשך ארוחה קלה ומספקת." : `נותרו כ־${Math.max(0, Math.round(target - consumed.kcal))} קלוריות במסגרת היעד.` });
   if (preferences.dailySummary && notificationIsDue(clock.minutes, preferences.summaryTime) && ((day.meals || []).length || day.waterMl)) { const score = calculateDayScore(day, profile, data.activity).score; add("summary", { score, calories: Math.round(consumed.kcal), target }); }
   if (preferences.weeklyTrends && clock.weekday === "Sun" && notificationIsDue(clock.minutes, preferences.weeklyTime) && (data.history || []).length >= 3) { const days = [...data.history, day].slice(-7); const average = Math.round(days.reduce((sum, item) => sum + totals(item).kcal, 0) / days.length); add("weekly", { average }); }

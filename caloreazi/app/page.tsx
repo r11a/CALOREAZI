@@ -65,8 +65,8 @@ const notificationTypeOptions = [
   ["mealReminders", "תזכורות ארוחות", "רק כאשר לא נרשמה ארוחה בזמן שבחרת"],
   ["waterReminders", "תזכורות שתייה", "רק כאשר קצב השתייה נמוך ביחס ליעד"],
   ["dailySummary", "סיכום יומי", "ציון, קלוריות ותמונת מצב בסוף היום"],
-  ["insights", "תובנות חכמות", "מידע שימושי לפי הארוחות והפערים של אותו יום"],
-  ["coachTips", "המלצות המאמן", "המלצה מתחלפת ומותאמת לנתונים שלך"],
+  ["insights", "תובנות וסיכומי ביניים", "עד שלושה מבטים קצרים על ההתקדמות במהלך היום"],
+  ["coachTips", "מאמן פעיל", "המלצות מתחלפות לפי חלבון, סיבים, ירקות, מים ושאר הפערים שלך"],
   ["weeklyTrends", "מגמות שבועיות", "ממוצעים ושינויים חשובים פעם בשבוע"],
   ["weightReminder", "תזכורת שקילה", "רק אם לא הוזן משקל במשך יותר מ־14 יום"],
   ["achievements", "הישגים רגועים", "חיזוק חיובי על יום מאוזן, בלי לחץ או ענישה"],
@@ -89,6 +89,20 @@ const mealSuggestionCatalog = [
   { name: "קערת עדשים, טחינה וירקות", periods: ["lunch", "dinner"], kcal: 520, protein: 25, carbs: 67, fat: 18, tags: ["קטניות", "טבעוני", "ירקות", "חם"] },
   { name: "קוטג׳, פרי ושקדים", periods: ["snack", "breakfast"], kcal: 280, protein: 22, carbs: 28, fat: 10, tags: ["חלבי", "פירות", "מהיר"] },
   { name: "חומוס, ביצה וירקות", periods: ["lunch", "dinner", "snack"], kcal: 410, protein: 20, carbs: 39, fat: 20, tags: ["קטניות", "ביצים", "ירקות", "מלוח"] },
+  { name: "דייסת שיבולת שועל, יוגורט ותפוח", periods: ["breakfast", "snack"], kcal: 365, protein: 20, carbs: 55, fat: 8, tags: ["חלבי", "פירות", "דגנים מלאים", "סיבים"] },
+  { name: "שקשוקה, לחם מלא וסלט", periods: ["breakfast", "lunch", "dinner"], kcal: 470, protein: 26, carbs: 47, fat: 20, tags: ["ביצים", "ירקות", "לחם", "חם"] },
+  { name: "טוסט מלחם מלא, גבינה וירקות", periods: ["breakfast", "dinner"], kcal: 380, protein: 27, carbs: 43, fat: 12, tags: ["חלבי", "לחם", "ירקות", "מהיר"] },
+  { name: "יוגורט, אגוזים וקיווי", periods: ["breakfast", "snack"], kcal: 300, protein: 20, carbs: 30, fat: 12, tags: ["חלבי", "פירות", "שקדים", "מהיר"] },
+  { name: "סלט קינואה, גרגרי חומוס וירקות", periods: ["lunch", "dinner"], kcal: 510, protein: 22, carbs: 72, fat: 16, tags: ["קטניות", "טבעוני", "ירקות", "סיבים"] },
+  { name: "קציצות הודו, תפוח אדמה וירקות", periods: ["lunch", "dinner"], kcal: 570, protein: 46, carbs: 54, fat: 18, tags: ["עוף", "ירקות", "חם"] },
+  { name: "טופו מוקפץ, אורז וירקות", periods: ["lunch", "dinner"], kcal: 540, protein: 30, carbs: 68, fat: 17, tags: ["טבעוני", "אורז", "ירקות", "חם"] },
+  { name: "דג בתנור, קינואה וסלט", periods: ["lunch", "dinner"], kcal: 550, protein: 45, carbs: 50, fat: 18, tags: ["דגים", "ירקות", "חם"] },
+  { name: "מרק עדשים ופרוסת לחם מלא", periods: ["lunch", "dinner"], kcal: 430, protein: 24, carbs: 66, fat: 9, tags: ["קטניות", "טבעוני", "לחם", "סיבים", "חם"] },
+  { name: "סלט טונה, שעועית וירקות", periods: ["lunch", "dinner"], kcal: 440, protein: 42, carbs: 35, fat: 15, tags: ["דגים", "קטניות", "ירקות", "סיבים"] },
+  { name: "תפוח וחופן שקדים", periods: ["snack"], kcal: 220, protein: 6, carbs: 27, fat: 11, tags: ["פירות", "שקדים", "סיבים", "מהיר"] },
+  { name: "ירקות חתוכים וטחינה", periods: ["snack"], kcal: 210, protein: 7, carbs: 18, fat: 13, tags: ["טבעוני", "ירקות", "טחינה", "מהיר"] },
+  { name: "יוגורט עשיר בחלבון ופרי", periods: ["snack", "breakfast"], kcal: 230, protein: 25, carbs: 28, fat: 4, tags: ["חלבי", "פירות", "מהיר"] },
+  { name: "ביצה קשה, ירקות וקרקר מלא", periods: ["snack", "breakfast"], kcal: 240, protein: 14, carbs: 23, fat: 11, tags: ["ביצים", "ירקות", "דגנים מלאים", "מהיר"] },
 ];
 const tasteQuestions = [
   { title: "מקורות חלבון", options: ["עוף", "דגים", "ביצים", "חלבי", "קטניות", "טבעוני"] },
@@ -882,8 +896,8 @@ export default function Home() {
   };
   const scoreTone = scoreToneFor(dailyScore);
   const componentLabels: Record<string,string> = { quality: "איכות תזונתית", targets: "התאמה ליעדים", habits: "הרגלים ועקביות" };
-  const scoreGuidance = Object.entries(state?.dailyScore?.components || {}).map(([key, part]: any) => ({ label: componentLabels[key] || key, value: Number(part.score || 0), max: Number(part.max || 0), coverage: Number(part.coverage || 0), tip: state?.dailyScore?.recommendation || "להמשיך בתיעוד." }));
   const scoreParameters = (state?.dailyScore?.parameters || []).filter((item: any) => item.available);
+  const scoreGuidance = Object.entries(state?.dailyScore?.components || {}).map(([key, part]: any) => { const weak = scoreParameters.filter((item: any) => item.group === key).sort((a: any, b: any) => a.percent - b.percent).slice(0, 2); return { key, label: componentLabels[key] || key, value: Number(part.score || 0), max: Number(part.max || 0), coverage: Number(part.coverage || 0), tip: weak[0]?.tip || state?.dailyScore?.recommendation || "להמשיך בתיעוד.", why: weak.length ? `${weak.map((item: any) => `${item.label} ${item.percent}%`).join(" · ")}. ${weak[0].tip}` : "נדרש עוד מידע כדי להסביר את הרכיב." }; });
   const scoreImprovement = [...scoreGuidance].sort((a, b) => (b.max - b.value) - (a.max - a.value))[0] || { tip: "להשלים תיעוד כדי לקבל המלצה מדויקת." };
   const scoreHeadline = dailyScore >= 80 ? "יום מאוזן מאוד — המשך כך." : dailyScore >= 60 ? `כיוון טוב — ${scoreImprovement.tip}` : dailyScore >= 40 ? `יש בסיס טוב. ${scoreImprovement.tip}` : `אפשר לשפר כבר היום: ${scoreImprovement.tip}`;
   const currentStreak = Number(state?.streak || 0);
@@ -901,14 +915,15 @@ export default function Home() {
   const mealSuggestions = useMemo(() => {
     const taste = profile?.tasteProfile || { likes: [], dislikes: [] }; const likes = taste.likes || []; const dislikes = taste.dislikes || []; const blocked = `${profile?.restrictions || ""} ${profile?.foodAllergies || ""}`.toLocaleLowerCase("he");
     const proteinGap = Math.max(0, Number(profile?.protein || 0) - macros.protein); const carbsGap = Math.max(0, Number(profile?.carbs || 0) - macros.carbs); const fatGap = Math.max(0, Number(profile?.fat || 0) - macros.fat);
+    const qualityGaps = (state?.dailyScore?.parameters || []).filter((item: any) => item.available && ["fiber", "produce"].includes(item.key)).sort((a: any, b: any) => a.percent - b.percent); const qualityGap = qualityGaps[0];
     const ranked = mealSuggestionCatalog.filter((meal) => meal.periods.includes(suggestionPeriod) && !meal.tags.some((tag) => dislikes.includes(tag) || blocked.includes(tag.toLocaleLowerCase("he"))) && !(profile?.diet === "vegan" && meal.tags.some((tag) => ["עוף", "דגים", "ביצים", "חלבי"].includes(tag))) && !(profile?.diet === "vegetarian" && meal.tags.some((tag) => ["עוף", "דגים"].includes(tag)))).map((meal) => {
-      const preference = meal.tags.filter((tag) => likes.includes(tag)).length * 18; const nutrition = Math.min(proteinGap, meal.protein) * 1.4 + Math.min(carbsGap, meal.carbs) * .25 + Math.min(fatGap, meal.fat) * .35;
-      const reason = proteinGap > 20 && meal.protein >= 25 ? `משלימה כ־${meal.protein}g חלבון מהחוסר היומי` : carbsGap > 35 && meal.carbs >= 35 ? "מתאימה לחוסר הנוכחי בפחמימות" : "מאוזנת ביחס למה שנאכל עד עכשיו";
+      const preference = meal.tags.filter((tag) => likes.includes(tag)).length * 18; const quality = qualityGap?.key === "fiber" && meal.tags.includes("סיבים") ? 24 : qualityGap?.key === "produce" && (meal.tags.includes("ירקות") || meal.tags.includes("פירות")) ? 20 : 0; const nutrition = Math.min(proteinGap, meal.protein) * 1.4 + Math.min(carbsGap, meal.carbs) * .25 + Math.min(fatGap, meal.fat) * .35 + quality;
+      const reason = qualityGap?.percent < 60 && qualityGap.key === "fiber" && meal.tags.includes("סיבים") ? "מוסיפה מקור סיבים שחסר היום" : qualityGap?.percent < 60 && qualityGap.key === "produce" && (meal.tags.includes("ירקות") || meal.tags.includes("פירות")) ? "עוזרת להשלים ירקות ופירות" : proteinGap > 20 && meal.protein >= 25 ? `משלימה כ־${meal.protein}g חלבון מהחוסר היומי` : carbsGap > 35 && meal.carbs >= 35 ? "מתאימה לחוסר הנוכחי בפחמימות" : "מאוזנת ביחס למה שנאכל עד עכשיו";
       return { ...meal, rank: preference + nutrition, reason, personal: meal.tags.some((tag) => likes.includes(tag)) };
     }).sort((a, b) => b.rank - a.rank);
-    const offset = ranked.length ? suggestionRefresh % ranked.length : 0;
+    const daySeed = Number(String(state?.today?.date || "").replaceAll("-", "")) || 0; const offset = ranked.length ? (daySeed + suggestionRefresh * 3) % ranked.length : 0;
     return [...ranked.slice(offset), ...ranked.slice(0, offset)].slice(0, 3);
-  }, [profile, macros, suggestionPeriod, suggestionRefresh]);
+  }, [profile, macros, suggestionPeriod, suggestionRefresh, state?.dailyScore?.parameters, state?.today?.date]);
   const historyDays = useMemo(() => [...(state?.history || []), ...(state?.today ? [{ ...state.today, dailyScore: state.dailyScore }] : [])], [state?.history, state?.today, state?.dailyScore]);
   const activeHistoryDate = historySelectedDate || state?.today?.date || "";
   const activeHistoryDay = historyDays.find((day) => day.date === activeHistoryDate) || historyDays[0];
@@ -976,56 +991,69 @@ export default function Home() {
   );
   const dailyInsights = useMemo(() => {
     if (!profile) return [];
-    const items = [];
+    const items: { icon: string; title: string; text: string; priority: number }[] = [];
+    const parameter = (key: string) => (state?.dailyScore?.parameters || []).find((item: any) => item.key === key && item.available);
+    const fiber = parameter("fiber"); const produce = parameter("produce");
     if (waterRemaining >= 500)
       items.push({
         icon: "💧",
         title: "כדאי להשלים שתייה",
         text: `חסרים עוד ${waterRemaining.toLocaleString()} מ״ל ליעד היומי.`,
+        priority: Math.round(waterRemaining / Math.max(1, Number(profile.waterMl)) * 100),
       });
     if (proteinRemaining >= 20)
       items.push({
         icon: "◉",
         title: "חלבון עדיין נמוך",
         text: `חסרים כ־${proteinRemaining} גרם. העדף מקור חלבון בארוחה הבאה.`,
+        priority: Math.round(proteinRemaining / Math.max(1, Number(profile.protein)) * 100) + 8,
       });
+    if (fiber && fiber.percent < 70) items.push({ icon: "◇", title: "אפשר לחזק את הסיבים", text: `נרשמו כ־${Math.round(fiber.value)} מתוך ${Math.round(fiber.target)} גרם. קטניות, ירקות, פרי או דגן מלא יעזרו.`, priority: 100 - fiber.percent + 7 });
+    if (produce && produce.percent < 70) items.push({ icon: "✦", title: "עוד צבע בארוחה הבאה", text: `נרשמו כ־${Math.round(produce.value)} מתוך ${Math.round(produce.target)} גרם ירקות ופירות.`, priority: 100 - produce.percent + 5 });
     if (consumed > profile.calories)
       items.push({
         icon: "↗",
         title: "עברת את היעד היומי",
         text: `נצרכו ${consumed - profile.calories} קלוריות מעל היעד. יום אחד אינו קובע מגמה.`,
+        priority: 90,
       });
     else if (remaining > profile.calories * 0.55 && now.getHours() >= 16)
       items.push({
         icon: "◷",
         title: "נשאר פער גדול להיום",
         text: `נותרו ${remaining.toLocaleString()} קלוריות. עדיף לתכנן ארוחה מאוזנת ולא להשלים בבת אחת.`,
+        priority: 75,
       });
     if ((state?.today?.meals?.length || 0) === 0)
       items.push({
         icon: "◷",
         title: "התחלה פשוטה ליום",
         text: "הארוחה הראשונה לא צריכה להיות מושלמת — שלב חלבון, ירק או פרי ומקור אנרגיה.",
+        priority: 85,
       });
     else
       items.push({
         icon: "✓",
-        title: "שמור על רצף נוח",
-        text: "עדיף לפזר את האכילה לאורך היום ולא להגיע לארוחה הבאה רעב מאוד.",
+        title: now.getHours() < 14 ? "תכנון קטן להמשך" : "שמור על רצף נוח",
+        text: now.getHours() < 14 ? "מבט קצר על הפערים עכשיו יעזור לבחור את הארוחה הבאה בלי לנחש." : "עדיף לפזר את האכילה ולא להגיע לארוחה הבאה רעב מאוד.",
+        priority: 25,
       });
-    items.push({
-      icon: "◇",
-      title: "שדרוג קטן לארוחה הבאה",
-      text: "נסה להוסיף מרכיב טרי וצבעוני. שינוי קטן ועקבי משפיע יותר מתפריט מושלם ליום אחד.",
-    });
+    const rotating = [
+      { icon: "◇", title: "שדרוג קטן לארוחה הבאה", text: "נסה להוסיף מרכיב טרי וצבעוני. שינוי קטן ועקבי משפיע יותר מיום מושלם.", priority: 20 },
+      { icon: "◎", title: "בדוק רעב לפני הבחירה", text: "בחר כמות שמתאימה לרעב שלך, ואז עדכן. לא צריך לנחש מנה מושלמת.", priority: 20 },
+      { icon: "✦", title: "גיוון עוזר להתמיד", text: "אפשר לבחור היום מקור חלבון או ירק שלא אכלת אתמול.", priority: 20 },
+      { icon: "◷", title: "ארוחת ביניים מתוכננת", text: "אם צפוי פער ארוך, פרי עם יוגורט או אגוזים יכול למנוע רעב חד.", priority: 20 },
+    ];
+    items.push(rotating[(Number(String(state?.today?.date || "").replaceAll("-", "")) + Math.floor(now.getHours() / 3)) % rotating.length]);
     if (!items.length)
       items.push({
         icon: "✓",
         title: "אתה בקצב מאוזן",
         text: "המשך לעדכן ארוחות ושתייה כדי לקבל המלצה מדויקת יותר.",
+        priority: 10,
       });
-    return items;
-  }, [profile, waterRemaining, proteinRemaining, consumed, remaining, now, state?.today?.meals?.length]);
+    return items.sort((a, b) => b.priority - a.priority);
+  }, [profile, waterRemaining, proteinRemaining, consumed, remaining, now, state?.today?.meals?.length, state?.today?.date, state?.dailyScore?.parameters]);
   async function login(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -2658,7 +2686,7 @@ export default function Home() {
           </header>
           <div className="score-parts">
             {scoreGuidance.map((part) => (
-              <span key={part.label}><small>{part.label}</small><i><b style={{ width: `${Math.round(part.value / Math.max(1, part.max) * 100)}%` }} /></i><strong>{part.value}/{part.max}</strong><em>כיסוי {part.coverage}%</em></span>
+              <span key={part.label}><small>{part.label}</small><i><b style={{ width: `${Math.round(part.value / Math.max(1, part.max) * 100)}%` }} /></i><strong>{part.value}/{part.max}</strong><em>כיסוי {part.coverage}%</em><p>{part.why}</p></span>
             ))}
           </div>
           <div className="score-parameter-grid">
@@ -4456,11 +4484,11 @@ export default function Home() {
                         </span>
                       </div>
                       <p className={`history-day-score-summary score-${scoreToneFor(Number(day.dailyScore?.score || 0))}`}><strong>סיכום היום</strong><span>{historyScoreText(day)}</span></p>
-                      <details className="history-score-analysis">
-                        <summary>ניתוח היום לפי מנוע הציון {day.dailyScore?.version || "2.0"}</summary>
+                      <section className="history-score-analysis">
+                        <h4>פירוט הציון</h4>
                         <div>{(day.dailyScore?.parameters || []).filter((part: any) => part.available).map((part: any) => <span key={part.key}><strong>{part.label}</strong><i><b style={{ width: `${part.percent}%` }} /></i><em>{part.percent}% · {Math.round(Number(part.value || 0))}/{Math.round(Number(part.target || 0))} {part.unit}</em></span>)}</div>
-                        <small>כיסוי הנתונים: {Number(day.dailyScore?.coverage || 0)}%. נתון שלא תועד אינו מוצג כאילו נכשל.</small>
-                      </details>
+                        <small>הציון מחושב אוטומטית במנוע 2.0 · כיסוי הנתונים: {Number(day.dailyScore?.coverage || 0)}%. נתון שלא תועד אינו מוצג כאילו נכשל.</small>
+                      </section>
                       <section className="history-timeline">
                         {timelineEntries.map((meal: any) => meal.kind === "water" ? <article className="timeline-water" key={meal.id}><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><i /><span className="timeline-icon">💧</span><div><em>שתייה</em><strong>כוס מים</strong><small>{meal.amount} מ״ל</small></div><b>{meal.amount}<small> מ״ל</small></b></article> : (
                             <article

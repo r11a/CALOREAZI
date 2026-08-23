@@ -319,6 +319,17 @@ test("notification preferences are granular, scheduled and respect quiet hours",
   assert.match(notificationScheduler, /notificationIsQuiet\(clock\.minutes/);
   assert.match(notificationScheduler, /maxPerDay/);
   assert.match(notificationScheduler, /14 \* 86400000/);
+  assert.match(notificationScheduler, /\[\["12:00","noon"\],\["16:00","afternoon"\],\["20:00","evening"\]\]/);
+  assert.match(notificationScheduler, /\[\["10:30","morning"\],\["12:30","noon"\]/);
+});
+
+test("coach recommendations rotate, food refresh changes results and score quality explains itself", () => {
+  assert.match(page, /suggestionRefresh \* 3/);
+  assert.match(page, /qualityGap/);
+  assert.match(page, /אפשר לחזק את הסיבים/);
+  assert.match(page, /part\.why/);
+  assert.match(page, /הציון מחושב אוטומטית במנוע 2\.0/);
+  assert.doesNotMatch(page, /<summary>ניתוח היום לפי מנוע הציון/);
 });
 
 test("admin can securely update a user email or password", () => {
