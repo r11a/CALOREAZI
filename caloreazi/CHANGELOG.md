@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.13.5
+
+- Automatically completes missing per-item calories after photo recognition and calculates the actual calories for the detected weight and quantity.
+- Added a persistent AI recalculation action that uses the user's edited item names, weights and quantities.
+- Fixed history timeline meal pictures and icons so they open the full meal view and return to history when closed.
+- Moved mobile Toast messages above the persistent navigation bar with readable wrapping and safe-area spacing.
+
 ## 1.13.4
 
 - Personalized every Push notification with the user's first name and rotating concise wording without an application-name title.

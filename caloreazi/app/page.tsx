@@ -614,6 +614,7 @@ export default function Home() {
   const [suggestionRefresh, setSuggestionRefresh] = useState(0);
   const [macroDetail, setMacroDetail] = useState<"protein" | "carbs" | "fat" | "">("");
   const [mealPreview, setMealPreview] = useState<any>(null);
+  const [mealPreviewReturnToHistory, setMealPreviewReturnToHistory] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historySelectedDate, setHistorySelectedDate] = useState("");
@@ -1974,6 +1975,36 @@ export default function Home() {
       setBusy(false);
     }
   }
+  async function completeMissingNutrition(name: string, items: any[]) {
+    const missing = items.map((item, index) => Number(item.kcalPer100 || 0) > 0 ? -1 : index).filter((index) => index >= 0);
+    if (!missing.length) return items;
+    const completion = await api("/api/ai/analyze-text", { method: "POST", body: JSON.stringify({ correction: "השלם רק ערכים תזונתיים חסרים ל־100 גרם לפי המזון המזוהה. אל תשנה שמות, כמויות או משקלים.", draft: { name, items } }) });
+    return items.map((item, index) => {
+      if (!missing.includes(index)) return item;
+      const estimate = completion.items?.[index] || completion.items?.find((candidate: any) => candidate.name === item.name);
+      return estimate ? { ...item, kcalPer100: Number(estimate.kcalPer100 || 0), proteinPer100: Number(estimate.proteinPer100 || 0), carbsPer100: Number(estimate.carbsPer100 || 0), fatPer100: Number(estimate.fatPer100 || 0), nutritionStatus: "estimated", nutritionSource: { source: "AI_ESTIMATE", sourceId: item.name, sourceVersion: "live" } } : item;
+    });
+  }
+  async function recalculateMealWithAi() {
+    if (busy || (!mealItems.length && !mealForm.name.trim())) return;
+    setBusy(true); setMealSaveFeedback("מחשב מחדש לפי השמות, המשקלים והכמויות המעודכנים…");
+    try {
+      const result = await api("/api/ai/analyze-text", { method: "POST", body: JSON.stringify(mealItems.length ? { correction: "חשב מחדש את הערכים התזונתיים לפי השמות, המשקלים והכמויות הנוכחיים. אל תשנה את הרכב הארוחה.", draft: { name: mealForm.name, items: mealItems } } : { description: `${mealForm.name}, ${manualPortion || "מנה אחת"}` }) });
+      setMealForm((current) => ({ ...current, name: result.name || current.name, kcal: 0, protein: 0, carbs: 0, fat: 0 }));
+      setMealItems(result.items || []); setMealReviewReady(true); setMealSaveFeedback("החישוב עודכן לפי הכמויות הנוכחיות ✓");
+    } catch (e) { setMealSaveFeedback((e as Error).message || "החישוב מחדש נכשל."); }
+    finally { setBusy(false); }
+  }
+  function openMealPreview(meal: any, fromHistory = false) {
+    setMealPreviewReturnToHistory(fromHistory);
+    if (fromHistory) setHistoryOpen(false);
+    setMealPreview(meal);
+  }
+  function closeMealPreview() {
+    setMealPreview(null);
+    if (mealPreviewReturnToHistory) setHistoryOpen(true);
+    setMealPreviewReturnToHistory(false);
+  }
   function updateMealItem(
     index: number,
     field: string,
@@ -2146,12 +2177,18 @@ export default function Home() {
         throw new Error(
           "הניתוח עדיין לא הסתיים. הוא נשמר וניתן לנסות שוב בעוד רגע.",
         );
+      let nutritionCompletionWarning = "";
+      if (result.items.some((item: any) => !(Number(item.kcalPer100) > 0))) {
+        setPhotoStatus("הזיהוי הושלם. משלים ערך קלורי לכל מרכיב לפי המשקל…");
+        try { result = { ...result, items: await completeMissingNutrition(result.name, result.items) }; }
+        catch { nutritionCompletionWarning = " חלק מהערכים לא הושלמו; אפשר ללחוץ על חשב מחדש."; }
+      }
       setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 });
       setMealItems(result.items);
       setAiOriginalItems(structuredClone(result.items));
       setMealConfidence(result.confidence || "low");
       setMealReviewReady(true);
-      setPhotoStatus("הזיהוי הושלם. בדוק את התוצאה ואשר.");
+      setPhotoStatus(`הזיהוי והחישוב לפי המשקל הושלמו. בדוק ואשר.${nutritionCompletionWarning}`);
       setAiCorrection("");
       setAiCorrectionStatus("");
     } catch (e) {
@@ -2751,13 +2788,13 @@ export default function Home() {
       {calorieOverage && <div className="modal-layer overage-layer"><button className="backdrop" onClick={() => setCalorieOverage(null)} /><section className="settings-modal overage-modal"><header><div><h2>חריגה מהיעד היומי</h2><small>הארוחה נשמרה, אבל אפשר עדיין לתקן את הבחירה</small></div></header><div className="overage-ring"><strong>+{Math.round(calorieOverage.overBy)}</strong><small>קלוריות מעל היעד</small></div><p>אין צורך להילחץ מיום אחד. אפשר להשאיר את הארוחה, לערוך כמויות או לבטל את ההוספה.</p><footer><button type="button" onClick={() => setCalorieOverage(null)}>השאר ביומן</button><button type="button" onClick={() => { const meal = calorieOverage.meal; setCalorieOverage(null); editMeal({ ...meal, id: calorieOverage.id, time: meal.occurredAt }); }}>ערוך ארוחה</button><button className="danger" type="button" onClick={async () => { await deleteMeal(calorieOverage.id); setCalorieOverage(null); }}>בטל את ההוספה</button></footer></section></div>}
       {mealPreview && (
         <div className="modal-layer meal-preview-layer">
-          <button className="backdrop" onClick={() => setMealPreview(null)} aria-label="סגירת פרטי הארוחה" />
+          <button className="backdrop" onClick={closeMealPreview} aria-label="סגירת פרטי הארוחה" />
           <section className="settings-modal meal-preview-modal">
-            <header><div><h2>{mealPreview.name}</h2><small>{periodLabels[mealPreview.period || "snack"]} · {new Date(mealPreview.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</small></div><button onClick={() => setMealPreview(null)}>×</button></header>
+            <header><div><h2>{mealPreview.name}</h2><small>{periodLabels[mealPreview.period || "snack"]} · {new Date(mealPreview.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</small></div><button onClick={closeMealPreview}>×</button></header>
             {mealPreview.image ? <img className="meal-preview-image" src={mealPreview.image} alt={mealPreview.name} /> : <div className="meal-preview-placeholder">🍽</div>}
             <div className="meal-preview-values"><span className="calories"><small>קלוריות</small><strong>{mealPreview.kcal}</strong><b>kcal</b></span><span className="protein"><small>חלבון</small><strong>{mealPreview.protein}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{mealPreview.carbs}g</strong></span><span className="fat"><small>שומן</small><strong>{mealPreview.fat}g</strong></span></div>
             {Array.isArray(mealPreview.items) && mealPreview.items.length > 0 && <div className="meal-preview-items"><strong>מרכיבי הארוחה</strong>{mealPreview.items.map((item: any, index: number) => <span key={`${item.name}-${index}`}><b>{item.name}</b><small>{item.grams ? `${item.grams} גרם` : item.quantity ? `כמות ${item.quantity}` : ""}</small></span>)}</div>}
-            <footer><button type="button" onClick={() => addMealToFavorites(mealPreview.id)} disabled={state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name)}>{state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name) ? "כבר במועדפים" : "הוסף למועדפים"}</button><button className="primary" type="button" onClick={() => setMealPreview(null)}>חזרה למה אכלתי היום</button></footer>
+            <footer><button type="button" onClick={() => addMealToFavorites(mealPreview.id)} disabled={state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name)}>{state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name) ? "כבר במועדפים" : "הוסף למועדפים"}</button><button className="primary" type="button" onClick={closeMealPreview}>{mealPreviewReturnToHistory ? "חזרה להיסטוריה" : "חזרה למה אכלתי היום"}</button></footer>
           </section>
         </div>
       )}
@@ -4313,9 +4350,9 @@ export default function Home() {
                               </time>
                               <i />
                               {meal.image ? (
-                                <button className="timeline-image-button" type="button" onClick={() => setMealPreview(meal)} aria-label={`הצגת ${meal.name}`}><img src={meal.image} alt="" loading="lazy" decoding="async" /></button>
+                                <button className="timeline-image-button" type="button" onClick={() => openMealPreview(meal, true)} aria-label={`הצגת ${meal.name}`}><img src={meal.image} alt="" loading="lazy" decoding="async" /></button>
                               ) : (
-                                <button className="timeline-image-button timeline-icon" type="button" onClick={() => setMealPreview(meal)} aria-label={`הצגת ${meal.name}`}>🍽</button>
+                                <button className="timeline-image-button timeline-icon" type="button" onClick={() => openMealPreview(meal, true)} aria-label={`הצגת ${meal.name}`}>🍽</button>
                               )}
                               <div>
                                 <em>{periodLabels[meal.period || "snack"]}</em>
@@ -5052,6 +5089,7 @@ export default function Home() {
                             )
                           }
                         /><button type="button" onClick={() => adjustMealItem(index, "kcalPer100", 10, 0, 1000)}>＋</button></div>
+                        <small>{Math.round(Number(item.kcalPer100 || 0) * Number(item.grams || 0) * Number(item.quantity || 1) / 100)} קלוריות לכמות שנבחרה</small>
                       </label>
                       <button
                         className="remove-item"
@@ -5139,7 +5177,7 @@ export default function Home() {
                 </>
               )}
             </div></details>}
-            {(mealForm.name || mealItems.length > 0) && <section className="meal-review-summary"><header><div><small>הארוחה שלך</small><strong>{mealForm.name || "ארוחה חדשה"}</strong></div><b>{Math.round(Number(mealDraftPreview.kcal || 0))}<small> kcal</small></b></header><div><span className="protein"><small>חלבון</small><strong>{Math.round(Number(mealDraftPreview.protein || 0))}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{Math.round(Number(mealDraftPreview.carbs || 0))}g</strong></span><span className="fat"><small>שומן</small><strong>{Math.round(Number(mealDraftPreview.fat || 0))}g</strong></span></div><p>זה הסיכום שיתווסף ליומן. אפשר לאשר או לפתוח את העריכה המתקדמת.</p></section>}
+            {(mealForm.name || mealItems.length > 0) && <section className="meal-review-summary"><header><div><small>הארוחה שלך</small><strong>{mealForm.name || "ארוחה חדשה"}</strong></div><b>{Math.round(Number(mealDraftPreview.kcal || 0))}<small> kcal</small></b></header><div><span className="protein"><small>חלבון</small><strong>{Math.round(Number(mealDraftPreview.protein || 0))}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{Math.round(Number(mealDraftPreview.carbs || 0))}g</strong></span><span className="fat"><small>שומן</small><strong>{Math.round(Number(mealDraftPreview.fat || 0))}g</strong></span></div><p>זה הסיכום שיתווסף ליומן. אפשר לאשר או לפתוח את העריכה המתקדמת.</p><button className="meal-recalculate-button" type="button" onClick={recalculateMealWithAi} disabled={busy}>{busy ? "מחשב מחדש…" : "חשב מחדש לפי השינויים"}</button></section>}
             {mealItems.length > 0 && (
               <section className="ai-correction-box">
                 <div><strong>צריך לתקן את הזיהוי?</strong><small>כתוב רק מה לא נכון — ה־AI יעדכן את הטיוטה בלי לשמור אותה.</small></div>

@@ -9,6 +9,7 @@ const adminUsersRoute = await readFile(new URL("../app/api/admin/users/route.ts"
 const notificationsRoute = await readFile(new URL("../app/api/notifications/route.ts", import.meta.url), "utf8");
 const serviceWorker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
 const notificationScheduler = await readFile(new URL("../server/notification-scheduler.js", import.meta.url), "utf8");
+const analyzeTextRoute = await readFile(new URL("../app/api/ai/analyze-text/route.ts", import.meta.url), "utf8");
 
 test("health profile is editable and explicitly bounded as non-medical advice", () => {
   for (const field of ["diabetesStatus", "hypertension", "foodAllergies", "relevantMedications", "pregnancyStatus"])
@@ -26,6 +27,19 @@ test("meal rows expose one clear edit action while deletion undo stays available
 test("editing a meal exposes an explicit save changes and close action", () => {
   assert.match(page, /editingMealId\s*\?\s*"שמור שינויים וסגור"/);
   assert.match(page, /meal-modal\$\{editingMealId \? " is-editing" : ""\}/);
+});
+
+test("photo meals automatically complete calories and remain recalculable after edits", () => {
+  assert.match(page, /completeMissingNutrition/);
+  assert.match(page, /חשב מחדש לפי השינויים/);
+  assert.match(page, /קלוריות לכמות שנבחרה/);
+  assert.match(analyzeTextRoute, /proteinPer100 \* 4/);
+});
+
+test("history meal pictures open the full meal preview and return to history", () => {
+  assert.match(page, /openMealPreview\(meal, true\)/);
+  assert.match(page, /mealPreviewReturnToHistory/);
+  assert.match(page, /חזרה להיסטוריה/);
 });
 
 test("macro detail lists are sorted from the largest gram contribution", () => {
