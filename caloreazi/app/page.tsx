@@ -25,7 +25,7 @@ type AppState = {
   measurements: any[];
   favorites: any[];
   activity: any[];
-  dailyScore: { score: number; parts: Record<string, number> };
+  dailyScore: { score: number; coverage?: number; status?: string; version?: string; components?: Record<string, any>; parameters?: any[]; recommendation?: string; parts: Record<string, number> };
   streak: number;
   coachHistory: { role: "user" | "assistant"; text: string; at?: string }[];
   foods: any[];
@@ -39,6 +39,7 @@ const emptyOnboarding = {
   email: "",
   goal: "lose",
   sex: "male",
+  birthDate: "",
   age: 35,
   height: 175,
   weight: 85,
@@ -831,27 +832,15 @@ export default function Home() {
   const dailyScore = Math.max(0, Math.min(100, Number(state?.dailyScore?.score || 0)));
   const scoreToneFor = (score: number) => score < 20 ? "red" : score < 40 ? "orange" : score < 60 ? "yellow" : score < 80 ? "blue" : "green";
   const historyScoreText = (day: any) => {
-    const score = Number(day?.dailyScore?.score || 0); const parts = day?.dailyScore?.parts || {};
-    const weakest = [
-      [40 - Number(parts.calories || 0), "להתקרב לטווח הקלוריות היומי"],
-      [25 - Number(parts.protein || 0), "לפזר יותר חלבון לאורך היום"],
-      [20 - Number(parts.water || 0), "להשלים את יעד השתייה"],
-      [10 - Number(parts.activity || 0), "להוסיף פעילות קצרה"],
-    ].sort((a: any, b: any) => b[0] - a[0])[0]?.[1];
-    if (score >= 80) return `יום מאוזן עם ציון ${score}/100. כדאי לשמר את אותה עקביות גם מחר.`;
-    if (score >= 60) return `יום בכיוון טוב עם ציון ${score}/100. השיפור המשמעותי ביותר יהיה ${weakest}.`;
-    return `ציון היום הוא ${score}/100. הצעד הראשון שכדאי להתמקד בו: ${weakest}.`;
+    const result = day?.dailyScore || {}; const score = Number(result.score || 0);
+    if (result.status === "insufficient") return `אין מספיק נתונים לציון מלא (כיסוי ${Number(result.coverage || 0)}%). ${result.recommendation || "כדאי להשלים תיעוד."}`;
+    return `ציון ${score}/100 לפי מנוע ${result.version || "1.0"}. ${result.recommendation || "כדאי להמשיך בתיעוד עקבי."}`;
   };
   const scoreTone = scoreToneFor(dailyScore);
-  const scoreParts = state?.dailyScore?.parts || {};
-  const scoreGuidance = [
-    { label: "מאזן קלורי", value: Number(scoreParts.calories || 0), max: 40, tip: "תעד ארוחות והתקרב לטווח הקלוריות היומי." },
-    { label: "חלבון", value: Number(scoreParts.protein || 0), max: 25, tip: "הוסף מקור חלבון איכותי לארוחה הבאה." },
-    { label: "מים", value: Number(scoreParts.water || 0), max: 20, tip: "השלם בהדרגה את יעד השתייה היומי." },
-    { label: "פעילות", value: Number(scoreParts.activity || 0), max: 10, tip: "הוסף הליכה או פעילות של לפחות 30 דקות." },
-    { label: "עקביות", value: Number(scoreParts.consistency || 0), max: 5, tip: "תעד לפחות שתי ארוחות כדי לקבל תמונת יום מלאה." },
-  ];
-  const scoreImprovement = [...scoreGuidance].sort((a, b) => (b.max - b.value) - (a.max - a.value))[0];
+  const componentLabels: Record<string,string> = { quality: "איכות תזונתית", targets: "התאמה ליעדים", habits: "הרגלים ועקביות" };
+  const scoreGuidance = Object.entries(state?.dailyScore?.components || {}).map(([key, part]: any) => ({ label: componentLabels[key] || key, value: Number(part.score || 0), max: Number(part.max || 0), coverage: Number(part.coverage || 0), tip: state?.dailyScore?.recommendation || "להמשיך בתיעוד." }));
+  const scoreParameters = (state?.dailyScore?.parameters || []).filter((item: any) => item.available);
+  const scoreImprovement = [...scoreGuidance].sort((a, b) => (b.max - b.value) - (a.max - a.value))[0] || { tip: "להשלים תיעוד כדי לקבל המלצה מדויקת." };
   const scoreHeadline = dailyScore >= 80 ? "יום מאוזן מאוד — המשך כך." : dailyScore >= 60 ? `כיוון טוב — ${scoreImprovement.tip}` : dailyScore >= 40 ? `יש בסיס טוב. ${scoreImprovement.tip}` : `אפשר לשפר כבר היום: ${scoreImprovement.tip}`;
   const currentStreak = Number(state?.streak || 0);
   const consistencyBadges = [
@@ -1571,6 +1560,7 @@ export default function Home() {
       name: state?.owner?.name || "",
       email: state?.owner?.email || "",
       accountPassword: "",
+      birthDate: profile.birthDate || "",
       age: profile.age,
       height: profile.height,
       targetWeight: profile.targetWeight,
@@ -1670,7 +1660,7 @@ export default function Home() {
   }
   function openTasteWizard() {
     const current = profile?.tasteProfile || { likes: [], dislikes: [], prepTime: "medium" };
-    setProfileForm({ name: state?.owner?.name || "", age: profile.age, height: profile.height, targetWeight: profile.targetWeight, activity: profile.activity, diet: profile.diet, restrictions: profile.restrictions || "", diabetesStatus: profile.diabetesStatus || "none", hypertension: Boolean(profile.hypertension), foodAllergies: profile.foodAllergies || "", relevantMedications: profile.relevantMedications || "", pregnancyStatus: profile.pregnancyStatus || "none", trainingDayBonus: profile.trainingDayBonus || 0, targetMode: profile.targetMode || "automatic", customCalories: profile.calories, customProtein: profile.protein, customCarbs: profile.carbs, customFat: profile.fat, avatar: profile.avatar || "", tasteProfile: current });
+    setProfileForm({ name: state?.owner?.name || "", birthDate: profile.birthDate || "", age: profile.age, height: profile.height, targetWeight: profile.targetWeight, activity: profile.activity, diet: profile.diet, restrictions: profile.restrictions || "", diabetesStatus: profile.diabetesStatus || "none", hypertension: Boolean(profile.hypertension), foodAllergies: profile.foodAllergies || "", relevantMedications: profile.relevantMedications || "", pregnancyStatus: profile.pregnancyStatus || "none", trainingDayBonus: profile.trainingDayBonus || 0, targetMode: profile.targetMode || "automatic", customCalories: profile.calories, customProtein: profile.protein, customCarbs: profile.carbs, customFat: profile.fat, avatar: profile.avatar || "", tasteProfile: current });
     setTasteDraft(structuredClone(current)); setTasteWizardStep(0); setProfileOpen(false); setTasteWizardOpen(true);
   }
   async function saveTasteWizard() {
@@ -2576,14 +2566,18 @@ export default function Home() {
         </summary>
         <div className="daily-score-explanation">
           <header>
-            <div><strong>הציון היומי שלך: {dailyScore}/100</strong><small>הציון מתעדכן לפי הנתונים שתיעדת היום</small></div>
-            <b>{scoreImprovement?.tip}</b>
+            <div><strong>{state.dailyScore.status === "insufficient" ? "עדיין אין מספיק נתונים" : state.dailyScore.status === "provisional" ? "ציון ביניים" : "הציון היומי"}: {dailyScore}/100</strong><small>מנוע {state.dailyScore.version || "1.0"} · כיסוי נתונים {Number(state.dailyScore.coverage || 0)}%</small></div>
+            <b>{state.dailyScore.recommendation || scoreImprovement?.tip}</b>
           </header>
           <div className="score-parts">
             {scoreGuidance.map((part) => (
-              <span key={part.label}><small>{part.label}</small><strong>{part.value}/{part.max}</strong></span>
+              <span key={part.label}><small>{part.label}</small><i><b style={{ width: `${Math.round(part.value / Math.max(1, part.max) * 100)}%` }} /></i><strong>{part.value}/{part.max}</strong><em>כיסוי {part.coverage}%</em></span>
             ))}
           </div>
+          <div className="score-parameter-grid">
+            {scoreParameters.map((part: any) => <article key={part.key}><header><strong>{part.label}</strong><b>{part.percent}%</b></header><i><b style={{ width: `${part.percent}%` }} /></i><small>{Math.round(Number(part.value || 0))} מתוך {Math.round(Number(part.target || 0))} {part.unit}</small></article>)}
+          </div>
+          <p className="score-method-note">הציון הוא כלי הכוונה התנהגותי — לא אבחון רפואי. רכיב שאין עליו מידע אינו מקבל ציון אפס, ורמת הכיסוי מוצגת במפורש.</p>
         </div>
       </details>
       <section className="daily-card">
@@ -3892,19 +3886,9 @@ export default function Home() {
                 />
               </label>
               <label>
-                גיל
-                <input
-                  type="number"
-                  min="14"
-                  max="120"
-                  value={profileForm.age || ""}
-                  onChange={(e) =>
-                    setProfileForm({
-                      ...profileForm,
-                      age: Number(e.target.value),
-                    })
-                  }
-                />
+                תאריך לידה
+                <input type="date" value={profileForm.birthDate || ""} onChange={(e) => setProfileForm({ ...profileForm, birthDate: e.target.value })} />
+                <small>הגיל יחושב אוטומטית וישמש לחישוב היעדים.</small>
               </label>
               <label>
                 גובה (ס״מ)
@@ -4383,6 +4367,11 @@ export default function Home() {
                         </span>
                       </div>
                       <p className={`history-day-score-summary score-${scoreToneFor(Number(day.dailyScore?.score || 0))}`}><strong>סיכום היום</strong><span>{historyScoreText(day)}</span></p>
+                      <details className="history-score-analysis">
+                        <summary>ניתוח היום לפי מנוע הציון {day.dailyScore?.version || "2.0"}</summary>
+                        <div>{(day.dailyScore?.parameters || []).filter((part: any) => part.available).map((part: any) => <span key={part.key}><strong>{part.label}</strong><i><b style={{ width: `${part.percent}%` }} /></i><em>{part.percent}% · {Math.round(Number(part.value || 0))}/{Math.round(Number(part.target || 0))} {part.unit}</em></span>)}</div>
+                        <small>כיסוי הנתונים: {Number(day.dailyScore?.coverage || 0)}%. נתון שלא תועד אינו מוצג כאילו נכשל.</small>
+                      </details>
                       <section className="history-timeline">
                         {timelineEntries.map((meal: any) => meal.kind === "water" ? <article className="timeline-water" key={meal.id}><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><i /><span className="timeline-icon">💧</span><div><em>שתייה</em><strong>כוס מים</strong><small>{meal.amount} מ״ל</small></div><b>{meal.amount}<small> מ״ל</small></b></article> : (
                             <article
@@ -5501,12 +5490,9 @@ function Onboarding({
           </select>
         </label>
         <label>
-          גיל
-          <input
-            type="number"
-            value={values.age}
-            onChange={(e) => setValues({ ...values, age: e.target.value })}
-          />
+          תאריך לידה
+          <input type="date" value={values.birthDate} onChange={(e) => setValues({ ...values, birthDate: e.target.value })} />
+          <small>הגיל מחושב אוטומטית לצורך יעדים מדויקים.</small>
         </label>
         <label>
           גובה (ס״מ)
@@ -5614,6 +5600,7 @@ function Onboarding({
             className="primary"
             disabled={
               busy ||
+              (step === 1 && !values.birthDate) ||
               (step === 0 &&
                 (!values.name.trim() ||
                   (bootstrap &&

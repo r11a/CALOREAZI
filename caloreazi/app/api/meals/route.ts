@@ -7,7 +7,7 @@ import { localDateAt, userTimeZone } from "@/server/local-date.js";
 import { validateMealNutrition } from "@/server/meal-validation.js";
 import { databaseStateEnabled, insertDatabaseMeal } from "@/server/state-database.js";
 export const runtime = "nodejs";
-type MealRecord = { id: string; clientRequestId?: string; name: string; period: string; kcal: number; protein: number; carbs: number; fat: number; sugar: number; sugarTrackedItems: number; items: unknown[]; source: string; image: string; media: unknown; confidence: number; transcript: string; time: string; score?: number; updatedAt?: string };
+type MealRecord = { id: string; clientRequestId?: string; name: string; period: string; kcal: number; protein: number; carbs: number; fat: number; sugar: number; sugarTrackedItems: number; fiber?: number; fiberTrackedItems?: number; sodiumMg?: number; sodiumMgTrackedItems?: number; saturatedFat?: number; saturatedFatTrackedItems?: number; addedSugar?: number; addedSugarTrackedItems?: number; items: unknown[]; source: string; image: string; media: unknown; confidence: number; transcript: string; time: string; score?: number; updatedAt?: string };
 
 export async function POST(request: Request) {
   const startedAt = Date.now();

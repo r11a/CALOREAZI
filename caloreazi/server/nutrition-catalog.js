@@ -87,7 +87,7 @@ async function findUsdaFood(name) {
   const response = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(apiKey)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query, pageSize: 5, dataType: ["Foundation", "SR Legacy"] }), signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`USDA FoodData Central returned ${response.status}`);
   const food = (await response.json()).foods?.[0];
-  const result = food ? { source: "USDA_FDC", sourceId: String(food.fdcId), sourceVersion: food.publicationDate || "live", name: food.description, aliases: [], kcalPer100: energyKcal(food), proteinPer100: nutrientValue(food, ["protein"]), carbsPer100: nutrientValue(food, ["carbohydrate, by difference"]), fatPer100: nutrientValue(food, ["total lipid (fat)"]), sugarPer100: nutrientValue(food, ["sugars, total including nlea", "sugars, total"]) } : null;
+  const result = food ? { source: "USDA_FDC", sourceId: String(food.fdcId), sourceVersion: food.publicationDate || "live", name: food.description, aliases: [], kcalPer100: energyKcal(food), proteinPer100: nutrientValue(food, ["protein"]), carbsPer100: nutrientValue(food, ["carbohydrate, by difference"]), fatPer100: nutrientValue(food, ["total lipid (fat)"]), sugarPer100: nutrientValue(food, ["sugars, total including nlea", "sugars, total"]), fiberPer100: nutrientValue(food, ["fiber, total dietary"]), sodiumMgPer100: nutrientValue(food, ["sodium, na"]), saturatedFatPer100: nutrientValue(food, ["fatty acids, total saturated"]) } : null;
   usdaCache.set(cacheKey, result); return result;
 }
 
@@ -97,7 +97,7 @@ export async function enrichVisionItemsAuthoritative(items) {
     let food = findNutritionFood(item.name);
     if (!food) { try { food = await findUsdaFood(item.searchNameEn || item.name); } catch { food = null; } }
     if (!food || !(food.kcalPer100 > 0)) { unmatched += 1; enriched.push({ ...item, kcalPer100: 0, proteinPer100: 0, carbsPer100: 0, fatPer100: 0, sugarPer100: null, nutritionSource: null, nutritionStatus: "needs_confirmation" }); continue; }
-    enriched.push({ ...item, kcalPer100: food.kcalPer100, proteinPer100: food.proteinPer100, carbsPer100: food.carbsPer100, fatPer100: food.fatPer100, sugarPer100: food.sugarPer100, nutritionSource: { source: food.source, sourceId: food.sourceId, sourceVersion: food.sourceVersion }, nutritionStatus: "matched" });
+    enriched.push({ ...item, kcalPer100: food.kcalPer100, proteinPer100: food.proteinPer100, carbsPer100: food.carbsPer100, fatPer100: food.fatPer100, sugarPer100: food.sugarPer100, fiberPer100: food.fiberPer100 ?? null, sodiumMgPer100: food.sodiumMgPer100 ?? null, saturatedFatPer100: food.saturatedFatPer100 ?? null, addedSugarPer100: food.addedSugarPer100 ?? null, nutritionSource: { source: food.source, sourceId: food.sourceId, sourceVersion: food.sourceVersion }, nutritionStatus: "matched" });
   }
   return { items: enriched, nutritionStatus: unmatched ? "needs_confirmation" : "matched", unmatched };
 }

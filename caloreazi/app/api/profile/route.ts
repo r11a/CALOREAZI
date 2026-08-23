@@ -1,5 +1,5 @@
 import { requireUser, verifyPassword } from "@/server/auth.js";
-import { calculateNutritionTargets } from "@/server/nutrition.js";
+import { ageFromBirthDate, calculateNutritionTargets } from "@/server/nutrition.js";
 import { readState, updateState, userView } from "@/server/store.js";
 import { validTimeZone } from "@/server/local-date.js";
 import { normalizeNotificationPreferences } from "@/server/notification-preferences.js";
@@ -12,10 +12,11 @@ export async function PUT(request: Request) {
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
   const body = await request.json();
   const name = String(body.name || "").trim();
-  const age = Number(body.age);
+  const birthDate = String(body.birthDate || ""); const derivedAge = ageFromBirthDate(birthDate); const age = derivedAge ?? Number(body.age);
   const height = Number(body.height);
   const targetWeight = Number(body.targetWeight);
   const avatar = String(body.avatar || "");
+  if (birthDate && derivedAge === null) return Response.json({ error: "תאריך הלידה אינו תקין" }, { status: 400 });
   const tasteProfile = body.tasteProfile && typeof body.tasteProfile === "object" ? { likes: [...new Set((Array.isArray(body.tasteProfile.likes) ? body.tasteProfile.likes : []).map((item) => String(item).slice(0, 40)))].slice(0, 30), dislikes: [...new Set((Array.isArray(body.tasteProfile.dislikes) ? body.tasteProfile.dislikes : []).map((item) => String(item).slice(0, 40)))].slice(0, 30), prepTime: ["quick", "medium", "long"].includes(body.tasteProfile.prepTime) ? body.tasteProfile.prepTime : "medium", completedAt: body.tasteProfile.completedAt || null } : undefined;
   if (name.length < 2) return Response.json({ error: "יש להזין שם תקין" }, { status: 400 });
   if (!(age >= 14 && age <= 120) || !(height >= 100 && height <= 250)) return Response.json({ error: "יש לבדוק גיל וגובה" }, { status: 400 });
@@ -41,6 +42,7 @@ export async function PUT(request: Request) {
     if (changesEmail) user.email = requestedEmail;
     Object.assign(profile, {
       age,
+      birthDate: derivedAge !== null ? birthDate : profile.birthDate,
       height,
       targetWeight,
       activity: body.activity || profile.activity,
