@@ -1,4 +1,4 @@
-const CACHE = "caloreazi-shell-v1.13.7";
+const CACHE = "caloreazi-shell-v1.13.8";
 const SHELL = ["./", "manifest.webmanifest", "caloreazi-wordmark-transparent.png", "caloreazi-pwa-mark-192-v3.png", "caloreazi-pwa-mark-512-v3.png", "category-vegetables-v1.png", "category-fruits-v1.png", "category-drinks-v1.png", "food-sprite-vegetables-v3.webp", "food-sprite-fruits-v3.webp", "food-sprite-drinks-v3.webp"];
 
 self.addEventListener("install", (event) => {
@@ -20,7 +20,7 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   let message = {};
   try { message = event.data?.json() || {}; } catch { message = { body: event.data?.text() || "יש לך עדכון חדש" }; }
-  event.waitUntil(self.registration.showNotification(message.title || "CALOREAZI", {
+  event.waitUntil(self.registration.showNotification(message.title || "עדכון אישי", {
     body: message.body || "יש לך עדכון חדש",
     icon: "caloreazi-pwa-mark-192-v3.png",
     badge: "caloreazi-pwa-mark-192-v3.png",

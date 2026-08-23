@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.13.8
+
+- Fixed legacy sharing candidates so an old email stored as a username is never shown; sharing now uses the current user name and internal user ID only.
+- Added a prominent “Nice to meet you” button under Account that opens a separate, optional and mobile-friendly questionnaire.
+- Expanded the questionnaire with practical schedule, meal-pattern, cooking, budget, hunger, digestion, emotional-eating and coaching-style choices plus focused free-text fields.
+- Added the optional questionnaire context to the AI coach so saved answers affect recommendations and communication style.
+- Removed the application-name fallback from Push notification titles; every app-generated notification now uses a concise subject title.
+- Prevented the phone keyboard from opening automatically when entering the shared or manual meal-add flow.
+
 ## 1.13.7
 
 - Made the home greeting plus button identical in behavior and visual language to the plus button in “What I ate today”.

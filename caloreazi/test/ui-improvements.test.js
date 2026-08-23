@@ -10,6 +10,9 @@ const notificationsRoute = await readFile(new URL("../app/api/notifications/rout
 const serviceWorker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
 const notificationScheduler = await readFile(new URL("../server/notification-scheduler.js", import.meta.url), "utf8");
 const analyzeTextRoute = await readFile(new URL("../app/api/ai/analyze-text/route.ts", import.meta.url), "utf8");
+const partnershipsRoute = await readFile(new URL("../app/api/partnerships/route.ts", import.meta.url), "utf8");
+const coachRoute = await readFile(new URL("../app/api/ai/chat/route.ts", import.meta.url), "utf8");
+const store = await readFile(new URL("../server/store.js", import.meta.url), "utf8");
 
 test("health profile is editable and explicitly bounded as non-medical advice", () => {
   for (const field of ["diabetesStatus", "hypertension", "foodAllergies", "relevantMedications", "pregnancyStatus"])
@@ -303,4 +306,28 @@ test("manual meal value choices share one clear icon-led action row", () => {
   assert.match(page, /name="list"/);
   assert.match(page, /יש לי ערכים/);
   assert.match(css, /manual-value-actions\{[^}]*grid-template-columns:1fr 1fr/);
+});
+
+test("sharing uses current usernames and never falls back to a remembered email", () => {
+  assert.match(page, /מוצגים שמות משתמש בלבד/);
+  assert.match(partnershipsRoute, /requestedIds/);
+  assert.doesNotMatch(partnershipsRoute, /String\(user\.email\)/);
+  assert.match(store, /username && !username\.includes\("@"\)/);
+});
+
+test("the optional acquaintance questionnaire opens from account and informs coach context", () => {
+  assert.match(page, /acquaintance-entry/);
+  assert.match(page, /כל השדות לא חובה/);
+  assert.match(page, /dailySchedule/);
+  assert.match(page, /mealPattern/);
+  assert.match(page, /cookingAccess/);
+  assert.match(page, /emotionalEating/);
+  assert.match(page, /coachingStyle/);
+  assert.match(css, /acquaintance-modal/);
+  assert.match(coachRoute, /acquaintance: profile\.acquaintance/);
+});
+
+test("meal add flows wait for an explicit field tap before opening the keyboard", () => {
+  assert.doesNotMatch(page, /<input\s+autoFocus/);
+  assert.match(page, /aria-label="חיפוש בהוספת אוכל"/);
 });
