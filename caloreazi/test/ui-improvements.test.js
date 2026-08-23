@@ -340,6 +340,11 @@ test("adaptive training goal plan is transparent and workouts use a fast path", 
   assert.match(page, /activity-quick-types/);
   assert.match(page, /פרטים נוספים — לא חובה/);
   assert.match(css, /goal-plan-calibration/);
+  assert.match(page, /נקודת הכניסה שלך/);
+  assert.match(page, /כבר בתהליך/);
+  assert.match(page, /שינוי משוער ב־4 השבועות האחרונים/);
+  assert.match(page, /המידע הוא דיווח עצמי/);
+  assert.match(page, /journey-existing-details/);
 });
 
 test("admin can securely update a user email or password", () => {

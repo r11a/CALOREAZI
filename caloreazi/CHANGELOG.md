@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.18.1
+
+- Added a clear onboarding and reusable “My path” wizard that records where the user joined the process, prior duration and progress, earlier approach, current obstacle, training experience and preferred pace.
+- Users who join mid-process receive relevant follow-up questions while self-reported history remains explicitly separated from measured application data.
+
 ## 1.18.0
 
 - Added goal modes for cutting, maintenance, lean mass gain, performance and balanced living.

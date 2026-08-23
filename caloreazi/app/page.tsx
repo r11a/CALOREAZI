@@ -49,6 +49,16 @@ const emptyOnboarding = {
   workoutTypes: [] as string[],
   diet: "none",
   restrictions: "",
+  journeyStage: "starting",
+  journeyWeeks: 0,
+  journeyStartingWeight: 0,
+  journeyRecentChangeKg: 0,
+  previousCalorieTarget: 0,
+  plateauWeeks: 0,
+  priorApproach: "",
+  mainChallenge: "",
+  trainingExperience: "beginner",
+  preferredPace: "moderate",
   theme: "dark",
   adminPassword: "",
 };
@@ -60,6 +70,7 @@ const goalLabels: Record<string, string> = {
   healthy: "אורח חיים מאוזן",
 };
 const workoutTypeLabels: Record<string, string> = { walking: "הליכה", running: "ריצה", strength: "אימון כוח", cycling: "רכיבה", swimming: "שחייה", yoga: "יוגה / גמישות", other: "אחר" };
+const journeyStageLabels: Record<string, string> = { starting: "אני מתחיל עכשיו", early: "כבר התחלתי לאחרונה", established: "אני כבר בתהליך קבוע", plateau: "אני בתקיעות", returning: "חוזר אחרי הפסקה", transition: "עובר ממסה לחיטוב או להפך" };
 const notificationPreferenceDefaults = { enabled: true, morningBrief: true, mealReminders: true, waterReminders: true, dailySummary: true, insights: true, coachTips: true, weeklyTrends: true, weightReminder: true, achievements: false, breakfastTime: "09:00", lunchTime: "14:00", dinnerTime: "20:00", waterTime: "16:30", summaryTime: "21:15", coachTime: "11:30", weeklyTime: "10:00", quietStart: "22:30", quietEnd: "07:00", maxPerDay: 5 };
 const notificationTypeOptions = [
   ["morningBrief", "בוקר טוב וסיכום אתמול", "בכל יום ב־07:30: הציון והקלוריות של אתמול יחד עם מבט להיום"],
@@ -640,7 +651,7 @@ export default function Home() {
   const [profileTab, setProfileTab] = useState<"basic" | "health" | "goals" | "notifications" | "account">("basic");
   const [profileForm, setProfileForm] = useState<any>({});
   const [newCycleOpen, setNewCycleOpen] = useState(false);
-  const [newCycleForm, setNewCycleForm] = useState({ currentWeight: 0, targetWeight: 0, goal: "lose" });
+  const [newCycleForm, setNewCycleForm] = useState({ currentWeight: 0, targetWeight: 0, goal: "lose", journeyStage: "starting", journeyWeeks: 0, journeyStartingWeight: 0, journeyRecentChangeKg: 0, previousCalorieTarget: 0, plateauWeeks: 0, priorApproach: "", mainChallenge: "", trainingExperience: "beginner", preferredPace: "moderate", workouts: 2, workoutTypes: [] as string[] });
   const [tasteWizardOpen, setTasteWizardOpen] = useState(false);
   const [tasteWizardStep, setTasteWizardStep] = useState(0);
   const [tasteDraft, setTasteDraft] = useState<any>({ likes: [], dislikes: [], prepTime: "medium" });
@@ -4214,7 +4225,7 @@ export default function Home() {
               </div>
               <b>‹</b>
             </button>
-            <button className="profile-sharing new-cycle-entry" type="button" onClick={() => { setNewCycleForm({ currentWeight: Number(latestWeight || profile.weight), targetWeight: Number(profile.targetWeight), goal: profile.goal || "lose" }); setNewCycleOpen(true); }}><span>↻</span><div><strong>התחל סבב חדש</strong><small>הגדר נקודת פתיחה ומטרה חדשות; כל ההיסטוריה הקודמת נשמרת</small></div><b>‹</b></button>
+            <button className="profile-sharing new-cycle-entry" type="button" onClick={() => { setNewCycleForm({ currentWeight: Number(latestWeight || profile.weight), targetWeight: Number(profile.targetWeight), goal: profile.goal || "lose", journeyStage: profile.journey?.stage || "starting", journeyWeeks: Number(profile.journey?.weeksBeforeJoining || 0), journeyStartingWeight: Number(profile.journey?.startingWeight || 0), journeyRecentChangeKg: Number(profile.journey?.recentChangeKg || 0), previousCalorieTarget: Number(profile.journey?.previousCalorieTarget || 0), plateauWeeks: Number(profile.journey?.plateauWeeks || 0), priorApproach: profile.journey?.priorApproach || "", mainChallenge: profile.journey?.mainChallenge || "", trainingExperience: profile.journey?.trainingExperience || "beginner", preferredPace: profile.journey?.preferredPace || "moderate", workouts: Number(profile.workouts || 2), workoutTypes: profile.workoutTypes || [] }); setNewCycleOpen(true); }}><span>↻</span><div><strong>המסלול שלי</strong><small>הגדר נקודת כניסה, מטרה, קצב ואימונים; כל ההיסטוריה נשמרת</small></div><b>‹</b></button>
             <button
               className="profile-sharing"
               type="button"
@@ -4726,7 +4737,12 @@ export default function Home() {
           </section>
         </div>
       )}
-      {newCycleOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setNewCycleOpen(false)} /><form className="settings-modal new-cycle-modal" onSubmit={startNewCycle}><header><div><h2>התחלת סבב חדש</h2><small>הארוחות, המדידות והסבבים הקודמים יישמרו במלואם</small></div><button type="button" onClick={() => setNewCycleOpen(false)}>×</button></header><div className="settings-grid"><label>משקל פתיחה חדש<input type="number" min="25" max="350" step=".1" value={newCycleForm.currentWeight} onChange={(e) => setNewCycleForm({ ...newCycleForm, currentWeight: Number(e.target.value) })} /></label><label>משקל יעד<input type="number" min="25" max="350" step=".1" value={newCycleForm.targetWeight} onChange={(e) => setNewCycleForm({ ...newCycleForm, targetWeight: Number(e.target.value) })} /></label><label className="wide">מטרה<select value={newCycleForm.goal} onChange={(e) => setNewCycleForm({ ...newCycleForm, goal: e.target.value })}>{Object.entries(goalLabels).map(([key,label]) => <option value={key} key={key}>{label}</option>)}</select></label></div><p className="modal-help">הפעולה משנה את נקודת הייחוס מכאן והלאה בלבד ואינה מוחקת נתון היסטורי.</p><footer><button type="button" onClick={() => setNewCycleOpen(false)}>ביטול</button><button className="primary" disabled={busy}>התחל סבב חדש</button></footer></form></div>}
+      {newCycleOpen && <div className="modal-layer"><button className="backdrop" onClick={() => setNewCycleOpen(false)} /><form className="settings-modal new-cycle-modal journey-wizard" onSubmit={startNewCycle}><header><div><h2>המסלול שלי</h2><small>טופס קצר וברור להתאמה לפי המקום שבו אתה נמצא עכשיו</small></div><button type="button" onClick={() => setNewCycleOpen(false)}>×</button></header>
+        <div className="journey-form-sections">
+          <section><header><b>1</b><div><strong>איפה אתה בתהליך?</strong><small>כך לא נניח שהכול התחיל ביום ההצטרפות</small></div></header><div className="journey-stage-grid">{Object.entries(journeyStageLabels).map(([key,label]) => <button type="button" key={key} className={newCycleForm.journeyStage === key ? "selected" : ""} onClick={() => setNewCycleForm({ ...newCycleForm, journeyStage: key })}>{label}</button>)}</div>{newCycleForm.journeyStage !== "starting" && <div className="journey-existing-details"><p>כדי להבין את מצבך לפני ההצטרפות — מלא רק מה שידוע לך.</p><div className="settings-grid"><label>כמה שבועות אתה כבר בתהליך?<input type="number" min="0" max="520" value={newCycleForm.journeyWeeks} onChange={(e) => setNewCycleForm({ ...newCycleForm, journeyWeeks: Number(e.target.value) })} /></label><label>משקל בתחילת התהליך<input type="number" min="25" max="350" step=".1" value={newCycleForm.journeyStartingWeight || ""} onChange={(e) => setNewCycleForm({ ...newCycleForm, journeyStartingWeight: Number(e.target.value) })} /></label><label>שינוי משוער ב־4 השבועות האחרונים (ק״ג)<input type="number" min="-20" max="20" step=".1" value={newCycleForm.journeyRecentChangeKg || ""} onChange={(e) => setNewCycleForm({ ...newCycleForm, journeyRecentChangeKg: Number(e.target.value) })} /><small>מינוס לירידה, פלוס לעלייה</small></label><label>יעד קלורי קודם — אם היה<input type="number" min="800" max="6000" value={newCycleForm.previousCalorieTarget || ""} onChange={(e) => setNewCycleForm({ ...newCycleForm, previousCalorieTarget: Number(e.target.value) })} /></label>{newCycleForm.journeyStage === "plateau" && <label>כמה שבועות אין שינוי משמעותי?<input type="number" min="1" max="52" value={newCycleForm.plateauWeeks || ""} onChange={(e) => setNewCycleForm({ ...newCycleForm, plateauWeeks: Number(e.target.value) })} /></label>}<label>מה ניסית עד עכשיו?<select value={newCycleForm.priorApproach} onChange={(e) => setNewCycleForm({ ...newCycleForm, priorApproach: e.target.value })}><option value="">לא בחרתי</option><option value="calorie_tracking">ספירת קלוריות</option><option value="meal_plan">תפריט קבוע</option><option value="intuitive">אכילה אינטואיטיבית</option><option value="low_carb">הפחתת פחמימות</option><option value="other">שיטה אחרת</option></select></label><label className="wide">מה הקושי המרכזי כרגע?<textarea value={newCycleForm.mainChallenge} maxLength={300} onChange={(e) => setNewCycleForm({ ...newCycleForm, mainChallenge: e.target.value })} placeholder="למשל: רעב בערב, חוסר עקביות, קושי להגיע לחלבון או תקיעות במשקל" /></label></div><small>המידע הוא דיווח עצמי ומשמש להבנת ההקשר בלבד. המנוע ילמד התאמות מנתונים שייאספו באפליקציה.</small></div>}</section>
+          <section><header><b>2</b><div><strong>מטרה וקצב</strong><small>המנוע יתחיל מנקודת פתיחה שמרנית</small></div></header><label>מטרת המסלול<select value={newCycleForm.goal} onChange={(e) => setNewCycleForm({ ...newCycleForm, goal: e.target.value })}>{Object.entries(goalLabels).map(([key,label]) => <option value={key} key={key}>{label}</option>)}</select></label><div className="journey-pace-grid">{[["gentle","רגוע","פחות שינויים, קל יותר להתמיד"],["moderate","מתון","איזון בין קצב להתמדה"],["focused","ממוקד","עדיין בגבולות שמרניים"]].map(([key,title,help]) => <button type="button" key={key} className={newCycleForm.preferredPace === key ? "selected" : ""} onClick={() => setNewCycleForm({ ...newCycleForm, preferredPace: key })}><strong>{title}</strong><small>{help}</small></button>)}</div><div className="settings-grid"><label>משקל נוכחי<input type="number" min="25" max="350" step=".1" value={newCycleForm.currentWeight} onChange={(e) => setNewCycleForm({ ...newCycleForm, currentWeight: Number(e.target.value) })} /></label><label>משקל יעד<input type="number" min="25" max="350" step=".1" value={newCycleForm.targetWeight} onChange={(e) => setNewCycleForm({ ...newCycleForm, targetWeight: Number(e.target.value) })} /></label></div></section>
+          <section><header><b>3</b><div><strong>ניסיון ואימונים</strong><small>המלצות המאמן יתאימו לשגרה האמיתית שלך</small></div></header><div className="settings-grid"><label>ניסיון באימוני כוח<select value={newCycleForm.trainingExperience} onChange={(e) => setNewCycleForm({ ...newCycleForm, trainingExperience: e.target.value })}><option value="beginner">מתחיל/ה</option><option value="intermediate">ביניים</option><option value="advanced">מתקדם/ת</option><option value="none">לא מבצע/ת אימוני כוח</option></select></label><label>אימונים בשבוע<input type="number" min="0" max="14" value={newCycleForm.workouts} onChange={(e) => setNewCycleForm({ ...newCycleForm, workouts: Number(e.target.value) })} /></label></div><fieldset className="onboarding-choice-field"><legend>סוגי אימון</legend><div className="profile-choice-chips">{Object.entries(workoutTypeLabels).map(([key,label]) => <button type="button" key={key} className={newCycleForm.workoutTypes.includes(key) ? "selected" : ""} onClick={() => setNewCycleForm({ ...newCycleForm, workoutTypes: newCycleForm.workoutTypes.includes(key) ? newCycleForm.workoutTypes.filter((item) => item !== key) : [...newCycleForm.workoutTypes, key] })}>{label}</button>)}</div></fieldset></section>
+        </div><p className="modal-help">הנתונים שלא ידועים יכולים להישאר ריקים. המערכת לא תשלים היסטוריה שלא הוזנה ולא תשנה יעד ללא אישור.</p><footer><button type="button" onClick={() => setNewCycleOpen(false)}>ביטול</button><button className="primary" disabled={busy}>שמור והתחל מסלול</button></footer></form></div>}
       {partnerOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setPartnerOpen(false)} />
@@ -5580,6 +5596,13 @@ function Onboarding({
       </div>
     </>,
     <>
+      <p className="eyebrow">נקודת הכניסה שלך</p>
+      <h1>איפה אתה נמצא בתהליך?</h1>
+      <p>השאלות משתנות לפי הבחירה. אפשר להשאיר כל פרט שאינך יודע ריק.</p>
+      <div className="journey-stage-grid onboarding-journey-stages">{Object.entries(journeyStageLabels).map(([key,label]) => <button type="button" key={key} className={values.journeyStage === key ? "selected" : ""} onClick={() => setValues({ ...values, journeyStage: key })}>{label}</button>)}</div>
+      {values.journeyStage !== "starting" && <div className="journey-existing-details onboarding-existing-details"><div className="metrics-grid"><label>כמה שבועות אתה כבר בתהליך?<input type="number" min="0" max="520" value={values.journeyWeeks} onChange={(e) => setValues({ ...values, journeyWeeks: Number(e.target.value) })} /></label><label>משקל בתחילת התהליך<input type="number" min="25" max="350" step=".1" value={values.journeyStartingWeight || ""} onChange={(e) => setValues({ ...values, journeyStartingWeight: Number(e.target.value) })} /></label><label>שינוי משוער ב־4 השבועות האחרונים<input type="number" min="-20" max="20" step=".1" value={values.journeyRecentChangeKg || ""} onChange={(e) => setValues({ ...values, journeyRecentChangeKg: Number(e.target.value) })} /><small>בק״ג: מינוס לירידה, פלוס לעלייה</small></label><label>יעד קלורי קודם — אם היה<input type="number" min="800" max="6000" value={values.previousCalorieTarget || ""} onChange={(e) => setValues({ ...values, previousCalorieTarget: Number(e.target.value) })} /></label>{values.journeyStage === "plateau" && <label>כמה שבועות קיימת תקיעות?<input type="number" min="1" max="52" value={values.plateauWeeks || ""} onChange={(e) => setValues({ ...values, plateauWeeks: Number(e.target.value) })} /></label>}<label>מה ניסית עד עכשיו?<select value={values.priorApproach} onChange={(e) => setValues({ ...values, priorApproach: e.target.value })}><option value="">לא בחרתי</option><option value="calorie_tracking">ספירת קלוריות</option><option value="meal_plan">תפריט קבוע</option><option value="intuitive">אכילה אינטואיטיבית</option><option value="low_carb">הפחתת פחמימות</option><option value="other">שיטה אחרת</option></select></label><label className="wide">מה הקושי המרכזי כרגע?<textarea value={values.mainChallenge} maxLength={300} onChange={(e) => setValues({ ...values, mainChallenge: e.target.value })} /></label></div><small>הדיווח עוזר למאמן להבין את הרקע. התאמות מספריות יחכו לנתונים שייאספו באפליקציה.</small></div>}
+    </>,
+    <>
       <p className="eyebrow">נקודת פתיחה</p>
       <h1>כמה פרטים לחישוב ראשוני</h1>
       <div className="metrics-grid">
@@ -5653,6 +5676,8 @@ function Onboarding({
         ))}
       </div>
       <div className="field-stack">
+        <label>ניסיון באימוני כוח<select value={values.trainingExperience} onChange={(e) => setValues({ ...values, trainingExperience: e.target.value })}><option value="beginner">מתחיל/ה</option><option value="intermediate">ביניים</option><option value="advanced">מתקדם/ת</option><option value="none">לא מבצע/ת אימוני כוח</option></select></label>
+        <label>קצב מסלול מועדף<select value={values.preferredPace} onChange={(e) => setValues({ ...values, preferredPace: e.target.value })}><option value="gentle">רגוע — פחות שינויים</option><option value="moderate">מתון — איזון בין קצב להתמדה</option><option value="focused">ממוקד — עדיין בגבולות שמרניים</option></select></label>
         <label>
           אימונים בשבוע
           <input
@@ -5704,7 +5729,7 @@ function Onboarding({
             className="primary"
             disabled={
               busy ||
-              (step === 1 && !values.birthDate) ||
+              (step === 3 && !values.birthDate) ||
               (step === 0 &&
                 (!values.name.trim() ||
                   (bootstrap &&

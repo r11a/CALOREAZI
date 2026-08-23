@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   const goalPlan = evaluateGoalPlan({ profile, measurements, days: trackedDays });
   const context = {
     identity: { name: user.name, conversationAlreadyStarted: recentConversation.length > 0 },
-    goals: { goal: profile.goal, currentWeightKg: currentWeight, targetWeightKg: Number(profile.targetWeight), remainingKg: Number((currentWeight - Number(profile.targetWeight)).toFixed(1)) },
+    goals: { goal: profile.goal, currentWeightKg: currentWeight, targetWeightKg: Number(profile.targetWeight), remainingKg: Number((currentWeight - Number(profile.targetWeight)).toFixed(1)), journey: profile.journey || { stage: "starting" } },
     bodyAndPlan: { sex: profile.sex, age: profile.age, heightCm: profile.height, bmi: profile.caloriePlan?.bmi, bmr: profile.caloriePlan?.bmr, maintenanceKcal: profile.caloriePlan?.maintenanceCalories, dailyTargetKcal: profile.calories, proteinTargetG: profile.protein, carbsTargetG: profile.carbs, fatTargetG: profile.fat, waterTargetMl: profile.waterMl },
     preferences: { activityLevel: profile.activity, workoutsPerWeek: profile.workouts, diet: profile.diet, restrictions: profile.restrictions || "אין מגבלות מתועדות", tasteProfile: profile.tasteProfile || { status: "שאלון הטעמים טרם מולא" }, acquaintance: profile.acquaintance || { status: "שאלון נעים להכיר טרם מולא" } },
     healthContext: { diabetesStatus: profile.diabetesStatus || "none", hypertension: Boolean(profile.hypertension), foodAllergies: profile.foodAllergies || "", relevantMedications: profile.relevantMedications || "", pregnancyStatus: profile.pregnancyStatus || "none" },
