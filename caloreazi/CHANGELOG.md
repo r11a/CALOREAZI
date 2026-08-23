@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.13.4
+
+- Personalized every Push notification with the user's first name and rotating concise wording without an application-name title.
+- Added a dedicated “send test” action beside every notification type with visible delivery feedback.
+
 ## 1.13.3
 
 - Fixed the mobile profile tabs so their icons and labels keep their full height and remain horizontally scrollable on narrow iPhone screens.
