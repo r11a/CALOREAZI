@@ -1,5 +1,6 @@
 export const DEFAULT_TIME_ZONE = process.env.TZ || "Asia/Jerusalem";
 
+/** @param {Date|string|number} value */
 export function localDateAt(value = new Date(), timeZone = DEFAULT_TIME_ZONE) {
   const date = value instanceof Date ? value : new Date(value);
   const parts = new Intl.DateTimeFormat("en", {

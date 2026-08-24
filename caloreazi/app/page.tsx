@@ -60,6 +60,7 @@ const emptyOnboarding = {
   trainingExperience: "beginner",
   preferredPace: "moderate",
   theme: "dark",
+  language: "he",
   adminPassword: "",
 };
 const goalLabels: Record<string, string> = {
@@ -456,6 +457,11 @@ function goalStatus(value: number, target: number) {
   if (ratio <= 1.05) return { className: "goal-on", label: "בטווח היעד" };
   return { className: "goal-over", label: "מעל היעד" };
 }
+function clientLocalDate(date = new Date(), timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+  const parts = new Intl.DateTimeFormat("en", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value || "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
 
 function exactAge(birthDate: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(birthDate || ""))) return null;
@@ -716,6 +722,7 @@ export default function Home() {
   const foodImageInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const mealSaveInFlight = useRef(false);
+  const waterMutationInFlight = useRef(false);
   const mealSaveRequestId = useRef("");
   const mealEditBaseUpdatedAt = useRef("");
   const imageCompletionRequested = useRef(new Set<string>());
@@ -967,6 +974,9 @@ export default function Home() {
   const latestWeight = weightEntries.at(-1)?.weight || profile?.weight || 0;
   const previousWeight = weightEntries.length > 1 ? Number(weightEntries.at(-2)?.weight) : null;
   const latestWeightDelta = previousWeight === null ? null : Number((Number(latestWeight) - previousWeight).toFixed(1));
+  const targetWeight = Number(profile?.targetWeight || 0);
+  const weightGoalDistance = Math.abs(targetWeight - initialWeight);
+  const weightGoalProgress = weightGoalDistance > 0 ? Math.max(0, Math.min(100, Math.round(Math.abs(Number(latestWeight) - initialWeight) / weightGoalDistance * 100))) : 0;
   const weightChange =
     weightEntries.length > 1
       ? Number(
@@ -1278,22 +1288,27 @@ export default function Home() {
   }
 
   async function addWater(amount = 250) {
+    if (waterMutationInFlight.current) return;
+    waterMutationInFlight.current = true;
     try {
       const recordedAt = new Date().toISOString();
+      const localDate = clientLocalDate(new Date(), profile?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+      const mutationKey = crypto.randomUUID();
       if (!navigator.onLine) {
-        await queueMutation("/api/water", "POST", JSON.stringify({ amount, recordedAt, localDate: state.today.date }));
-        setState((current: any) => ({ ...current, today: { ...current.today, waterMl: Math.max(0, Number(current.today.waterMl || 0) + amount) } }));
+        await queueMutation("/api/water", "POST", JSON.stringify({ amount, recordedAt, localDate }));
+        setState((current: any) => ({ ...current, today: { ...current.today, date: localDate, waterMl: Math.max(0, Number(current.today.waterMl || 0) + amount) } }));
         setOfflineQueueCount(await offlinePendingCount()); setMealResult({ name: "המים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
       }
       setState(
         await api("/api/water", {
           method: "POST",
-          body: JSON.stringify({ amount }),
+          headers: { "Idempotency-Key": mutationKey },
+          body: JSON.stringify({ amount, recordedAt, localDate }),
         }),
       );
     } catch (e) {
       setError((e as Error).message);
-    }
+    } finally { window.setTimeout(() => { waterMutationInFlight.current = false; }, 900); }
   }
   function openWaterEditor() {
     setWaterValue(Number(state?.today?.waterMl || 0));
@@ -1615,6 +1630,16 @@ export default function Home() {
       setError((e as Error).message);
     }
   }
+  async function deleteHistoryEntry(kind: "meal" | "water", id: string, date: string) {
+    const password = window.prompt(`מחיקת ${kind === "meal" ? "ארוחה" : "שתייה"} מההיסטוריה תעדכן מיד את כל המדדים. יש להזין סיסמה:`);
+    if (!password) return;
+    if (!window.confirm("למחוק את הרשומה ולעדכן מחדש את הקלוריות, אבות המזון, המים והציון?")) return;
+    try {
+      const latest = await api("/api/history", { method: "DELETE", body: JSON.stringify({ kind, id, date, password }) });
+      setState(latest); const [insights, goalPlan] = await Promise.all([api("/api/insights"), api("/api/goal-plan")]); setInsightsData({ ...insights, goalPlan });
+      setError(kind === "meal" ? "הארוחה נמחקה והמדדים חושבו מחדש." : "המים נמחקו והמדדים חושבו מחדש.");
+    } catch (e) { setError((e as Error).message); }
+  }
   async function undoDeleteMeal() {
     if (!undoMeal) return;
     try {
@@ -1673,6 +1698,14 @@ export default function Home() {
       setState(await api("/api/favorites", { method: "DELETE", body: JSON.stringify({ id }) }));
     } catch (e) { setError((e as Error).message); }
   }
+  async function saveFavorite(favorite: any) {
+    try { setState(await api("/api/favorites", { method: "PUT", body: JSON.stringify({ id: favorite.id, ...favorite.meal }) })); setPendingFavorite(null); }
+    catch (e) { setError((e as Error).message); }
+  }
+  async function calculateFavorite(favorite: any) {
+    try { setBusy(true); const result = await api("/api/ai/analyze-text", { method: "POST", body: JSON.stringify({ description: `${favorite.meal.name}, מנה אחת. חשב קלוריות וחלבון פחמימות ושומן.` }) }); const calculated = calculateMealDraft(result.items || [], result); setPendingFavorite({ ...favorite, editing: true, meal: { ...favorite.meal, kcal: Math.round(calculated.kcal || 0), protein: Math.round(calculated.protein || 0), carbs: Math.round(calculated.carbs || 0), fat: Math.round(calculated.fat || 0) } }); }
+    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  }
   function openProfile() {
     setProfileTab("basic");
     setProfileForm({
@@ -1703,6 +1736,8 @@ export default function Home() {
       tasteProfile: profile.tasteProfile || { likes: [], dislikes: [], prepTime: "medium" },
       acquaintance: profile.acquaintance || { bloodType: "", occupation: "", sleepHours: 0, stressLevel: 0, dailySchedule: "", mealPattern: "", cookingAccess: "", foodBudget: "", hungerTimes: "", emotionalEating: "", digestiveIssues: "", coachingStyle: "", motivation: "", eatingChallenges: "" },
       notificationPreferences: { ...notificationPreferenceDefaults, ...(profile.notificationPreferences || {}) },
+      language: profile.language || "he",
+      cameraCalibration: profile.cameraCalibration || { reference: "none", plateDiameterCm: 26, useLearnedCorrections: true },
       avatar: profile.avatar || "",
     });
     setWeightValue(latestWeight);
@@ -2647,7 +2682,7 @@ export default function Home() {
   const mealDraftPreview = calculateMealDraft(mealItems, mealForm);
 
   return (
-    <main className={dark ? "app-shell theme-dark" : "app-shell"} dir="rtl">
+    <main className={dark ? "app-shell theme-dark" : "app-shell"} dir={profile?.language === "en" ? "ltr" : "rtl"} lang={profile?.language || "he"}>
       {!online && (
         <div className="offline-banner">
           אין כרגע חיבור · ההזנות נשמרות במכשיר ויסונכרנו אוטומטית כשהחיבור יתחדש
@@ -4183,10 +4218,12 @@ export default function Home() {
             {profileTab === "account" && <section className="profile-tab-panel account-panel"><header><span>⚙</span><div><strong>העדפות וחשבון</strong><small>תצוגה, שיתוף, גיבוי וניהול מידע</small></div></header>
             <section className="account-credentials">
               <strong>פרטי התחברות</strong>
+              <label>שפת הממשק<select value={profileForm.language || "he"} onChange={(e) => setProfileForm({ ...profileForm, language: e.target.value })}><option value="he">עברית</option><option value="en">English (beta)</option></select><small>הבחירה נשמרת למשתמש ומשנה גם את כיוון הממשק. תרגום אנגלי מלא יושלם בהדרגה.</small></label>
               <label>כתובת אימייל<input type="email" value={profileForm.email || ""} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} /></label>
               {profileForm.email !== state.owner.email && <label>סיסמה נוכחית לאישור שינוי<input type="password" autoComplete="current-password" value={profileForm.accountPassword || ""} onChange={(e) => setProfileForm({ ...profileForm, accountPassword: e.target.value })} /></label>}
               <div className="password-change-grid"><label>סיסמה נוכחית<input type="password" autoComplete="current-password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} /></label><label>סיסמה חדשה<input type="password" autoComplete="new-password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} /></label><label>אימות סיסמה חדשה<input type="password" autoComplete="new-password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} /></label><button type="button" disabled={busy || !passwordForm.currentPassword || passwordForm.newPassword.length < 10 || passwordForm.newPassword !== passwordForm.confirmPassword} onClick={(event) => void changeAdminPassword(event as any)}>שנה סיסמה</button></div>
             </section>
+            <section className="camera-calibration-settings"><strong>כיול הערכת גודל בצילום</strong><p>הכיול מסייע לאומדן המנות בלבד ואינו מחליף שקילה.</p><div className="settings-grid"><label>אובייקט ייחוס<select value={profileForm.cameraCalibration?.reference || "none"} onChange={(e) => setProfileForm({ ...profileForm, cameraCalibration: { ...profileForm.cameraCalibration, reference: e.target.value } })}><option value="none">ללא אובייקט ייחוס</option><option value="plate">צלחת קבועה</option><option value="card">כרטיס בגודל תקני</option></select></label>{profileForm.cameraCalibration?.reference === "plate" && <label>קוטר הצלחת בס״מ<input type="number" min="15" max="40" step=".5" value={profileForm.cameraCalibration?.plateDiameterCm || 26} onChange={(e) => setProfileForm({ ...profileForm, cameraCalibration: { ...profileForm.cameraCalibration, plateDiameterCm: Number(e.target.value) } })} /></label>}<label className="checkbox-label"><input type="checkbox" checked={profileForm.cameraCalibration?.useLearnedCorrections !== false} onChange={(e) => setProfileForm({ ...profileForm, cameraCalibration: { ...profileForm.cameraCalibration, useLearnedCorrections: e.target.checked } })} /> למד מהתיקונים שלי</label></div></section>
             <button className="taste-profile-entry" type="button" onClick={openTasteWizard}><span>♡</span><div><strong>שאלון טעמים והעדפות</strong><small>{profile?.tasteProfile?.completedAt ? `${profile.tasteProfile.likes?.length || 0} העדפות אהובות נשמרו · אפשר לעדכן` : "שאלון קצר ולא חובה להתאמת המלצות הארוחות וה־AI"}</small></div><b>←</b></button>
             <button className="profile-sharing acquaintance-entry" type="button" onClick={() => setAcquaintanceOpen(true)}><span>✦</span><div><strong>נעים להכיר</strong><small>{profile?.acquaintance?.completedAt ? "השאלון נשמר · אפשר לעדכן בכל זמן" : "טופס אישי אופציונלי להתאמה מדויקת יותר"}</small></div><b>‹</b></button>
             {acquaintanceOpen && <div className="modal-layer acquaintance-layer"><button className="backdrop" type="button" onClick={() => setAcquaintanceOpen(false)} /><section className="settings-modal acquaintance-modal">
@@ -4282,6 +4319,7 @@ export default function Home() {
                     <small>{favorite.meal.kcal} kcal · {favorite.meal.protein || 0}g חלבון</small>
                   </div>
                   <button className="favorite-add" aria-label={`הוספת ${favorite.meal.name} להיום`} title="הוסף להיום" onClick={() => setPendingFavorite(favorite)}><AppIcon name="plus" /></button>
+                  <button className="favorite-edit" aria-label={`עריכת ${favorite.meal.name}`} title="ערוך וחישוב ערכים" onClick={() => setPendingFavorite({ ...favorite, editing: true })}>✎</button>
                   <button className="favorite-remove" aria-label={`הסרת ${favorite.meal.name} מהמועדפים`} title="הסר מהמועדפים" onClick={() => removeFavorite(favorite.id)}>×</button>
                 </article>
               ))}
@@ -4290,7 +4328,7 @@ export default function Home() {
           </section>
         </div>
       )}
-      {pendingFavorite && <div className="modal-layer modal-nested"><button className="backdrop" onClick={() => setPendingFavorite(null)} /><section className="settings-modal compact-modal favorite-confirm"><header><div><h2>להוסיף להיום?</h2><p>{pendingFavorite.meal.name}</p></div><button onClick={() => setPendingFavorite(null)}>×</button></header><div><strong>{pendingFavorite.meal.kcal} קלוריות</strong><span>{pendingFavorite.meal.protein || 0}g חלבון · {pendingFavorite.meal.carbs || 0}g פחמימות · {pendingFavorite.meal.fat || 0}g שומן</span></div><footer><button onClick={() => setPendingFavorite(null)}>ביטול</button><button className="primary" onClick={async () => { await repeatFavorite(pendingFavorite.id); setPendingFavorite(null); setFoodLibraryOpen(false); }}>＋ הוסף לארוחה</button></footer></section></div>}
+      {pendingFavorite && <div className="modal-layer modal-nested"><button className="backdrop" onClick={() => setPendingFavorite(null)} /><section className="settings-modal compact-modal favorite-confirm"><header><div><h2>{pendingFavorite.editing ? "עריכת מועדף" : "להוסיף להיום?"}</h2><p>{pendingFavorite.meal.name}</p></div><button onClick={() => setPendingFavorite(null)}>×</button></header>{pendingFavorite.editing ? <div className="favorite-edit-form"><label>שם המאכל<input value={pendingFavorite.meal.name || ""} onChange={(e) => setPendingFavorite({ ...pendingFavorite, meal: { ...pendingFavorite.meal, name: e.target.value } })} /></label><div>{[["kcal","קלוריות"],["protein","חלבון"],["carbs","פחמימות"],["fat","שומן"]].map(([key,label]) => <label key={key}>{label}<input type="number" min="0" value={pendingFavorite.meal[key] || 0} onChange={(e) => setPendingFavorite({ ...pendingFavorite, meal: { ...pendingFavorite.meal, [key]: Number(e.target.value) } })} /></label>)}</div><button type="button" className="favorite-ai-calculate" disabled={busy} onClick={() => calculateFavorite(pendingFavorite)}>⌁ {busy ? "מחשב…" : "חשב ערכים עם AI"}</button></div> : <div><strong>{pendingFavorite.meal.kcal} קלוריות</strong><span>{pendingFavorite.meal.protein || 0}g חלבון · {pendingFavorite.meal.carbs || 0}g פחמימות · {pendingFavorite.meal.fat || 0}g שומן</span></div>}<footer><button onClick={() => setPendingFavorite(null)}>ביטול</button>{pendingFavorite.editing ? <button className="primary" onClick={() => saveFavorite(pendingFavorite)}>שמור שינויים</button> : <button className="primary" onClick={async () => { await repeatFavorite(pendingFavorite.id); setPendingFavorite(null); setFoodLibraryOpen(false); }}>＋ הוסף לארוחה</button>}</footer></section></div>}
       {editingFood && (
         <div className="modal-layer modal-nested">
           <button className="backdrop" onClick={() => setEditingFood(null)} />
@@ -4510,7 +4548,7 @@ export default function Home() {
                         <small>הציון מחושב אוטומטית במנוע 2.0 · כיסוי הנתונים: {Number(day.dailyScore?.coverage || 0)}%. נתון שלא תועד אינו מוצג כאילו נכשל.</small>
                       </section>
                       <section className="history-timeline">
-                        {timelineEntries.map((meal: any) => meal.kind === "water" ? <article className="timeline-water" key={meal.id}><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><i /><span className="timeline-icon">💧</span><div><em>שתייה</em><strong>כוס מים</strong><small>{meal.amount} מ״ל</small></div><b>{meal.amount}<small> מ״ל</small></b></article> : (
+                        {timelineEntries.map((meal: any) => meal.kind === "water" ? <article className="timeline-water" key={meal.id}><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><i /><span className="timeline-icon">💧</span><div><em>שתייה</em><strong>כוס מים</strong><small>{meal.amount} מ״ל</small></div><b>{meal.amount}<small> מ״ל</small></b><button className="history-delete-entry" type="button" onClick={() => deleteHistoryEntry("water", meal.id, day.date)} aria-label="מחיקת כוס המים">מחיקה</button></article> : (
                             <article
                               className={`timeline-${meal.period || "snack"}`}
                               key={meal.id}
@@ -4539,6 +4577,7 @@ export default function Home() {
                                 {meal.kcal}
                                 <small> kcal</small>
                               </b>
+                              <button className="history-delete-entry" type="button" onClick={() => deleteHistoryEntry("meal", meal.id, day.date)} aria-label={`מחיקת ${meal.name}`}>מחיקה</button>
                             </article>
                           ))}
                       </section>
@@ -4646,6 +4685,7 @@ export default function Home() {
                 <div><strong>מעקב משקל</strong><small>כל עדכון נשמר כמדידה חדשה לפי תאריך ואינו מוחק את ההיסטוריה</small></div>
                 <b>{latestWeight ? `${Number(latestWeight).toFixed(1)} ק״ג` : "אין מדידה"}{latestWeightDelta !== null ? <small className={latestWeightDelta > 0 ? "weight-up" : latestWeightDelta < 0 ? "weight-down" : "weight-steady"}><span aria-hidden="true">{latestWeightDelta > 0 ? "↑" : latestWeightDelta < 0 ? "↓" : "→"}</span> {Math.abs(latestWeightDelta).toFixed(1)} ק״ג <em>מהקודם</em></small> : <small className="weight-steady">אין מדידה קודמת</small>}</b>
               </div>
+              {initialWeight > 0 && targetWeight > 0 && <section className="weight-goal-axis" aria-label="ציר התקדמות ממשקל התחלתי למשקל יעד"><header><span><small>משקל הזנה</small><strong>{initialWeight.toFixed(1)}</strong></span><b>{weightGoalProgress}% בדרך ליעד</b><span><small>משקל יעד</small><strong>{targetWeight.toFixed(1)}</strong></span></header><div><i style={{ width: `${weightGoalProgress}%` }} /><em style={{ insetInlineStart: `${weightGoalProgress}%` }}>{Number(latestWeight).toFixed(1)}</em></div><footer><small>התחלה</small><strong>משקל נוכחי</strong><small>יעד</small></footer></section>}
               <form className="weight-update-form" onSubmit={saveTrendWeight}>
                 <label>משקל נוכחי<input type="number" min="25" max="350" step="0.1" value={weightValue || ""} onChange={(event) => setWeightValue(Number(event.target.value))} /></label>
                 <label>תאריך המדידה<input type="date" value={weightDate} max={state.today?.date} onChange={(event) => setWeightDate(event.target.value)} /></label>
@@ -5654,6 +5694,7 @@ function Onboarding({
             <button type="button" className={values.theme === "light" ? "selected light-choice" : "light-choice"} onClick={() => setValues({ ...values, theme: "light" })}><i />בהיר</button>
           </div>
         </div>
+        <label>שפת הממשק<select value={values.language || "he"} onChange={(e) => setValues({ ...values, language: e.target.value })}><option value="he">עברית</option><option value="en">English (beta)</option></select></label>
       </div>
     </>,
     <>

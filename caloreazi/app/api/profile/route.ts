@@ -55,6 +55,12 @@ export async function PUT(request: Request) {
       relevantMedications: String(body.relevantMedications || "").slice(0, 500),
       pregnancyStatus: ["none", "pregnant", "breastfeeding"].includes(body.pregnancyStatus) ? body.pregnancyStatus : "none",
       timeZone: validTimeZone(body.timeZone || profile.timeZone),
+      language: ["he", "en"].includes(body.language) ? body.language : (profile.language || "he"),
+      cameraCalibration: body.cameraCalibration && typeof body.cameraCalibration === "object" ? {
+        reference: ["plate", "card", "none"].includes(body.cameraCalibration.reference) ? body.cameraCalibration.reference : "none",
+        plateDiameterCm: Math.max(15, Math.min(40, Number(body.cameraCalibration.plateDiameterCm) || 26)),
+        useLearnedCorrections: body.cameraCalibration.useLearnedCorrections !== false,
+      } : (profile.cameraCalibration || { reference: "none", plateDiameterCm: 26, useLearnedCorrections: true }),
       trainingDayBonus: Math.min(600, Math.max(0, Number(body.trainingDayBonus) || 0)),
       targetMode: ["custom", "adaptive"].includes(body.targetMode) ? body.targetMode : "automatic",
       tasteProfile: tasteProfile || profile.tasteProfile,

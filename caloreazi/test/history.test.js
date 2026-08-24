@@ -18,3 +18,19 @@ test("rolls a completed day into per-user history without losing meals", () => {
   assert.equal(data.today.meals.length, 0);
   assert.ok(data.today.date > "2025-01-01");
 });
+
+test("rolls an empty day at midnight so the first new entry belongs to today", () => {
+  const state = { userData: { u1: { profile: { timeZone: "Asia/Jerusalem" }, today: { date: "2025-01-01", waterMl: 0, waterEvents: [], meals: [] }, history: [] } } };
+  const data = ensureUserData(state, "u1");
+  assert.equal(data.today.date, localDateAt(new Date(), "Asia/Jerusalem"));
+  assert.equal(data.history.length, 0);
+});
+
+test("restores an already-created current local day instead of duplicating it", () => {
+  const current = localDateAt(new Date(), "Asia/Jerusalem");
+  const state = { userData: { u1: { profile: { timeZone: "Asia/Jerusalem" }, today: { date: "2025-01-01", waterMl: 0, meals: [] }, history: [{ date: current, waterMl: 250, waterEvents: [{ id: "w1", amount: 250 }], meals: [] }] } } };
+  const data = ensureUserData(state, "u1");
+  assert.equal(data.today.date, current);
+  assert.equal(data.today.waterMl, 250);
+  assert.equal(data.history.some((day) => day.date === current), false);
+});

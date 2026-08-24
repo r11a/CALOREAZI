@@ -86,9 +86,20 @@ export function ensureUserData(state, userId) {
   data.coachHistory = Array.isArray(data.coachHistory) ? data.coachHistory : [];
   data.today = { ...structuredClone(defaultState.today), ...(data.today || {}) };
   const todayDate = localDateAt(new Date(), userTimeZone(data));
-  if (data.today.date && data.today.date !== todayDate && (data.today.meals.length || data.today.waterMl)) {
-    if (!data.history.some((day) => day.date === data.today.date)) data.history.push(structuredClone(data.today));
-    data.today = { date: todayDate, waterMl: 0, meals: [] };
+  if (data.today.date && data.today.date !== todayDate) {
+    if (data.today.meals.length || data.today.waterMl) {
+      const archived = data.history.find((day) => day.date === data.today.date);
+      if (archived) {
+        archived.meals = [...(archived.meals || []), ...data.today.meals.filter((meal) => !(archived.meals || []).some((item) => item.id === meal.id))];
+        archived.waterEvents = [...(archived.waterEvents || []), ...(data.today.waterEvents || []).filter((event) => !(archived.waterEvents || []).some((item) => item.id === event.id))];
+        archived.waterMl = archived.waterEvents.length ? archived.waterEvents.reduce((sum, event) => sum + Number(event.amount || 0), 0) : Math.max(Number(archived.waterMl || 0), Number(data.today.waterMl || 0));
+      } else data.history.push(structuredClone(data.today));
+    }
+    const existingToday = data.history.find((day) => day.date === todayDate);
+    if (existingToday) {
+      data.today = { ...existingToday, meals: [...(existingToday.meals || [])], waterEvents: [...(existingToday.waterEvents || [])] };
+      data.history = data.history.filter((day) => day !== existingToday);
+    } else data.today = { date: todayDate, waterMl: 0, waterEvents: [], meals: [] };
   } else if (!data.today.date) data.today.date = todayDate;
   state.userData[userId] = data;
   return data;

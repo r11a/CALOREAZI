@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.18.2
+
+- Fixed local-midnight rollover even when the previous day was empty, and assigned meals and water using each user's timezone.
+- Added duplicate-tap protection and idempotent feedback for water updates.
+- Added password-protected meal and water deletion from history with immediate score and metric recalculation.
+- Added a start-to-target weight progress axis and RTL-aligned trend bars.
+- Added favorite editing, manual nutrition values and AI recalculation.
+- Added per-user Hebrew/English language preference and onboarding language selection; English remains explicitly marked beta.
+- Improved dark onboarding controls, chat readability and the coach panel visual hierarchy.
+- Added optional experimental camera portion calibration using a plate or standard-card reference and learned corrections.
+
 ## 1.18.1
 
 - Added a clear onboarding and reusable “My path” wizard that records where the user joined the process, prior duration and progress, earlier approach, current obstacle, training experience and preferred pace.
