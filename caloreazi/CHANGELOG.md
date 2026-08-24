@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.18.3
+
+- Water entries can now be deleted directly from history without a password after an explicit confirmation, while meal deletion remains password protected.
+- Replaced profile-tab emoji thumbnails with the product's consistent vector icon language and improved mobile spacing, active states and tap targets.
+
 ## 1.18.2
 
 - Fixed local-midnight rollover even when the previous day was empty, and assigned meals and water using each user's timezone.

@@ -1631,9 +1631,10 @@ export default function Home() {
     }
   }
   async function deleteHistoryEntry(kind: "meal" | "water", id: string, date: string) {
-    const password = window.prompt(`מחיקת ${kind === "meal" ? "ארוחה" : "שתייה"} מההיסטוריה תעדכן מיד את כל המדדים. יש להזין סיסמה:`);
-    if (!password) return;
-    if (!window.confirm("למחוק את הרשומה ולעדכן מחדש את הקלוריות, אבות המזון, המים והציון?")) return;
+    const password = kind === "meal" ? window.prompt("מחיקת ארוחה מההיסטוריה דורשת את הסיסמה הנוכחית:") : "";
+    if (kind === "meal" && !password) return;
+    const confirmed = window.confirm(kind === "water" ? "למחוק את כוס המים הזו? כמות המים והציון של אותו יום יעודכנו מיד." : "למחוק את הארוחה ולעדכן מחדש את הקלוריות, אבות המזון והציון?");
+    if (!confirmed) return;
     try {
       const latest = await api("/api/history", { method: "DELETE", body: JSON.stringify({ kind, id, date, password }) });
       setState(latest); const [insights, goalPlan] = await Promise.all([api("/api/insights"), api("/api/goal-plan")]); setInsightsData({ ...insights, goalPlan });
@@ -4045,8 +4046,8 @@ export default function Home() {
                 </button>
               </div>
             </div>
-            <nav className="profile-tabs" aria-label="חלקי הפרופיל">{[["basic","👤","אישי"],["health","♥","בריאות"],["goals","◎","יעדים"],["notifications","🔔","התראות"],["account","⚙","חשבון"]].map(([key,icon,label]) => <button key={key} type="button" className={profileTab === key ? "active" : ""} onClick={() => setProfileTab(key as typeof profileTab)}><span>{icon}</span>{label}</button>)}</nav>
-            {profileTab === "basic" && <section className="profile-tab-panel"><header><span>👤</span><div><strong>הפרטים הבסיסיים שלי</strong><small>נתונים המשמשים לחישוב יעדים ומעקב</small></div></header>
+            <nav className="profile-tabs" aria-label="חלקי הפרופיל">{[["basic","user","אישי"],["health","heart","בריאות"],["goals","target","יעדים"],["notifications","bell","התראות"],["account","settings","חשבון"]].map(([key,icon,label]) => <button key={key} type="button" className={profileTab === key ? "active" : ""} onClick={() => setProfileTab(key as typeof profileTab)}><span><AppIcon name={icon as any} /></span><b>{label}</b></button>)}</nav>
+            {profileTab === "basic" && <section className="profile-tab-panel"><header><span><AppIcon name="user" /></span><div><strong>הפרטים הבסיסיים שלי</strong><small>נתונים המשמשים לחישוב יעדים ומעקב</small></div></header>
             <div className="settings-grid">
               <label>
                 שם
@@ -4150,7 +4151,7 @@ export default function Home() {
               </label>
             </div>
             </section>}
-            {profileTab === "health" && <section className="profile-tab-panel"><header><span>♥</span><div><strong>בריאות והתאמה אישית</strong><small>מידע רלוונטי להמלצות בטוחות יותר</small></div></header>
+            {profileTab === "health" && <section className="profile-tab-panel"><header><span><AppIcon name="heart" /></span><div><strong>בריאות והתאמה אישית</strong><small>מידע רלוונטי להמלצות בטוחות יותר</small></div></header>
             <section className="health-profile">
               <div><p className="eyebrow">מידע בריאותי רלוונטי</p><h3>התאמה בטוחה יותר של ההמלצות</h3><small>נשמר בפרופיל הפרטי ומשמש את ה־AI. אינו תחליף לייעוץ רפואי.</small></div>
               <div className="settings-grid">
@@ -4162,7 +4163,7 @@ export default function Home() {
               </div>
             </section>
             </section>}
-            {profileTab === "goals" && <section className="profile-tab-panel"><header><span>◎</span><div><strong>יעדים ומדדים</strong><small>טווחים, משקל ומצב ההתקדמות</small></div></header>
+            {profileTab === "goals" && <section className="profile-tab-panel"><header><span><AppIcon name="target" /></span><div><strong>יעדים ומדדים</strong><small>טווחים, משקל ומצב ההתקדמות</small></div></header>
             <section className="health-profile">
               <div><p className="eyebrow">יעדים מקצועיים</p><h3>טווחים ויום אימון</h3></div>
               <div className="settings-grid">
@@ -4200,7 +4201,7 @@ export default function Home() {
               </span>
             </div>
             </section>}
-            {profileTab === "notifications" && <section className="profile-tab-panel notification-settings-panel"><header><span>🔔</span><div><strong>התראות חכמות</strong><small>רק מה שבחרת, בזמן רלוונטי ובהתאם ליום שלך</small></div></header>
+            {profileTab === "notifications" && <section className="profile-tab-panel notification-settings-panel"><header><span><AppIcon name="bell" /></span><div><strong>התראות חכמות</strong><small>רק מה שבחרת, בזמן רלוונטי ובהתאם ליום שלך</small></div></header>
               <label className="notification-master" htmlFor="notification-master-enabled"><input id="notification-master-enabled" aria-label="הפעלת התראות אוטומטיות" type="checkbox" checked={profileForm.notificationPreferences?.enabled !== false} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, enabled: event.target.checked } })} /><span><strong>הפעלת התראות אוטומטיות</strong><small>המתזמן מכבד שעות שקטות ומגבלת התראות יומית</small></span></label>
               <div className="notification-type-list">{notificationTypeOptions.map(([key,title,description]) => <article key={key}><label htmlFor={`notification-${key}`}><input id={`notification-${key}`} aria-label={title} type="checkbox" checked={Boolean(profileForm.notificationPreferences?.[key])} onChange={(event) => setProfileForm({ ...profileForm, notificationPreferences: { ...notificationPreferenceDefaults, ...profileForm.notificationPreferences, [key]: event.target.checked } })} /><span><strong>{title}</strong><small>{description}</small></span></label><button type="button" disabled={Boolean(testingNotificationType)} onClick={() => testNotification(key, title)}>{testingNotificationType === key ? "שולח…" : "שלח לבדיקה"}</button></article>)}</div>
               <section className="notification-times"><header><strong>זמנים מועדפים</strong><small>הודעה תישלח רק אם היא עדיין רלוונטית</small></header><div>
@@ -4215,7 +4216,7 @@ export default function Home() {
               <button className="notification-enable-button" type="button" onClick={enableNotifications} disabled={busy}>{busy ? "מפעיל…" : notificationPermission === "granted" ? "בדוק שוב התראות למסך הנעילה" : "הפעל התראות למסך הנעילה"}</button>
               <p className={`notification-live-status ${notificationStatus.includes("✓") ? "success" : ""}`} aria-live="polite">{notificationStatus || (notificationPermission === "granted" ? "הרשאת iPhone קיימת. לחץ כדי לוודא שהחיבור לשרת תקין." : "לאחר הלחיצה iPhone יבקש ממך לאשר התראות.")}</p>
             </section>}
-            {profileTab === "account" && <section className="profile-tab-panel account-panel"><header><span>⚙</span><div><strong>העדפות וחשבון</strong><small>תצוגה, שיתוף, גיבוי וניהול מידע</small></div></header>
+            {profileTab === "account" && <section className="profile-tab-panel account-panel"><header><span><AppIcon name="settings" /></span><div><strong>העדפות וחשבון</strong><small>תצוגה, שיתוף, גיבוי וניהול מידע</small></div></header>
             <section className="account-credentials">
               <strong>פרטי התחברות</strong>
               <label>שפת הממשק<select value={profileForm.language || "he"} onChange={(e) => setProfileForm({ ...profileForm, language: e.target.value })}><option value="he">עברית</option><option value="en">English (beta)</option></select><small>הבחירה נשמרת למשתמש ומשנה גם את כיוון הממשק. תרגום אנגלי מלא יושלם בהדרגה.</small></label>
