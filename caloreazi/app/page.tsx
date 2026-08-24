@@ -690,6 +690,14 @@ export default function Home() {
   const [historyCalendarMonth, setHistoryCalendarMonth] = useState("");
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [insightsData, setInsightsData] = useState<any>(null);
+  useEffect(() => {
+    if (!insightsOpen || !insightsData?.recommendationRefreshAt) return;
+    const delay = Math.max(5_000, new Date(insightsData.recommendationRefreshAt).getTime() - Date.now() + 1_000);
+    const timer = window.setTimeout(() => {
+      api("/api/insights").then((latest) => setInsightsData((current: any) => ({ ...latest, goalPlan: current?.goalPlan }))).catch(() => undefined);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [insightsOpen, insightsData?.recommendationRefreshAt]);
   const [activityOpen, setActivityOpen] = useState(false);
   const [activityForm, setActivityForm] = useState({
     description: "",
@@ -3192,7 +3200,7 @@ export default function Home() {
           <button className="backdrop" onClick={() => setCoachOpen(false)} />
           <aside className="coach-sheet">
             <header>
-              <div className={`coach-avatar ${coachIsFemale ? "female" : "male"}`}><AppIcon name="coach" /><b>{coachDisplayName}</b></div>
+              <div className={`coach-avatar ${coachIsFemale ? "female" : "male"}`}><img src={coachIsFemale ? "/coach-avatar-female.webp" : "/coach-avatar-male.webp"} alt={coachIsFemale ? "אווטאר המאמנת" : "אווטאר המאמן"} /><b>{coachDisplayName}</b></div>
               <div>
                 <strong>{coachDisplayName} · {coachIsFemale ? "המאמנת האישית שלך" : "המאמן האישי שלך"}</strong>
                 <small>
@@ -3213,7 +3221,7 @@ export default function Home() {
               {messages.map((item, index) => (
                 <div key={index} className={`chat-message-row ${item.role}`}>
                   <div className={`chat-avatar ${item.role === "user" ? "user" : coachIsFemale ? "coach female" : "coach male"}`}>
-                    {item.role === "user" && profile?.avatar ? <img src={profile.avatar} alt={state.owner.name} /> : item.role === "user" ? <AppIcon name="user" /> : <><AppIcon name="coach" /><b>{coachDisplayName.slice(0, 1)}</b></>}
+                    {item.role === "user" && profile?.avatar ? <img src={profile.avatar} alt={state.owner.name} /> : item.role === "user" ? <AppIcon name="user" /> : <img src={coachIsFemale ? "/coach-avatar-female.webp" : "/coach-avatar-male.webp"} alt={coachIsFemale ? "המאמנת" : "המאמן"} />}
                   </div>
                   <div className={`chat-message ${item.role}`}>
                     <span>{item.text}</span>
