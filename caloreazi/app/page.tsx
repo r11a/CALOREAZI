@@ -1047,6 +1047,14 @@ export default function Home() {
   });
   const waterByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, amount: historyDays.slice(-30).flatMap((day: any) => day.waterEvents || []).filter((event: any) => new Date(event.time).getHours() === hour).reduce((sum: number, event: any) => sum + Number(event.amount || 0), 0) }));
   const maximumWaterHour = Math.max(1, ...waterByHour.map((item) => item.amount));
+  const trend30Days = insightsData?.daily?.slice(-30) || [];
+  const trend30Points = trend30Days.map((day: any, index: number) => ({
+    ...day,
+    x: trend30Days.length === 1 ? 300 : 24 + index * (552 / Math.max(1, trend30Days.length - 1)),
+    y: 142 - Math.max(0, Math.min(100, Number(day.score || 0))) * 1.12,
+  }));
+  const trend30Line = trend30Points.map((point: any) => `${point.x},${point.y}`).join(" ");
+  const trend30Area = trend30Points.length ? `24,150 ${trend30Line} ${trend30Points.at(-1).x},150` : "";
   const greeting =
     now.getHours() < 5
       ? "לילה טוב"
@@ -4994,8 +5002,18 @@ export default function Home() {
                 <p className="coach-recommendation"><b>המלצת זהב:</b> {insightsData.recommendation}</p>
                 <section className="trend-comparison">
                   <header><div><strong>תמונת מצב ל־30 ימים</strong><small>המסלול שלך במבט אחד · רק ימים מתועדים נכנסים לממוצע</small></div><b className={Number(insightsData.summary.calorieWeeklyChange || 0) <= 0 ? "down" : "up"}>{Number(insightsData.summary.calorieWeeklyChange || 0) === 0 ? "→ יציב" : Number(insightsData.summary.calorieWeeklyChange || 0) > 0 ? "↗ מגמת עלייה" : "↘ מגמת ירידה"}</b></header>
-                  <div className="trend-live-chart" aria-label="גרף ציונים וקלוריות ב־30 הימים האחרונים">
-                    {insightsData.daily.slice(-30).map((day: any, index: number) => <span key={day.date} style={{ "--bar-height": `${Math.max(8, Number(day.score || 0))}%`, "--bar-delay": `${index * 24}ms` } as React.CSSProperties} title={`${day.date}: ציון ${day.score || 0}`}><i className={`score-${scoreToneFor(day.score || 0)}`} /><small>{index % 5 === 0 ? new Date(`${day.date}T12:00:00`).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" }) : ""}</small></span>)}
+                  <div className="trend-live-chart" aria-label="גרף הציון ב־30 הימים האחרונים">
+                    {trend30Points.length ? <>
+                      <div className="trend-chart-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></div>
+                      <svg viewBox="0 0 600 170" preserveAspectRatio="none" role="img" aria-label="מגמת הציון היומי">
+                        <defs><linearGradient id="trend30Fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#55bfe6" stopOpacity=".48"/><stop offset="1" stopColor="#55bfe6" stopOpacity=".02"/></linearGradient><linearGradient id="trend30Stroke" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#8b6bd1"/><stop offset=".5" stopColor="#55bfe6"/><stop offset="1" stopColor="#51b77c"/></linearGradient></defs>
+                        <g className="trend-grid-lines"><line x1="24" y1="30" x2="576" y2="30"/><line x1="24" y1="86" x2="576" y2="86"/><line x1="24" y1="142" x2="576" y2="142"/></g>
+                        <polygon className="trend-area" points={trend30Area}/>
+                        <polyline className="trend-line" points={trend30Line}/>
+                        {trend30Points.map((point: any, index: number) => <g className="trend-point" style={{ "--point-delay": `${420 + index * 28}ms` } as React.CSSProperties} key={point.date}><circle cx={point.x} cy={point.y} r="5"/><title>{`${new Date(`${point.date}T12:00:00`).toLocaleDateString("he-IL")}: ציון ${point.score || 0}`}</title></g>)}
+                      </svg>
+                      <div className="trend-chart-dates"><span>{new Date(`${trend30Points[0].date}T12:00:00`).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</span><strong>ציון יומי</strong><span>{new Date(`${trend30Points.at(-1).date}T12:00:00`).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</span></div>
+                    </> : <p className="trend-empty">הגרף יתחיל להיבנות לאחר תיעוד היום הראשון.</p>}
                   </div>
                   <div>
                     <span><small>ימי מעקב</small><strong>{insightsData.summary.monthlyTrackedDays} / 30</strong></span>
