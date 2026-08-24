@@ -3125,6 +3125,31 @@ export default function Home() {
               <button onClick={() => setSettingsOpen(false)}>×</button>
             </header>
             <div className="admin-workspace">
+            <label className="admin-mobile-nav">
+              <span><AppIcon name="settings" /><small>אזור ניהול</small></span>
+              <select
+                value={adminTab}
+                aria-label="בחירת אזור במרכז הניהול"
+                onChange={(event) => {
+                  const nextTab = event.target.value as typeof adminTab;
+                  if (nextTab === "trash") void openTrash();
+                  else setAdminTab(nextTab);
+                }}
+              >
+                <optgroup label="מערכת">
+                  <option value="ai">AI ומודלים</option>
+                  <option value="users">ניהול משתמשים</option>
+                  <option value="security">אבטחה וגישה</option>
+                </optgroup>
+                <optgroup label="מידע ותחזוקה">
+                  <option value="storage">אחסון ומדיה</option>
+                  <option value="database">מסד נתונים</option>
+                  <option value="backups">גיבויים ושחזור</option>
+                  <option value="audit">יומן פעילות</option>
+                  <option value="trash">סל מחזור</option>
+                </optgroup>
+              </select>
+            </label>
             <nav className="admin-nav">
               <button
                 className={adminTab === "ai" ? "active" : ""}

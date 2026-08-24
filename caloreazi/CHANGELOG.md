@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.18.7
+
+- Replaced clipped mobile ADMIN tabs with one clear, full-width section selector grouped by system and maintenance tasks.
+
 ## 1.18.6
 
 - Moved ADMIN management out of the user profile and into a subtle settings icon beside the administrator avatar.

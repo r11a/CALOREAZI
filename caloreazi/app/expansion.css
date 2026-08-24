@@ -153,6 +153,7 @@
 .admin-workspace>.admin-nav .app-icon{width:20px;height:20px;justify-self:center;color:currentColor}
 .admin-workspace>.admin-nav button>span{min-width:0;display:grid;gap:3px}
 .admin-workspace>.admin-nav button strong{font-size:13px}.admin-workspace>.admin-nav button small{overflow:hidden;color:var(--muted);font-size:9px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+.admin-mobile-nav{display:none}
 .admin-content{min-height:0;padding:24px 28px 38px;overflow-y:auto;scrollbar-width:none}
 .admin-page-heading{margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .admin-page-heading h3{margin:2px 0 0;font-size:27px}.admin-page-heading .eyebrow{margin:0}
@@ -170,15 +171,14 @@
 .admin-center.admin-tab-security .admin-content>#admin-security,.admin-center.admin-tab-users .admin-content>#admin-users,.admin-center.admin-tab-storage .admin-content>#admin-storage,.admin-center.admin-tab-database .admin-content>#admin-database,.admin-center.admin-tab-backups .admin-content>#admin-backups,.admin-center.admin-tab-audit .admin-content>#admin-audit,.admin-center.admin-tab-trash .admin-content>#admin-trash{display:block}
 .admin-center>footer{position:relative!important;bottom:auto!important;flex:none;margin:0!important;padding:12px 24px max(12px,env(safe-area-inset-bottom));background:var(--surface)}
 .theme-dark .admin-workspace{background:#111514}.theme-dark .admin-workspace>.admin-nav,.theme-dark .admin-content>.admin-intro,.theme-dark .admin-content>.settings-grid,.theme-dark .admin-content>.usage-summary,.theme-dark .admin-content>.admin-users,.theme-dark .admin-content>.health-grid article{background:#1b201f}.theme-dark .admin-workspace>.admin-nav button.active{background:#35271f}
-@media(max-width:760px),(pointer:coarse){
+@media(max-width:760px){
  .admin-header-help{display:none}
  .admin-workspace{display:flex;flex-direction:column;background:var(--surface)}
- .admin-workspace>.admin-nav{min-height:72px;flex:none;padding:8px 10px;flex-direction:row;overflow-x:auto;overflow-y:hidden;border:0;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 96%,transparent);scroll-snap-type:x proximity}
- .admin-workspace>.admin-nav button{width:auto;min-width:94px;min-height:54px;padding:7px 10px;grid-template-columns:22px auto;gap:6px;border-radius:9px;scroll-snap-align:start}
- .admin-workspace>.admin-nav button:hover{transform:none}.admin-workspace>.admin-nav button.active{box-shadow:inset 0 -3px var(--orange)}
- .admin-workspace>.admin-nav button small{display:none}.admin-workspace>.admin-nav button strong{font-size:12px;white-space:nowrap}
- .admin-workspace>.admin-nav .app-icon{width:17px;height:17px}
- .admin-content{padding:16px 12px calc(32px + env(safe-area-inset-bottom))}
+ .admin-workspace>.admin-nav{display:none}
+ .admin-mobile-nav{position:relative;min-height:72px;flex:none;margin:0;padding:10px 12px;display:grid;grid-template-columns:92px minmax(0,1fr);align-items:center;gap:10px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 96%,transparent)}
+ .admin-mobile-nav>span{display:flex;align-items:center;gap:7px;color:var(--muted);font-weight:800}.admin-mobile-nav>span .app-icon{width:18px;height:18px;color:var(--orange)}.admin-mobile-nav>span small{font-size:11px;white-space:nowrap}
+ .admin-mobile-nav select{width:100%;min-width:0;min-height:50px;padding:0 15px 0 42px;border:1px solid color-mix(in srgb,var(--orange) 34%,var(--line));border-radius:13px;color:var(--ink);background:color-mix(in srgb,var(--orange) 7%,var(--surface));font-size:15px!important;font-weight:900;box-shadow:0 7px 18px color-mix(in srgb,var(--orange) 8%,transparent)}
+ .admin-content{padding:14px 12px calc(32px + env(safe-area-inset-bottom))}
  .admin-page-heading{margin:0 2px 14px}.admin-page-heading h3{font-size:23px}.admin-system-state{padding:7px 9px;font-size:9px}
  .admin-content>.health-grid{grid-template-columns:1fr 1fr!important}.admin-content>.health-grid article{min-width:0;min-height:84px;padding:12px}
  .admin-content>.admin-intro,.admin-content>.settings-grid,.admin-content>.usage-summary,.admin-content>.admin-users{padding:14px;border-radius:15px}

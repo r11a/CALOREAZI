@@ -418,6 +418,9 @@ test("admin uses a focused control-center workspace", () => {
   assert.match(page, /admin-page-heading/);
   assert.match(expansionCss, /grid-template-columns:238px minmax\(0,1fr\)/);
   assert.match(expansionCss, /admin-center\.admin-tab-trash \.admin-content>#admin-trash/);
+  assert.match(page, /admin-mobile-nav/);
+  assert.match(page, /aria-label="בחירת אזור במרכז הניהול"/);
+  assert.match(expansionCss, /admin-workspace>\.admin-nav\{display:none\}/);
 });
 
 test("desktop destinations use a full system-screen shell without visible scrollbars", () => {
