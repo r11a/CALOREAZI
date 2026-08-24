@@ -12,6 +12,7 @@ const notificationScheduler = await readFile(new URL("../server/notification-sch
 const analyzeTextRoute = await readFile(new URL("../app/api/ai/analyze-text/route.ts", import.meta.url), "utf8");
 const partnershipsRoute = await readFile(new URL("../app/api/partnerships/route.ts", import.meta.url), "utf8");
 const coachRoute = await readFile(new URL("../app/api/ai/chat/route.ts", import.meta.url), "utf8");
+const speechRoute = await readFile(new URL("../app/api/ai/speech/route.ts", import.meta.url), "utf8");
 const store = await readFile(new URL("../server/store.js", import.meta.url), "utf8");
 const offlineQueue = await readFile(new URL("../app/offline-queue.ts", import.meta.url), "utf8");
 const waterRoute = await readFile(new URL("../app/api/water/route.ts", import.meta.url), "utf8");
@@ -105,6 +106,19 @@ test("photo capture communicates quality, confidence, offline state and save res
   assert.match(page, /offlineQueueCount/);
   assert.match(page, /meal-result-toast/);
   assert.match(css, /photo-quality/);
+});
+
+test("coach uses concise human Hebrew and offers persistent male or female cloud voices", () => {
+  assert.match(coachRoute, /טון בונה, סבלני ומכבד/);
+  assert.match(coachRoute, /לכל היותר ב-3 מספרים/);
+  assert.match(page, /המאמן האישי שלך/);
+  assert.match(page, /coach-voice-picker/);
+  assert.match(page, /chooseCoachVoice\("male"\)/);
+  assert.match(page, /chooseCoachVoice\("female"\)/);
+  assert.doesNotMatch(page, /data\.usage\.totalTokens/);
+  assert.match(speechRoute, /gemini-3\.1-flash-tts-preview/);
+  assert.match(speechRoute, /gpt-4o-mini-tts/);
+  assert.match(speechRoute, /בונה וסבלני/);
 });
 
 test("offline outbox covers core entries and birth date shows the calculated age", () => {

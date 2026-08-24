@@ -564,7 +564,10 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [coachListening, setCoachListening] = useState(false);
   const [coachAutoSpeak, setCoachAutoSpeak] = useState(false);
+  const [coachVoice, setCoachVoice] = useState<"male" | "female">("male");
   const [coachSpeaking, setCoachSpeaking] = useState(false);
+  const coachAudio = useRef<HTMLAudioElement | null>(null);
+  const coachAudioUrl = useRef("");
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string; usage?: string }[]
   >([]);
@@ -744,6 +747,7 @@ export default function Home() {
     api("/api/state")
       .then((data) => {
         setState(data);
+        setCoachVoice(data.profile?.coachVoice === "female" ? "female" : "male");
         setMessages(Array.isArray(data.coachHistory) ? data.coachHistory : []);
         if (data.owner)
           setOnboarding((current) => ({
@@ -1755,6 +1759,7 @@ export default function Home() {
       acquaintance: profile.acquaintance || { bloodType: "", occupation: "", sleepHours: 0, stressLevel: 0, dailySchedule: "", mealPattern: "", cookingAccess: "", foodBudget: "", hungerTimes: "", emotionalEating: "", digestiveIssues: "", coachingStyle: "", motivation: "", eatingChallenges: "" },
       notificationPreferences: { ...notificationPreferenceDefaults, ...(profile.notificationPreferences || {}) },
       language: profile.language || "he",
+      coachVoice: profile.coachVoice || "male",
       cameraCalibration: profile.cameraCalibration || { reference: "none", plateDiameterCm: 26, useLearnedCorrections: true },
       avatar: profile.avatar || "",
     });
@@ -2562,24 +2567,53 @@ export default function Home() {
     setRecording(false);
   }
   function stopCoachSpeech() {
+    coachAudio.current?.pause();
+    coachAudio.current = null;
+    if (coachAudioUrl.current) URL.revokeObjectURL(coachAudioUrl.current);
+    coachAudioUrl.current = "";
     if (typeof window !== "undefined" && "speechSynthesis" in window)
       window.speechSynthesis.cancel();
     setCoachSpeaking(false);
   }
-  function speakCoachReply(text: string) {
+  function speakWithDevice(text: string) {
     if (!("speechSynthesis" in window) || !text.trim()) return;
     window.speechSynthesis.cancel();
-    const spokenText = text.replace(/[*#_`>]/g, " ").replace(/\s+/g, " ").trim();
+    const spokenText = text.replace(/(\d),(?=\d{3}\b)/g, "$1").replace(/(\d+)\s*kcal/gi, "$1 קלוריות").replace(/(\d+)\s*g\b/gi, "$1 גרם").replace(/%/g, " אחוז").replace(/[*#_`>]/g, " ").replace(/\s+/g, " ").trim();
     const utterance = new SpeechSynthesisUtterance(spokenText);
     const voices = window.speechSynthesis.getVoices();
-    utterance.voice = voices.find((voice) => /^he(?:-|_)/i.test(voice.lang)) || voices.find((voice) => voice.lang.toLowerCase().includes("he")) || null;
+    const hebrewVoices = voices.filter((voice) => /^he(?:-|_)/i.test(voice.lang) || voice.lang.toLowerCase().includes("he"));
+    utterance.voice = hebrewVoices.find((voice) => coachVoice === "female" ? /female|carmit|sivan|נעמה/i.test(voice.name) : /male|asher|daniel|יואב/i.test(voice.name)) || hebrewVoices[0] || null;
     utterance.lang = "he-IL";
-    utterance.rate = 1;
-    utterance.pitch = 1;
+    utterance.rate = 0.96;
+    utterance.pitch = coachVoice === "female" ? 1.04 : 0.94;
     utterance.onstart = () => setCoachSpeaking(true);
     utterance.onend = () => setCoachSpeaking(false);
     utterance.onerror = () => setCoachSpeaking(false);
     window.speechSynthesis.speak(utterance);
+  }
+  async function speakCoachReply(text: string) {
+    if (!text.trim()) return;
+    stopCoachSpeech();
+    setCoachSpeaking(true);
+    try {
+      const response = await fetch("/api/ai/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice: coachVoice }) });
+      if (!response.ok) throw new Error("cloud voice unavailable");
+      const url = URL.createObjectURL(await response.blob());
+      const audio = new Audio(url);
+      coachAudio.current = audio;
+      coachAudioUrl.current = url;
+      audio.onended = stopCoachSpeech;
+      audio.onerror = () => { stopCoachSpeech(); speakWithDevice(text); };
+      await audio.play();
+    } catch {
+      setCoachSpeaking(false);
+      speakWithDevice(text);
+    }
+  }
+  function chooseCoachVoice(voice: "male" | "female") {
+    stopCoachSpeech();
+    setCoachVoice(voice);
+    void api("/api/ai/speech", { method: "PUT", body: JSON.stringify({ voice }) }).catch(() => undefined);
   }
   async function sendCoachText(rawText: string, speakResponse = coachAutoSpeak) {
     const text = rawText.trim();
@@ -2597,7 +2631,6 @@ export default function Home() {
         {
           role: "assistant",
           text: data.reply,
-          usage: `${data.usage.totalTokens} tokens · $${data.usage.estimatedCost.toFixed(4)}`,
         },
       ]);
       if (speakResponse) speakCoachReply(data.reply);
@@ -3037,9 +3070,9 @@ export default function Home() {
             <header>
               <div className="coach-avatar"><AppIcon name="coach" /></div>
               <div>
-                <strong>המאמן של CALOREAZI</strong>
+                <strong>המאמן האישי שלך</strong>
                 <small>
-                  <i /> מחובר לנתוני היום שלך
+                  <i /> כאן איתך, בקצב שלך
                 </small>
               </div>
               <div className="coach-header-actions">
@@ -3051,15 +3084,13 @@ export default function Home() {
             <div className="chat-feed">
               {messages.length === 0 && (
                 <div className="coach-message">
-                  שלום {state.owner.name}, אני מוכן. אפשר לשאול מה כדאי לאכול,
-                  איך נראה היום שלך, או לבקש רעיון שמתאים למטרה.
+                  {state.owner.name}, מה יעזור לך עכשיו? אפשר להתייעץ, לחשוב יחד על הארוחה הבאה או פשוט לבדוק איך היום מתקדם.
                 </div>
               )}
               {messages.map((item, index) => (
                 <div key={index} className={`chat-message ${item.role}`}>
                   <span>{item.text}</span>
                   {item.role === "assistant" && <button type="button" className={`message-speak ${coachSpeaking ? "speaking" : ""}`} onClick={() => coachSpeaking ? stopCoachSpeech() : speakCoachReply(item.text)} aria-label={coachSpeaking ? "עצירת ההקראה" : "הקראת התשובה"}><AppIcon name="speaker" />{coachSpeaking ? "עצור" : "הקרא"}</button>}
-                  {item.usage && <small>{item.usage}</small>}
                 </div>
               ))}
               {busy && <div className="typing">חושב…</div>}
@@ -3076,6 +3107,11 @@ export default function Home() {
               <button onClick={() => setMessage("HELP: איך מחושב הציון היומי ואיך אפשר לשפר אותו?")}>איך משפרים ציון?</button>
               <button onClick={() => setMessage("HELP: איך משנים את היעדים והפרטים האישיים?")}>איך משנים יעדים?</button>
               <button onClick={() => setMessage("מה חסר לי היום בחלבון, פחמימות, שומן, מים וקלוריות?")}>מה חסר לי היום?</button>
+            </div>
+            <div className="coach-voice-picker" aria-label="בחירת קול המאמן">
+              <span>הקול של המאמן</span>
+              <button type="button" className={coachVoice === "male" ? "selected" : ""} onClick={() => chooseCoachVoice("male")}>גברי</button>
+              <button type="button" className={coachVoice === "female" ? "selected" : ""} onClick={() => chooseCoachVoice("female")}>נשי</button>
             </div>
             {(coachListening || coachSpeaking) && <div className={`coach-voice-status ${coachListening ? "listening" : "speaking"}`} role="status"><span>{coachListening ? "מקשיב…" : "המאמן מדבר…"}</span><button type="button" onClick={() => coachListening ? coachSpeechRecognition.current?.stop?.() : stopCoachSpeech()}>{coachListening ? "שלח עכשיו" : "עצור"}</button></div>}
             <form onSubmit={sendMessage}>

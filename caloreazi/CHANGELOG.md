@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.18.9
+
+- Reworked coach replies into concise, patient and constructive Hebrew that leads with one useful insight instead of dumping every available metric.
+- Added a persistent male or female coach-voice preference with high-quality Gemini or OpenAI cloud speech and a safe Hebrew device fallback.
+- Removed token and cost diagnostics from the user conversation and refined the coach welcome, status and voice controls.
+
 ## 1.18.8
 
 - Added a voice-first coach conversation: one-tap Hebrew dictation sends automatically, replies can be read aloud, auto-speech is optional, and listening or playback can be stopped clearly.
