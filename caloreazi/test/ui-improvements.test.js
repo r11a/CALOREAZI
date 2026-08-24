@@ -114,8 +114,8 @@ test("coach uses concise human Hebrew and offers persistent male or female cloud
   assert.match(page, /המאמן האישי שלך/);
   assert.match(page, /coach-voice-profile/);
   assert.match(page, /coachVoiceProvider/);
-  assert.match(page, /<option value="male">גברי/);
-  assert.match(page, /<option value="female">נשי/);
+  assert.match(page, /<option value="male-warm">גברי/);
+  assert.match(page, /<option value="female-warm">נשי/);
   assert.doesNotMatch(page, /data\.usage\.totalTokens/);
   assert.match(speechRoute, /gemini-2\.5-flash-preview-tts:generateContent/);
   assert.match(speechRoute, /gpt-4o-mini-tts/);
@@ -458,6 +458,9 @@ test("coach supports a complete opt-in voice conversation", () => {
   assert.match(page, /coachSpeechRequest\.current\?\.abort/);
   assert.match(page, /coachSendInFlight\.current/);
   assert.match(page, /לא הופעל קול נוסף/);
+  assert.match(page, /voiceMode: speakResponse/);
+  assert.match(page, /source\.playbackRate\.value/);
+  assert.match(page, /female-clear/);
   assert.match(css, /coach-voice-wave/);
 });
 

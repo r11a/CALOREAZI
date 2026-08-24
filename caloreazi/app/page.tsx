@@ -565,6 +565,7 @@ export default function Home() {
   const [coachListening, setCoachListening] = useState(false);
   const [coachTranscribing, setCoachTranscribing] = useState(false);
   const [coachVoice, setCoachVoice] = useState<"male" | "female">("male");
+  const [coachVoiceStyle, setCoachVoiceStyle] = useState<"warm" | "clear">("warm");
   const [coachVoiceProvider, setCoachVoiceProvider] = useState<"cloud" | "device">("cloud");
   const [coachSpeaking, setCoachSpeaking] = useState(false);
   const [coachSpeechPending, setCoachSpeechPending] = useState(false);
@@ -758,6 +759,7 @@ export default function Home() {
       .then((data) => {
         setState(data);
         setCoachVoice(data.profile?.coachVoice === "female" ? "female" : "male");
+        setCoachVoiceStyle(data.profile?.coachVoiceStyle === "clear" ? "clear" : "warm");
         setCoachVoiceProvider(data.profile?.coachVoiceProvider === "device" ? "device" : "cloud");
         setMessages(Array.isArray(data.coachHistory) ? data.coachHistory : []);
         if (data.owner)
@@ -1781,6 +1783,7 @@ export default function Home() {
       notificationPreferences: { ...notificationPreferenceDefaults, ...(profile.notificationPreferences || {}) },
       language: profile.language || "he",
       coachVoice: profile.coachVoice || "male",
+      coachVoiceStyle: profile.coachVoiceStyle || "warm",
       coachVoiceProvider: profile.coachVoiceProvider || "cloud",
       cameraCalibration: profile.cameraCalibration || { reference: "none", plateDiameterCm: 26, useLearnedCorrections: true },
       avatar: profile.avatar || "",
@@ -1798,7 +1801,7 @@ export default function Home() {
         await queueMutation("/api/profile", "PUT", JSON.stringify(offlineProfile));
         if (weightValue && Number(weightValue) !== Number(latestWeight)) await queueMutation("/api/measurements", "POST", JSON.stringify({ weight: weightValue, date: state.today.date }));
         setState((current: any) => ({ ...current, profile: { ...current.profile, ...offlineProfile, age: exactAge(offlineProfile.birthDate) ?? current.profile.age, weight: weightValue || current.profile.weight } }));
-        setCoachVoice(offlineProfile.coachVoice === "female" ? "female" : "male"); setCoachVoiceProvider(offlineProfile.coachVoiceProvider === "device" ? "device" : "cloud");
+        setCoachVoice(offlineProfile.coachVoice === "female" ? "female" : "male"); setCoachVoiceStyle(offlineProfile.coachVoiceStyle === "clear" ? "clear" : "warm"); setCoachVoiceProvider(offlineProfile.coachVoiceProvider === "device" ? "device" : "cloud");
         setOfflineQueueCount(await offlinePendingCount()); setProfileOpen(false); setMealResult({ name: "הפרטים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
       }
       let latest = await api("/api/profile", {
@@ -1811,7 +1814,7 @@ export default function Home() {
           body: JSON.stringify({ weight: weightValue }),
         });
       setState(latest);
-      setCoachVoice(latest.profile?.coachVoice === "female" ? "female" : "male"); setCoachVoiceProvider(latest.profile?.coachVoiceProvider === "device" ? "device" : "cloud");
+      setCoachVoice(latest.profile?.coachVoice === "female" ? "female" : "male"); setCoachVoiceStyle(latest.profile?.coachVoiceStyle === "clear" ? "clear" : "warm"); setCoachVoiceProvider(latest.profile?.coachVoiceProvider === "device" ? "device" : "cloud");
       setProfileOpen(false);
     } catch (e) {
       setError((e as Error).message);
@@ -2621,7 +2624,7 @@ export default function Home() {
     const hebrewVoices = voices.filter((voice) => /^he(?:-|_)/i.test(voice.lang) || voice.lang.toLowerCase().includes("he"));
     utterance.voice = hebrewVoices.find((voice) => coachVoice === "female" ? /female|carmit|sivan|נעמה/i.test(voice.name) : /male|asher|daniel|יואב/i.test(voice.name)) || hebrewVoices[0] || null;
     utterance.lang = "he-IL";
-    utterance.rate = 0.96;
+    utterance.rate = coachVoiceStyle === "clear" ? 1.08 : 1.04;
     utterance.pitch = coachVoice === "female" ? 1.04 : 0.94;
     utterance.onstart = () => { if (run === coachSpeechRun.current) setCoachSpeaking(true); };
     utterance.onend = () => { if (run === coachSpeechRun.current) setCoachSpeaking(false); };
@@ -2637,7 +2640,7 @@ export default function Home() {
     coachSpeechRequest.current = controller;
     setCoachSpeechPending(true);
     try {
-      const response = await fetch("/api/ai/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice: coachVoice, provider: coachVoiceProvider }), signal: controller.signal });
+      const response = await fetch("/api/ai/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice: coachVoice, style: coachVoiceStyle, provider: coachVoiceProvider }), signal: controller.signal });
       if (!response.ok) throw new Error("cloud voice unavailable");
       const audioBytes = await response.arrayBuffer();
       if (run !== coachSpeechRun.current) return;
@@ -2647,6 +2650,7 @@ export default function Home() {
         const buffer = await context.decodeAudioData(audioBytes.slice(0));
         const source = context.createBufferSource();
         source.buffer = buffer;
+        source.playbackRate.value = coachVoiceStyle === "clear" ? 1.12 : 1.08;
         source.connect(context.destination);
         source.onended = () => { if (run === coachSpeechRun.current) stopCoachSpeech(); };
         coachAudioSource.current = source;
@@ -2657,6 +2661,7 @@ export default function Home() {
       }
       const url = URL.createObjectURL(new Blob([audioBytes], { type: response.headers.get("Content-Type") || "audio/mpeg" }));
       const audio = new Audio(url);
+      audio.playbackRate = coachVoiceStyle === "clear" ? 1.12 : 1.08;
       coachAudio.current = audio;
       coachAudioUrl.current = url;
       audio.onplay = () => { if (run === coachSpeechRun.current) { setCoachSpeechPending(false); setCoachSpeaking(true); } };
@@ -2682,7 +2687,7 @@ export default function Home() {
     try {
       const data = await api("/api/ai/chat", {
         method: "POST",
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, voiceMode: speakResponse }),
       });
       setMessages((items) => [
         ...items,
@@ -4421,7 +4426,7 @@ export default function Home() {
             {profileTab === "account" && <section className="profile-tab-panel account-panel"><header><span><AppIcon name="settings" /></span><div><strong>העדפות וחשבון</strong><small>תצוגה, שיתוף, גיבוי וניהול מידע</small></div></header>
             <section className="account-credentials">
               <strong>פרטי התחברות</strong>
-              <div className="coach-voice-profile"><strong>קול המאמן</strong><p>הקול יופעל אוטומטית רק אחרי הודעה קולית. הודעה כתובה תקבל תשובה כתובה.</p><div><label>ספק קול<select value={profileForm.coachVoiceProvider || "cloud"} onChange={(e) => setProfileForm({ ...profileForm, coachVoiceProvider: e.target.value })}><option value="cloud">{(state.ai?.voiceProvider || state.ai?.roles?.coach?.provider || state.ai?.provider) === "gemini" ? "Gemini — קול ענן עברי" : "OpenAI — קול ענן עברי"}</option><option value="device">קול המכשיר — גיבוי</option></select></label><label>סוג קול<select value={profileForm.coachVoice || "male"} onChange={(e) => setProfileForm({ ...profileForm, coachVoice: e.target.value })}><option value="male">גברי</option><option value="female">נשי</option></select></label></div></div>
+              <div className="coach-voice-profile"><strong>קול המאמן</strong><p>הקול יופעל אוטומטית רק אחרי הודעה קולית. הודעה כתובה תקבל תשובה כתובה.</p><div><label>ספק קול<select value={profileForm.coachVoiceProvider || "cloud"} onChange={(e) => setProfileForm({ ...profileForm, coachVoiceProvider: e.target.value })}><option value="cloud">{(state.ai?.voiceProvider || state.ai?.roles?.coach?.provider || state.ai?.provider) === "gemini" ? "Gemini — קול ענן עברי" : "OpenAI — קול ענן עברי"}</option><option value="device">קול המכשיר</option></select></label><label>קול<select value={`${profileForm.coachVoice || "male"}-${profileForm.coachVoiceStyle || "warm"}`} onChange={(e) => { const [voice, style] = e.target.value.split("-"); setProfileForm({ ...profileForm, coachVoice: voice, coachVoiceStyle: style }); }}><option value="male-warm">גברי — חם ורגוע</option><option value="male-clear">גברי — ברור וישיר</option><option value="female-warm">נשי — חם ורגוע</option><option value="female-clear">נשי — ברור ובהיר</option></select></label></div></div>
               <label>שפת הממשק<select value={profileForm.language || "he"} onChange={(e) => setProfileForm({ ...profileForm, language: e.target.value })}><option value="he">עברית</option><option value="en">English (beta)</option></select><small>הבחירה נשמרת למשתמש ומשנה גם את כיוון הממשק. תרגום אנגלי מלא יושלם בהדרגה.</small></label>
               <label>כתובת אימייל<input type="email" value={profileForm.email || ""} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} /></label>
               {profileForm.email !== state.owner.email && <label>סיסמה נוכחית לאישור שינוי<input type="password" autoComplete="current-password" value={profileForm.accountPassword || ""} onChange={(e) => setProfileForm({ ...profileForm, accountPassword: e.target.value })} /></label>}

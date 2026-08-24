@@ -33,7 +33,7 @@ function average(values: number[]) {
 }
 
 export async function POST(request: Request) {
-  const { message } = await request.json();
+  const { message, voiceMode = false } = await request.json();
   if (!String(message || "").trim()) return Response.json({ error: "יש לכתוב שאלה" }, { status: 400 });
   const state = await readState();
   const session = requireUser(state, request);
@@ -81,6 +81,7 @@ export async function POST(request: Request) {
 - כתוב כמו מאמן אנושי שמדבר עם אדם, לא כמו דו״ח נתונים: פתח בתובנה או מסקנה ברורה, המשך בהמלצה מעשית אחת, וסיים בעידוד קצר רק כשזה טבעי.
 - שמור תמיד על טון בונה, סבלני ומכבד. אל תאשים, אל תטיף ואל תשתמש בפחד או בבושה. בחר ניסוח שעוזר למשתמש להבין מה הצעד הבא גם אחרי יום פחות מוצלח.
 - ברירת המחדל היא עד 4 משפטים קצרים. אל תציג טבלה, רשימת מדדים או את כל נתוני היום אלא אם המשתמש ביקש פירוט.
+- כאשר VOICE_MODE=true, השב בשני משפטים קצרים לכל היותר כדי שהשיחה הקולית תהיה מהירה וטבעית. אם נדרש פירוט, הצע להמשיך במקום להקריא דו״ח ארוך.
 - השתמש לכל היותר ב-3 מספרים שבאמת עוזרים להחלטה. כתוב יחידות בעברית טבעית (קלוריות, גרם, מיליליטר) ואל תשתמש בקיצורים לועזיים בתשובה בעברית.
 - אל תשתמש בניסוחים מכניים כמו "בהתבסס על הנתונים שסופקו", "להלן" או "מומלץ לציין". דבר ישירות ובגובה העיניים.
 - אין אבחון רפואי. התריע רק כשיש סיכון ממשי; אל תנסח הסתייגות גנרית בכל תשובה.
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
 - אל תמציא יעד קלורי, קצב שינוי או יעד מאקרו. השתמש רק במספרים שב-USER_CONTEXT וב-goalPlan. אם חסר מידע, אמור מה חסר.
 - evidence הוא מאגר מקורות מקצועיים מאושר, לא גלישה חיה. כשנדרש ביסוס ציין ארגון ומזהה מקור מתוכו בלבד; אל תמציא מחקר, DOI, תאריך או ציטוט.
 - הפרד בין מסקנה מנתוני המשתמש לבין מידע כללי. בחשש לזמינות אנרגטית נמוכה, ירידה מהירה או פגיעה בהתאוששות אל תעמיק גירעון והמלץ על בדיקה מקצועית.`;
-  const input = `USER_CONTEXT:\n${JSON.stringify(context, null, 2)}\n\nRECENT_CONVERSATION:\n${recentConversation.map((item: any) => `${item.role === "user" ? "משתמש" : "מאמן"}: ${item.text}`).join("\n") || "אין עדיין"}\n\nCURRENT_USER_MESSAGE:\n${String(message).trim()}`;
+  const input = `VOICE_MODE:${Boolean(voiceMode)}\nUSER_CONTEXT:\n${JSON.stringify(context)}\nRECENT_CONVERSATION:\n${recentConversation.map((item: any) => `${item.role === "user" ? "משתמש" : "מאמן"}: ${item.text}`).join("\n") || "אין עדיין"}\nCURRENT_USER_MESSAGE:\n${String(message).trim()}`;
   try {
     const candidates = aiRoleCandidates(state.ai, "coach"); let role = candidates[0]; let result: any; let lastError: unknown;
     for (const candidate of candidates) { try { role = candidate; const call = role.provider === "gemini" ? generateGeminiCoachReply : generateOpenAiCoachReply; result = await call({ apiKey: await decryptSecret(state.ai.encryptedKey), model: role.model, instructions, input }); break; } catch (error) { lastError = error; } }

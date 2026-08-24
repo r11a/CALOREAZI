@@ -57,6 +57,7 @@ export async function PUT(request: Request) {
       timeZone: validTimeZone(body.timeZone || profile.timeZone),
       language: ["he", "en"].includes(body.language) ? body.language : (profile.language || "he"),
       coachVoice: ["male", "female"].includes(body.coachVoice) ? body.coachVoice : (profile.coachVoice || "male"),
+      coachVoiceStyle: ["warm", "clear"].includes(body.coachVoiceStyle) ? body.coachVoiceStyle : (profile.coachVoiceStyle || "warm"),
       coachVoiceProvider: ["cloud", "device"].includes(body.coachVoiceProvider) ? body.coachVoiceProvider : (profile.coachVoiceProvider || "cloud"),
       cameraCalibration: body.cameraCalibration && typeof body.cameraCalibration === "object" ? {
         reference: ["plate", "card", "none"].includes(body.cameraCalibration.reference) ? body.cameraCalibration.reference : "none",
