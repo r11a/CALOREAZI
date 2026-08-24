@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.18.5
+
+- Unified desktop overlays into large system-style screens with sticky headers and footers, consistent spacing and hidden scrollbars.
+- Expanded the desktop coach into the same centered system-screen language while keeping confirmations and password prompts compact.
+
 ## 1.18.4
 
 - Fixed history deletion for legacy water entries that do not have a stored identifier, while removing only the selected event.

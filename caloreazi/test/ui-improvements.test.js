@@ -410,3 +410,11 @@ test("bottom navigation keeps trends visible and moves admin into the account ta
   assert.match(page, /admin-center-entry/);
   assert.match(page, /מרכז ניהול ADMIN/);
 });
+
+test("desktop destinations use a full system-screen shell without visible scrollbars", () => {
+  assert.match(expansionCss, /@media\(min-width:761px\)/);
+  assert.match(expansionCss, /height:calc\(100dvh - 48px\)/);
+  assert.match(expansionCss, /settings-modal:not\(\.compact-modal\):not\(\.quick-confirm\):not\(\.overage-modal\)/);
+  assert.match(expansionCss, /scrollbar-width:none/);
+  assert.match(expansionCss, /coach-sheet\{position:relative/);
+});
