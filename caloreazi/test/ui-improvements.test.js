@@ -452,6 +452,9 @@ test("coach supports a complete opt-in voice conversation", () => {
   assert.match(page, /coach-voice-status/);
   assert.match(page, /message-speak/);
   assert.match(page, /עצירה ושליחת ההודעה/);
+  assert.match(page, /unlockCoachAudio/);
+  assert.match(page, /decodeAudioData/);
+  assert.match(page, /audio\.onplay = \(\) => setCoachSpeaking\(true\)/);
   assert.match(css, /coach-voice-wave/);
 });
 

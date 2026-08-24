@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.18.12
+
+- פתיחת ערוץ האודיו בזמן פעולת המשתמש כדי לאפשר תשובת מאמן קולית ב־iPhone PWA.
+- ניגון תשובת הענן דרך Web Audio עם fallback לנגן הדפדפן ולקול המכשיר.
+- חיווי "המאמן עונה בקול" מוצג רק לאחר שההשמעה התחילה בפועל.
+
 ## 1.18.11
 
 - Moved the cloud/device provider and male/female coach voice choices into the user profile.

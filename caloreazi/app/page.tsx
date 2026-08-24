@@ -569,6 +569,8 @@ export default function Home() {
   const [coachSpeaking, setCoachSpeaking] = useState(false);
   const coachAudio = useRef<HTMLAudioElement | null>(null);
   const coachAudioUrl = useRef("");
+  const coachAudioContext = useRef<AudioContext | null>(null);
+  const coachAudioSource = useRef<AudioBufferSourceNode | null>(null);
   const coachRecorder = useRef<MediaRecorder | null>(null);
   const coachRecordingStream = useRef<MediaStream | null>(null);
   const coachAudioChunks = useRef<Blob[]>([]);
@@ -2577,6 +2579,8 @@ export default function Home() {
     setRecording(false);
   }
   function stopCoachSpeech() {
+    try { coachAudioSource.current?.stop(); } catch { /* source may already be stopped */ }
+    coachAudioSource.current = null;
     coachAudio.current?.pause();
     coachAudio.current = null;
     if (coachAudioUrl.current) URL.revokeObjectURL(coachAudioUrl.current);
@@ -2584,6 +2588,13 @@ export default function Home() {
     if (typeof window !== "undefined" && "speechSynthesis" in window)
       window.speechSynthesis.cancel();
     setCoachSpeaking(false);
+  }
+  function unlockCoachAudio() {
+    if (typeof window === "undefined") return;
+    const AudioContextConstructor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    if (!coachAudioContext.current) coachAudioContext.current = new AudioContextConstructor();
+    if (coachAudioContext.current.state === "suspended") void coachAudioContext.current.resume();
   }
   function speakWithDevice(text: string) {
     if (!("speechSynthesis" in window) || !text.trim()) return;
@@ -2605,14 +2616,28 @@ export default function Home() {
     if (!text.trim()) return;
     stopCoachSpeech();
     if (coachVoiceProvider === "device") { speakWithDevice(text); return; }
-    setCoachSpeaking(true);
     try {
       const response = await fetch("/api/ai/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice: coachVoice, provider: coachVoiceProvider }) });
       if (!response.ok) throw new Error("cloud voice unavailable");
-      const url = URL.createObjectURL(await response.blob());
+      const audioBytes = await response.arrayBuffer();
+      const context = coachAudioContext.current;
+      if (context) {
+        if (context.state === "suspended") await context.resume();
+        const buffer = await context.decodeAudioData(audioBytes.slice(0));
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(context.destination);
+        source.onended = stopCoachSpeech;
+        coachAudioSource.current = source;
+        source.start(0);
+        setCoachSpeaking(true);
+        return;
+      }
+      const url = URL.createObjectURL(new Blob([audioBytes], { type: response.headers.get("Content-Type") || "audio/mpeg" }));
       const audio = new Audio(url);
       coachAudio.current = audio;
       coachAudioUrl.current = url;
+      audio.onplay = () => setCoachSpeaking(true);
       audio.onended = stopCoachSpeech;
       audio.onerror = () => { stopCoachSpeech(); speakWithDevice(text); };
       await audio.play();
@@ -2675,6 +2700,7 @@ export default function Home() {
     const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!Recognition) { void startCoachRecording(); return; }
     if (busy) return;
+    unlockCoachAudio();
     stopCoachSpeech();
     coachTranscript.current = "";
     setMessage("");
@@ -2694,6 +2720,7 @@ export default function Home() {
   async function startCoachRecording() {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") { setError("המיקרופון אינו זמין. בדוק הרשאה בהגדרות iPhone ונסה שוב."); return; }
     try {
+      unlockCoachAudio();
       stopCoachSpeech(); setMessage("");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       coachRecordingStream.current = stream; coachAudioChunks.current = [];
@@ -2717,6 +2744,7 @@ export default function Home() {
     } catch { setError("לא ניתנה גישה למיקרופון. אשר הרשאה ל־CALOREAZI בהגדרות iPhone."); }
   }
   function stopCoachListening() {
+    unlockCoachAudio();
     if (coachSpeechRecognition.current) { coachSpeechRecognition.current.stop?.(); return; }
     if (coachRecorder.current?.state === "recording") coachRecorder.current.stop();
     coachRecorder.current = null;
