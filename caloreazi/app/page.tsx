@@ -2668,7 +2668,7 @@ export default function Home() {
       audio.onended = () => { if (run === coachSpeechRun.current) stopCoachSpeech(); };
       audio.onerror = () => { if (run === coachSpeechRun.current) { stopCoachSpeech(); setError("לא הצלחתי להשמיע את קול הענן. נסה שוב או בחר קול מכשיר בפרופיל."); } };
       await audio.play();
-    } catch (error) {
+    } catch {
       if (controller.signal.aborted || run !== coachSpeechRun.current) return;
       setCoachSpeechPending(false);
       setCoachSpeaking(false);
