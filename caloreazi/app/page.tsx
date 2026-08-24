@@ -567,10 +567,14 @@ export default function Home() {
   const [coachVoice, setCoachVoice] = useState<"male" | "female">("male");
   const [coachVoiceProvider, setCoachVoiceProvider] = useState<"cloud" | "device">("cloud");
   const [coachSpeaking, setCoachSpeaking] = useState(false);
+  const [coachSpeechPending, setCoachSpeechPending] = useState(false);
   const coachAudio = useRef<HTMLAudioElement | null>(null);
   const coachAudioUrl = useRef("");
   const coachAudioContext = useRef<AudioContext | null>(null);
   const coachAudioSource = useRef<AudioBufferSourceNode | null>(null);
+  const coachSpeechRequest = useRef<AbortController | null>(null);
+  const coachSpeechRun = useRef(0);
+  const coachSendInFlight = useRef(false);
   const coachRecorder = useRef<MediaRecorder | null>(null);
   const coachRecordingStream = useRef<MediaStream | null>(null);
   const coachAudioChunks = useRef<Blob[]>([]);
@@ -770,6 +774,13 @@ export default function Home() {
 
   useEffect(() => {
     if (coachOpen) return;
+    coachSpeechRun.current += 1;
+    coachSpeechRequest.current?.abort();
+    coachSpeechRequest.current = null;
+    try { coachAudioSource.current?.stop(); } catch { /* source may already be stopped */ }
+    coachAudioSource.current = null;
+    coachAudio.current?.pause();
+    coachAudio.current = null;
     coachTranscript.current = "";
     coachSpeechRecognition.current?.abort?.();
     coachRecorder.current?.stop?.();
@@ -778,6 +789,7 @@ export default function Home() {
       window.speechSynthesis.cancel();
     setCoachListening(false);
     setCoachSpeaking(false);
+    setCoachSpeechPending(false);
   }, [coachOpen]);
 
   useEffect(() => {
@@ -2579,6 +2591,9 @@ export default function Home() {
     setRecording(false);
   }
   function stopCoachSpeech() {
+    coachSpeechRun.current += 1;
+    coachSpeechRequest.current?.abort();
+    coachSpeechRequest.current = null;
     try { coachAudioSource.current?.stop(); } catch { /* source may already be stopped */ }
     coachAudioSource.current = null;
     coachAudio.current?.pause();
@@ -2588,6 +2603,7 @@ export default function Home() {
     if (typeof window !== "undefined" && "speechSynthesis" in window)
       window.speechSynthesis.cancel();
     setCoachSpeaking(false);
+    setCoachSpeechPending(false);
   }
   function unlockCoachAudio() {
     if (typeof window === "undefined") return;
@@ -2596,7 +2612,7 @@ export default function Home() {
     if (!coachAudioContext.current) coachAudioContext.current = new AudioContextConstructor();
     if (coachAudioContext.current.state === "suspended") void coachAudioContext.current.resume();
   }
-  function speakWithDevice(text: string) {
+  function speakWithDevice(text: string, run = coachSpeechRun.current) {
     if (!("speechSynthesis" in window) || !text.trim()) return;
     window.speechSynthesis.cancel();
     const spokenText = text.replace(/(\d),(?=\d{3}\b)/g, "$1").replace(/(\d+)\s*kcal/gi, "$1 קלוריות").replace(/(\d+)\s*g\b/gi, "$1 גרם").replace(/%/g, " אחוז").replace(/[*#_`>]/g, " ").replace(/\s+/g, " ").trim();
@@ -2607,19 +2623,24 @@ export default function Home() {
     utterance.lang = "he-IL";
     utterance.rate = 0.96;
     utterance.pitch = coachVoice === "female" ? 1.04 : 0.94;
-    utterance.onstart = () => setCoachSpeaking(true);
-    utterance.onend = () => setCoachSpeaking(false);
-    utterance.onerror = () => setCoachSpeaking(false);
+    utterance.onstart = () => { if (run === coachSpeechRun.current) setCoachSpeaking(true); };
+    utterance.onend = () => { if (run === coachSpeechRun.current) setCoachSpeaking(false); };
+    utterance.onerror = () => { if (run === coachSpeechRun.current) setCoachSpeaking(false); };
     window.speechSynthesis.speak(utterance);
   }
   async function speakCoachReply(text: string) {
     if (!text.trim()) return;
     stopCoachSpeech();
-    if (coachVoiceProvider === "device") { speakWithDevice(text); return; }
+    const run = coachSpeechRun.current;
+    if (coachVoiceProvider === "device") { speakWithDevice(text, run); return; }
+    const controller = new AbortController();
+    coachSpeechRequest.current = controller;
+    setCoachSpeechPending(true);
     try {
-      const response = await fetch("/api/ai/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice: coachVoice, provider: coachVoiceProvider }) });
+      const response = await fetch("/api/ai/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice: coachVoice, provider: coachVoiceProvider }), signal: controller.signal });
       if (!response.ok) throw new Error("cloud voice unavailable");
       const audioBytes = await response.arrayBuffer();
+      if (run !== coachSpeechRun.current) return;
       const context = coachAudioContext.current;
       if (context) {
         if (context.state === "suspended") await context.resume();
@@ -2627,9 +2648,10 @@ export default function Home() {
         const source = context.createBufferSource();
         source.buffer = buffer;
         source.connect(context.destination);
-        source.onended = stopCoachSpeech;
+        source.onended = () => { if (run === coachSpeechRun.current) stopCoachSpeech(); };
         coachAudioSource.current = source;
         source.start(0);
+        setCoachSpeechPending(false);
         setCoachSpeaking(true);
         return;
       }
@@ -2637,19 +2659,23 @@ export default function Home() {
       const audio = new Audio(url);
       coachAudio.current = audio;
       coachAudioUrl.current = url;
-      audio.onplay = () => setCoachSpeaking(true);
-      audio.onended = stopCoachSpeech;
-      audio.onerror = () => { stopCoachSpeech(); speakWithDevice(text); };
+      audio.onplay = () => { if (run === coachSpeechRun.current) { setCoachSpeechPending(false); setCoachSpeaking(true); } };
+      audio.onended = () => { if (run === coachSpeechRun.current) stopCoachSpeech(); };
+      audio.onerror = () => { if (run === coachSpeechRun.current) { stopCoachSpeech(); setError("לא הצלחתי להשמיע את קול הענן. נסה שוב או בחר קול מכשיר בפרופיל."); } };
       await audio.play();
-    } catch {
+    } catch (error) {
+      if (controller.signal.aborted || run !== coachSpeechRun.current) return;
+      setCoachSpeechPending(false);
       setCoachSpeaking(false);
-      setError("קול הענן לא היה זמין כרגע; עברתי לקול המכשיר כדי לא לעכב את השיחה.");
-      speakWithDevice(text);
+      setError("קול הענן לא היה זמין כרגע. לא הופעל קול נוסף; אפשר לנסות שוב או לבחור קול מכשיר בפרופיל.");
+    } finally {
+      if (coachSpeechRequest.current === controller) coachSpeechRequest.current = null;
     }
   }
   async function sendCoachText(rawText: string, speakResponse = false) {
     const text = rawText.trim();
-    if (!text || busy) return;
+    if (!text || busy || coachSendInFlight.current) return;
+    coachSendInFlight.current = true;
     setMessages((items) => [...items, { role: "user", text }]);
     setMessage("");
     setBusy(true);
@@ -2689,6 +2715,7 @@ export default function Home() {
         { role: "assistant", text: (e as Error).message },
       ]);
     } finally {
+      coachSendInFlight.current = false;
       setBusy(false);
     }
   }
@@ -3158,7 +3185,7 @@ export default function Home() {
               {messages.map((item, index) => (
                 <div key={index} className={`chat-message ${item.role}`}>
                   <span>{item.text}</span>
-                  {item.role === "assistant" && <button type="button" className={`message-speak ${coachSpeaking ? "speaking" : ""}`} onClick={() => coachSpeaking ? stopCoachSpeech() : speakCoachReply(item.text)} aria-label={coachSpeaking ? "עצירת ההקראה" : "הקראת התשובה"}><AppIcon name="speaker" />{coachSpeaking ? "עצור" : "הקרא"}</button>}
+                  {item.role === "assistant" && <button type="button" className={`message-speak ${coachSpeaking || coachSpeechPending ? "speaking" : ""}`} onClick={() => coachSpeaking || coachSpeechPending ? stopCoachSpeech() : speakCoachReply(item.text)} aria-label={coachSpeaking || coachSpeechPending ? "עצירת ההקראה" : "הקראת התשובה"}><AppIcon name="speaker" />{coachSpeechPending ? "מכין קול" : coachSpeaking ? "עצור" : "הקרא"}</button>}
                 </div>
               ))}
               {busy && <div className="typing">חושב…</div>}
@@ -3168,7 +3195,7 @@ export default function Home() {
               <button onClick={() => setMessage("איך היום שלי נראה ומה הצעד הבא שכדאי לי לעשות?")}>איך אני מתקדם?</button>
               <button onClick={() => setMessage("תן לי משימה אחת פשוטה להמשך היום")}>תן לי משימה</button>
             </div>
-            {(coachListening || coachTranscribing || coachSpeaking || busy) && <div className={`coach-voice-status ${coachListening ? "listening" : coachSpeaking ? "speaking" : "thinking"}`} role="status"><span>{coachListening ? "אני מקשיב — לחץ שוב כדי לשלוח" : coachTranscribing ? "מבין את ההודעה שלך…" : coachSpeaking ? `המאמן עונה בקול ${coachVoice === "female" ? "נשי" : "גברי"}…` : "שולח למאמן ומכין תשובה…"}</span>{(coachListening || coachSpeaking) && <button type="button" onClick={() => coachListening ? stopCoachListening() : stopCoachSpeech()}>{coachListening ? "שלח" : "עצור"}</button>}</div>}
+            {(coachListening || coachTranscribing || coachSpeechPending || coachSpeaking || busy) && <div className={`coach-voice-status ${coachListening ? "listening" : coachSpeaking ? "speaking" : "thinking"}`} role="status"><span>{coachListening ? "אני מקשיב — לחץ שוב כדי לשלוח" : coachTranscribing ? "מבין את ההודעה שלך…" : coachSpeechPending ? "מכין תשובה קולית אחת…" : coachSpeaking ? `המאמן עונה בקול ${coachVoice === "female" ? "נשי" : "גברי"}…` : "שולח למאמן ומכין תשובה…"}</span>{(coachListening || coachSpeechPending || coachSpeaking) && <button type="button" onClick={() => coachListening ? stopCoachListening() : stopCoachSpeech()}>{coachListening ? "שלח" : "עצור"}</button>}</div>}
             <form onSubmit={sendMessage}>
               <button type="button" disabled={busy || coachTranscribing} className={`coach-dictation ${coachListening ? "listening" : ""}`} onClick={() => coachListening ? stopCoachListening() : startCoachDictation()} aria-label={coachListening ? "עצירה ושליחת ההודעה" : "התחלת הודעה קולית"} title={coachListening ? "לחץ כדי לעצור ולשלוח" : "לחץ כדי לדבר"}><AppIcon name="mic" /><span>{coachListening ? "שלח" : "דבר"}</span></button>
               <input
