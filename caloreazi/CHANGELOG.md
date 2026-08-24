@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.18.8
+
+- Added a voice-first coach conversation: one-tap Hebrew dictation sends automatically, replies can be read aloud, auto-speech is optional, and listening or playback can be stopped clearly.
+
 ## 1.18.7
 
 - Replaced clipped mobile ADMIN tabs with one clear, full-width section selector grouped by system and maintenance tasks.

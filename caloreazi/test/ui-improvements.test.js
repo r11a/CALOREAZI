@@ -423,6 +423,17 @@ test("admin uses a focused control-center workspace", () => {
   assert.match(expansionCss, /admin-workspace>\.admin-nav\{display:none\}/);
 });
 
+test("coach supports a complete opt-in voice conversation", () => {
+  assert.match(page, /speechSynthesis/);
+  assert.match(page, /SpeechSynthesisUtterance/);
+  assert.match(page, /sendCoachText\(text, true\)/);
+  assert.match(page, /coach-voice-toggle/);
+  assert.match(page, /coach-voice-status/);
+  assert.match(page, /message-speak/);
+  assert.match(page, /סיום ושליחת ההודעה הקולית/);
+  assert.match(css, /coach-voice-wave/);
+});
+
 test("desktop destinations use a full system-screen shell without visible scrollbars", () => {
   assert.match(expansionCss, /@media\(min-width:761px\)/);
   assert.match(expansionCss, /height:calc\(100dvh - 48px\)/);

@@ -563,6 +563,8 @@ export default function Home() {
   const [mealDateTime, setMealDateTime] = useState(() => localDateTimeInput());
   const [message, setMessage] = useState("");
   const [coachListening, setCoachListening] = useState(false);
+  const [coachAutoSpeak, setCoachAutoSpeak] = useState(false);
+  const [coachSpeaking, setCoachSpeaking] = useState(false);
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string; usage?: string }[]
   >([]);
@@ -731,6 +733,7 @@ export default function Home() {
   const recordingStartedAt = useRef(0);
   const speechRecognition = useRef<any>(null);
   const coachSpeechRecognition = useRef<any>(null);
+  const coachTranscript = useRef("");
   const browserTranscript = useRef("");
   const voiceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceProcessingTimer = useRef<ReturnType<typeof setInterval> | null>(
@@ -753,6 +756,16 @@ export default function Home() {
       })
       .catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => {
+    if (coachOpen) return;
+    coachTranscript.current = "";
+    coachSpeechRecognition.current?.abort?.();
+    if (typeof window !== "undefined" && "speechSynthesis" in window)
+      window.speechSynthesis.cancel();
+    setCoachListening(false);
+    setCoachSpeaking(false);
+  }, [coachOpen]);
 
   useEffect(() => {
     const meal = state?.today?.meals?.find((item) => item.id && (!item.image || /(?:category-|food-sprite-|generic|placeholder)/i.test(String(item.image))) && !imageCompletionRequested.current.has(item.id));
@@ -2548,9 +2561,28 @@ export default function Home() {
     }
     setRecording(false);
   }
-  async function sendMessage(event: FormEvent) {
-    event.preventDefault();
-    const text = message.trim();
+  function stopCoachSpeech() {
+    if (typeof window !== "undefined" && "speechSynthesis" in window)
+      window.speechSynthesis.cancel();
+    setCoachSpeaking(false);
+  }
+  function speakCoachReply(text: string) {
+    if (!("speechSynthesis" in window) || !text.trim()) return;
+    window.speechSynthesis.cancel();
+    const spokenText = text.replace(/[*#_`>]/g, " ").replace(/\s+/g, " ").trim();
+    const utterance = new SpeechSynthesisUtterance(spokenText);
+    const voices = window.speechSynthesis.getVoices();
+    utterance.voice = voices.find((voice) => /^he(?:-|_)/i.test(voice.lang)) || voices.find((voice) => voice.lang.toLowerCase().includes("he")) || null;
+    utterance.lang = "he-IL";
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.onstart = () => setCoachSpeaking(true);
+    utterance.onend = () => setCoachSpeaking(false);
+    utterance.onerror = () => setCoachSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  }
+  async function sendCoachText(rawText: string, speakResponse = coachAutoSpeak) {
+    const text = rawText.trim();
     if (!text || busy) return;
     setMessages((items) => [...items, { role: "user", text }]);
     setMessage("");
@@ -2568,6 +2600,7 @@ export default function Home() {
           usage: `${data.usage.totalTokens} tokens · $${data.usage.estimatedCost.toFixed(4)}`,
         },
       ]);
+      if (speakResponse) speakCoachReply(data.reply);
       if (/(?:תכניס|תוסיף|הוסף|הכנס).*(?:ארוחה|אוכל|ליומן|לארוחות)/i.test(text)) {
         const draft = await api("/api/ai/analyze-text", { method: "POST", body: JSON.stringify({ description: text }) });
         setEditingMealId("");
@@ -2594,19 +2627,24 @@ export default function Home() {
       setBusy(false);
     }
   }
+  async function sendMessage(event: FormEvent) {
+    event.preventDefault();
+    await sendCoachText(message);
+  }
   function startCoachDictation() {
     const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!Recognition) { setError("הכתבה קולית אינה נתמכת בדפדפן הזה."); return; }
+    coachTranscript.current = "";
     coachSpeechRecognition.current?.abort?.();
     const recognition = new Recognition();
     coachSpeechRecognition.current = recognition;
     recognition.lang = "he-IL";
     recognition.interimResults = true;
     recognition.continuous = false;
-    recognition.onstart = () => setCoachListening(true);
-    recognition.onresult = (event: any) => { const text = Array.from(event.results).map((result: any) => result[0]?.transcript || "").join(" ").trim(); if (text) setMessage(text); };
-    recognition.onerror = () => { setCoachListening(false); setError("לא ניתן היה לזהות את ההכתבה. בדוק הרשאת מיקרופון ונסה שוב."); };
-    recognition.onend = () => setCoachListening(false);
+    recognition.onstart = () => { coachTranscript.current = ""; setCoachAutoSpeak(true); setCoachListening(true); };
+    recognition.onresult = (event: any) => { const text = Array.from(event.results).map((result: any) => result[0]?.transcript || "").join(" ").trim(); if (text) { coachTranscript.current = text; setMessage(text); } };
+    recognition.onerror = () => { coachTranscript.current = ""; setCoachListening(false); setError("לא ניתן היה לזהות את ההכתבה. בדוק הרשאת מיקרופון ונסה שוב."); };
+    recognition.onend = () => { setCoachListening(false); const text = coachTranscript.current.trim(); if (text) void sendCoachText(text, true); };
     recognition.start();
   }
   async function clearCoachDisplay() {
@@ -3005,6 +3043,7 @@ export default function Home() {
                 </small>
               </div>
               <div className="coach-header-actions">
+                <button type="button" className={`coach-voice-toggle ${coachAutoSpeak ? "active" : ""}`} onClick={() => { if (coachAutoSpeak) stopCoachSpeech(); setCoachAutoSpeak(!coachAutoSpeak); }} aria-pressed={coachAutoSpeak} title="הקראת תשובות המאמן"><AppIcon name="speaker" /><span>{coachAutoSpeak ? "קול פעיל" : "הפעל קול"}</span></button>
                 <button className="clear-chat" onClick={clearCoachDisplay} title="ניקוי התצוגה בלבד; ההיסטוריה נשמרת בזיכרון המאמן והמלל לא יחזור">נקה מסך</button>
                 <button onClick={() => setCoachOpen(false)} aria-label="סגירת המאמן">×</button>
               </div>
@@ -3019,6 +3058,7 @@ export default function Home() {
               {messages.map((item, index) => (
                 <div key={index} className={`chat-message ${item.role}`}>
                   <span>{item.text}</span>
+                  {item.role === "assistant" && <button type="button" className={`message-speak ${coachSpeaking ? "speaking" : ""}`} onClick={() => coachSpeaking ? stopCoachSpeech() : speakCoachReply(item.text)} aria-label={coachSpeaking ? "עצירת ההקראה" : "הקראת התשובה"}><AppIcon name="speaker" />{coachSpeaking ? "עצור" : "הקרא"}</button>}
                   {item.usage && <small>{item.usage}</small>}
                 </div>
               ))}
@@ -3037,12 +3077,13 @@ export default function Home() {
               <button onClick={() => setMessage("HELP: איך משנים את היעדים והפרטים האישיים?")}>איך משנים יעדים?</button>
               <button onClick={() => setMessage("מה חסר לי היום בחלבון, פחמימות, שומן, מים וקלוריות?")}>מה חסר לי היום?</button>
             </div>
+            {(coachListening || coachSpeaking) && <div className={`coach-voice-status ${coachListening ? "listening" : "speaking"}`} role="status"><span>{coachListening ? "מקשיב…" : "המאמן מדבר…"}</span><button type="button" onClick={() => coachListening ? coachSpeechRecognition.current?.stop?.() : stopCoachSpeech()}>{coachListening ? "שלח עכשיו" : "עצור"}</button></div>}
             <form onSubmit={sendMessage}>
-              <button type="button" className={`coach-dictation ${coachListening ? "listening" : ""}`} onClick={startCoachDictation} aria-label={coachListening ? "מקשיב להכתבה" : "הכתבה קולית"} title="הכתבה קולית">{coachListening ? "●" : "🎙"}</button>
+              <button type="button" className={`coach-dictation ${coachListening ? "listening" : ""}`} onClick={() => coachListening ? coachSpeechRecognition.current?.stop?.() : startCoachDictation()} aria-label={coachListening ? "סיום ושליחת ההודעה הקולית" : "שיחה קולית עם המאמן"} title="דבר עם המאמן"><AppIcon name="mic" /></button>
               <input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="שאל את המאמן…"
+                placeholder={coachListening ? "מקשיב לך…" : "כתוב או לחץ על המיקרופון ודבר…"}
               />
               <button disabled={busy}>↑</button>
             </form>
