@@ -112,16 +112,18 @@ test("coach uses concise human Hebrew and offers persistent male or female cloud
   assert.match(coachRoute, /טון בונה, סבלני ומכבד/);
   assert.match(coachRoute, /לכל היותר ב-3 מספרים/);
   assert.match(page, /המאמן האישי שלך/);
-  assert.match(page, /coach-voice-picker/);
-  assert.match(page, /chooseCoachVoice\("male"\)/);
-  assert.match(page, /chooseCoachVoice\("female"\)/);
+  assert.match(page, /coach-voice-profile/);
+  assert.match(page, /coachVoiceProvider/);
+  assert.match(page, /<option value="male">גברי/);
+  assert.match(page, /<option value="female">נשי/);
   assert.doesNotMatch(page, /data\.usage\.totalTokens/);
-  assert.match(speechRoute, /gemini-3\.1-flash-tts-preview/);
+  assert.match(speechRoute, /gemini-2\.5-flash-preview-tts:generateContent/);
   assert.match(speechRoute, /gpt-4o-mini-tts/);
   assert.match(speechRoute, /בונה וסבלני/);
-  assert.match(page, /recognition\.onspeechend = \(\) => recognition\.stop\(\)/);
+  assert.match(page, /recognition\.continuous = true/);
   assert.match(page, /שולח למאמן ומכין תשובה/);
-  assert.match(page, /ההודעה תישלח אוטומטית/);
+  assert.match(page, /לחץ כדי לעצור ולשלוח/);
+  assert.match(page, /sendCoachText\(text, true\)/);
 });
 
 test("offline outbox covers core entries and birth date shows the calculated age", () => {
@@ -220,11 +222,11 @@ test("meal save explains missing fields, infers safe values and blocks duplicate
   assert.match(css, /meal-save-feedback/);
 });
 
-test("coach can clear only its visible transcript and offers practical help prompts", () => {
+test("coach can clear only its visible transcript and offers focused prompts", () => {
   assert.match(page, /setMessages\(\[\]\)/);
   assert.match(page, /ניקוי התצוגה בלבד; ההיסטוריה נשמרת/);
-  assert.match(page, /HELP: איך מוסיפים ארוחה/);
-  assert.match(page, /איך משנים יעדים/);
+  assert.match(page, /מה כדאי עכשיו/);
+  assert.match(page, /תן לי משימה/);
 });
 
 test("history daily summary follows the five-band score color", () => {
@@ -444,10 +446,12 @@ test("coach supports a complete opt-in voice conversation", () => {
   assert.match(page, /speechSynthesis/);
   assert.match(page, /SpeechSynthesisUtterance/);
   assert.match(page, /sendCoachText\(text, true\)/);
-  assert.match(page, /coach-voice-toggle/);
+  assert.match(page, /coach-voice-profile/);
+  assert.match(page, /stopCoachListening/);
+  assert.match(page, /\/api\/ai\/transcribe/);
   assert.match(page, /coach-voice-status/);
   assert.match(page, /message-speak/);
-  assert.match(page, /סיום ושליחת ההודעה הקולית/);
+  assert.match(page, /עצירה ושליחת ההודעה/);
   assert.match(css, /coach-voice-wave/);
 });
 

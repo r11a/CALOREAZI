@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.18.11
+
+- Moved the cloud/device provider and male/female coach voice choices into the user profile.
+- Simplified mobile coach UI to one clear microphone: tap to listen, tap again to send; voice messages receive spoken answers while typed messages remain text-only.
+- Replaced the Gemini speech call with the stable TTS generate-content path and added server transcription fallback when iPhone PWA browser dictation is unavailable.
+- Reduced mobile chat clutter to three focused prompts and added explicit listening, transcription, thinking and speaking states.
+
 ## 1.18.10
 
 - Made coach voice a one-tap flow: tap, speak naturally, pause to send automatically, and receive the reply aloud in the selected voice.

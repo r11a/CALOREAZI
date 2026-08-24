@@ -563,11 +563,15 @@ export default function Home() {
   const [mealDateTime, setMealDateTime] = useState(() => localDateTimeInput());
   const [message, setMessage] = useState("");
   const [coachListening, setCoachListening] = useState(false);
-  const [coachAutoSpeak, setCoachAutoSpeak] = useState(false);
+  const [coachTranscribing, setCoachTranscribing] = useState(false);
   const [coachVoice, setCoachVoice] = useState<"male" | "female">("male");
+  const [coachVoiceProvider, setCoachVoiceProvider] = useState<"cloud" | "device">("cloud");
   const [coachSpeaking, setCoachSpeaking] = useState(false);
   const coachAudio = useRef<HTMLAudioElement | null>(null);
   const coachAudioUrl = useRef("");
+  const coachRecorder = useRef<MediaRecorder | null>(null);
+  const coachRecordingStream = useRef<MediaStream | null>(null);
+  const coachAudioChunks = useRef<Blob[]>([]);
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string; usage?: string }[]
   >([]);
@@ -748,6 +752,7 @@ export default function Home() {
       .then((data) => {
         setState(data);
         setCoachVoice(data.profile?.coachVoice === "female" ? "female" : "male");
+        setCoachVoiceProvider(data.profile?.coachVoiceProvider === "device" ? "device" : "cloud");
         setMessages(Array.isArray(data.coachHistory) ? data.coachHistory : []);
         if (data.owner)
           setOnboarding((current) => ({
@@ -765,6 +770,8 @@ export default function Home() {
     if (coachOpen) return;
     coachTranscript.current = "";
     coachSpeechRecognition.current?.abort?.();
+    coachRecorder.current?.stop?.();
+    coachRecordingStream.current?.getTracks().forEach((track) => track.stop());
     if (typeof window !== "undefined" && "speechSynthesis" in window)
       window.speechSynthesis.cancel();
     setCoachListening(false);
@@ -1760,6 +1767,7 @@ export default function Home() {
       notificationPreferences: { ...notificationPreferenceDefaults, ...(profile.notificationPreferences || {}) },
       language: profile.language || "he",
       coachVoice: profile.coachVoice || "male",
+      coachVoiceProvider: profile.coachVoiceProvider || "cloud",
       cameraCalibration: profile.cameraCalibration || { reference: "none", plateDiameterCm: 26, useLearnedCorrections: true },
       avatar: profile.avatar || "",
     });
@@ -1776,6 +1784,7 @@ export default function Home() {
         await queueMutation("/api/profile", "PUT", JSON.stringify(offlineProfile));
         if (weightValue && Number(weightValue) !== Number(latestWeight)) await queueMutation("/api/measurements", "POST", JSON.stringify({ weight: weightValue, date: state.today.date }));
         setState((current: any) => ({ ...current, profile: { ...current.profile, ...offlineProfile, age: exactAge(offlineProfile.birthDate) ?? current.profile.age, weight: weightValue || current.profile.weight } }));
+        setCoachVoice(offlineProfile.coachVoice === "female" ? "female" : "male"); setCoachVoiceProvider(offlineProfile.coachVoiceProvider === "device" ? "device" : "cloud");
         setOfflineQueueCount(await offlinePendingCount()); setProfileOpen(false); setMealResult({ name: "הפרטים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
       }
       let latest = await api("/api/profile", {
@@ -1788,6 +1797,7 @@ export default function Home() {
           body: JSON.stringify({ weight: weightValue }),
         });
       setState(latest);
+      setCoachVoice(latest.profile?.coachVoice === "female" ? "female" : "male"); setCoachVoiceProvider(latest.profile?.coachVoiceProvider === "device" ? "device" : "cloud");
       setProfileOpen(false);
     } catch (e) {
       setError((e as Error).message);
@@ -2594,9 +2604,10 @@ export default function Home() {
   async function speakCoachReply(text: string) {
     if (!text.trim()) return;
     stopCoachSpeech();
+    if (coachVoiceProvider === "device") { speakWithDevice(text); return; }
     setCoachSpeaking(true);
     try {
-      const response = await fetch("/api/ai/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice: coachVoice }) });
+      const response = await fetch("/api/ai/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice: coachVoice, provider: coachVoiceProvider }) });
       if (!response.ok) throw new Error("cloud voice unavailable");
       const url = URL.createObjectURL(await response.blob());
       const audio = new Audio(url);
@@ -2607,15 +2618,11 @@ export default function Home() {
       await audio.play();
     } catch {
       setCoachSpeaking(false);
+      setError("קול הענן לא היה זמין כרגע; עברתי לקול המכשיר כדי לא לעכב את השיחה.");
       speakWithDevice(text);
     }
   }
-  function chooseCoachVoice(voice: "male" | "female") {
-    stopCoachSpeech();
-    setCoachVoice(voice);
-    void api("/api/ai/speech", { method: "PUT", body: JSON.stringify({ voice }) }).catch(() => undefined);
-  }
-  async function sendCoachText(rawText: string, speakResponse = coachAutoSpeak) {
+  async function sendCoachText(rawText: string, speakResponse = false) {
     const text = rawText.trim();
     if (!text || busy) return;
     setMessages((items) => [...items, { role: "user", text }]);
@@ -2666,7 +2673,7 @@ export default function Home() {
   }
   function startCoachDictation() {
     const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!Recognition) { setError("הכתבה קולית אינה נתמכת בדפדפן הזה."); return; }
+    if (!Recognition) { void startCoachRecording(); return; }
     if (busy) return;
     stopCoachSpeech();
     coachTranscript.current = "";
@@ -2676,14 +2683,43 @@ export default function Home() {
     coachSpeechRecognition.current = recognition;
     recognition.lang = "he-IL";
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.maxAlternatives = 1;
-    recognition.onstart = () => { coachTranscript.current = ""; setCoachAutoSpeak(true); setCoachListening(true); };
+    recognition.onstart = () => { coachTranscript.current = ""; setCoachListening(true); };
     recognition.onresult = (event: any) => { const text = Array.from(event.results).map((result: any) => result[0]?.transcript || "").join(" ").trim(); if (text) { coachTranscript.current = text; setMessage(text); } };
-    recognition.onspeechend = () => recognition.stop();
-    recognition.onerror = (event: any) => { coachTranscript.current = ""; setCoachListening(false); setError(event?.error === "no-speech" ? "לא שמעתי אותך. לחץ שוב ודבר כרגיל." : "לא ניתן היה לזהות את ההכתבה. בדוק הרשאת מיקרופון ונסה שוב."); };
-    recognition.onend = () => { setCoachListening(false); const text = coachTranscript.current.trim(); if (text) void sendCoachText(text, true); };
+    recognition.onerror = (event: any) => { coachTranscript.current = ""; coachSpeechRecognition.current = null; setCoachListening(false); setError(event?.error === "no-speech" ? "לא שמעתי אותך. לחץ שוב ודבר כרגיל." : "לא ניתן היה לזהות את ההכתבה. בדוק הרשאת מיקרופון ונסה שוב."); };
+    recognition.onend = () => { coachSpeechRecognition.current = null; setCoachListening(false); const text = coachTranscript.current.trim(); if (text) void sendCoachText(text, true); };
     recognition.start();
+  }
+  async function startCoachRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") { setError("המיקרופון אינו זמין. בדוק הרשאה בהגדרות iPhone ונסה שוב."); return; }
+    try {
+      stopCoachSpeech(); setMessage("");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      coachRecordingStream.current = stream; coachAudioChunks.current = [];
+      const mimeType = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((type) => MediaRecorder.isTypeSupported(type)) || "";
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      coachRecorder.current = recorder;
+      recorder.ondataavailable = (event) => { if (event.data.size) coachAudioChunks.current.push(event.data); };
+      recorder.onstop = async () => {
+        coachRecorder.current = null; stream.getTracks().forEach((track) => track.stop()); coachRecordingStream.current = null; setCoachListening(false);
+        const blob = new Blob(coachAudioChunks.current, { type: recorder.mimeType || "audio/webm" }); coachAudioChunks.current = [];
+        if (blob.size < 800) { setError("לא שמעתי הודעה. לחץ שוב ודבר כרגיל."); return; }
+        setCoachTranscribing(true);
+        try {
+          const form = new FormData(); form.append("audio", blob, recorder.mimeType.includes("mp4") ? "coach.m4a" : "coach.webm");
+          const response = await fetch("/api/ai/transcribe", { method: "POST", body: form }); const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "התמלול נכשל");
+          setMessage(data.transcript); await sendCoachText(data.transcript, true);
+        } catch (error) { setError((error as Error).message); } finally { setCoachTranscribing(false); }
+      };
+      recorder.start(250); setCoachListening(true);
+    } catch { setError("לא ניתנה גישה למיקרופון. אשר הרשאה ל־CALOREAZI בהגדרות iPhone."); }
+  }
+  function stopCoachListening() {
+    if (coachSpeechRecognition.current) { coachSpeechRecognition.current.stop?.(); return; }
+    if (coachRecorder.current?.state === "recording") coachRecorder.current.stop();
+    coachRecorder.current = null;
   }
   async function clearCoachDisplay() {
     try { await api("/api/ai/chat", { method: "PATCH" }); setMessages([]); }
@@ -3081,7 +3117,6 @@ export default function Home() {
                 </small>
               </div>
               <div className="coach-header-actions">
-                <button type="button" className={`coach-voice-toggle ${coachAutoSpeak ? "active" : ""}`} onClick={() => { if (coachAutoSpeak) stopCoachSpeech(); setCoachAutoSpeak(!coachAutoSpeak); }} aria-pressed={coachAutoSpeak} title="הקראת תשובות המאמן"><AppIcon name="speaker" /><span>{coachAutoSpeak ? "קול פעיל" : "הפעל קול"}</span></button>
                 <button className="clear-chat" onClick={clearCoachDisplay} title="ניקוי התצוגה בלבד; ההיסטוריה נשמרת בזיכרון המאמן והמלל לא יחזור">נקה מסך</button>
                 <button onClick={() => setCoachOpen(false)} aria-label="סגירת המאמן">×</button>
               </div>
@@ -3101,26 +3136,13 @@ export default function Home() {
               {busy && <div className="typing">חושב…</div>}
             </div>
             <div className="quick-prompts">
-              <button onClick={() => setMessage("מה כדאי לי לאכול עכשיו?")}>
-                מה כדאי לאכול?
-              </button>
-              <button onClick={() => setMessage("איך היום שלי נראה?")}>
-                איך היום שלי?
-              </button>
-              <button onClick={() => setMessage("HELP: איך מוסיפים ארוחה ידנית ושומרים אותה?")}>איך מוסיפים ארוחה?</button>
-              <button onClick={() => setMessage("HELP: איך מצלמים ארוחה כדי לקבל זיהוי מדויק?")}>איך מצלמים נכון?</button>
-              <button onClick={() => setMessage("HELP: איך מחושב הציון היומי ואיך אפשר לשפר אותו?")}>איך משפרים ציון?</button>
-              <button onClick={() => setMessage("HELP: איך משנים את היעדים והפרטים האישיים?")}>איך משנים יעדים?</button>
-              <button onClick={() => setMessage("מה חסר לי היום בחלבון, פחמימות, שומן, מים וקלוריות?")}>מה חסר לי היום?</button>
+              <button onClick={() => setMessage("מה כדאי לי לאכול עכשיו?")}>מה כדאי עכשיו?</button>
+              <button onClick={() => setMessage("איך היום שלי נראה ומה הצעד הבא שכדאי לי לעשות?")}>איך אני מתקדם?</button>
+              <button onClick={() => setMessage("תן לי משימה אחת פשוטה להמשך היום")}>תן לי משימה</button>
             </div>
-            <div className="coach-voice-picker" aria-label="בחירת קול המאמן">
-              <span>הקול של המאמן</span>
-              <button type="button" className={coachVoice === "male" ? "selected" : ""} onClick={() => chooseCoachVoice("male")}>גברי</button>
-              <button type="button" className={coachVoice === "female" ? "selected" : ""} onClick={() => chooseCoachVoice("female")}>נשי</button>
-            </div>
-            {(coachListening || coachSpeaking || busy) && <div className={`coach-voice-status ${coachListening ? "listening" : coachSpeaking ? "speaking" : "thinking"}`} role="status"><span>{coachListening ? "אני מקשיב — דבר חופשי…" : coachSpeaking ? `המאמן עונה בקול ${coachVoice === "female" ? "נשי" : "גברי"}…` : "שולח למאמן ומכין תשובה…"}</span>{(coachListening || coachSpeaking) && <button type="button" onClick={() => coachListening ? coachSpeechRecognition.current?.stop?.() : stopCoachSpeech()}>{coachListening ? "סיימתי" : "עצור"}</button>}</div>}
+            {(coachListening || coachTranscribing || coachSpeaking || busy) && <div className={`coach-voice-status ${coachListening ? "listening" : coachSpeaking ? "speaking" : "thinking"}`} role="status"><span>{coachListening ? "אני מקשיב — לחץ שוב כדי לשלוח" : coachTranscribing ? "מבין את ההודעה שלך…" : coachSpeaking ? `המאמן עונה בקול ${coachVoice === "female" ? "נשי" : "גברי"}…` : "שולח למאמן ומכין תשובה…"}</span>{(coachListening || coachSpeaking) && <button type="button" onClick={() => coachListening ? stopCoachListening() : stopCoachSpeech()}>{coachListening ? "שלח" : "עצור"}</button>}</div>}
             <form onSubmit={sendMessage}>
-              <button type="button" disabled={busy} className={`coach-dictation ${coachListening ? "listening" : ""}`} onClick={() => coachListening ? coachSpeechRecognition.current?.stop?.() : startCoachDictation()} aria-label={coachListening ? "סיום ושליחת ההודעה הקולית" : "לחיצה אחת לשיחה עם המאמן"} title="לחץ ודבר — ההודעה תישלח אוטומטית"><AppIcon name="mic" /></button>
+              <button type="button" disabled={busy || coachTranscribing} className={`coach-dictation ${coachListening ? "listening" : ""}`} onClick={() => coachListening ? stopCoachListening() : startCoachDictation()} aria-label={coachListening ? "עצירה ושליחת ההודעה" : "התחלת הודעה קולית"} title={coachListening ? "לחץ כדי לעצור ולשלוח" : "לחץ כדי לדבר"}><AppIcon name="mic" /><span>{coachListening ? "שלח" : "דבר"}</span></button>
               <input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
@@ -4344,6 +4366,7 @@ export default function Home() {
             {profileTab === "account" && <section className="profile-tab-panel account-panel"><header><span><AppIcon name="settings" /></span><div><strong>העדפות וחשבון</strong><small>תצוגה, שיתוף, גיבוי וניהול מידע</small></div></header>
             <section className="account-credentials">
               <strong>פרטי התחברות</strong>
+              <div className="coach-voice-profile"><strong>קול המאמן</strong><p>הקול יופעל אוטומטית רק אחרי הודעה קולית. הודעה כתובה תקבל תשובה כתובה.</p><div><label>ספק קול<select value={profileForm.coachVoiceProvider || "cloud"} onChange={(e) => setProfileForm({ ...profileForm, coachVoiceProvider: e.target.value })}><option value="cloud">{(state.ai?.voiceProvider || state.ai?.roles?.coach?.provider || state.ai?.provider) === "gemini" ? "Gemini — קול ענן עברי" : "OpenAI — קול ענן עברי"}</option><option value="device">קול המכשיר — גיבוי</option></select></label><label>סוג קול<select value={profileForm.coachVoice || "male"} onChange={(e) => setProfileForm({ ...profileForm, coachVoice: e.target.value })}><option value="male">גברי</option><option value="female">נשי</option></select></label></div></div>
               <label>שפת הממשק<select value={profileForm.language || "he"} onChange={(e) => setProfileForm({ ...profileForm, language: e.target.value })}><option value="he">עברית</option><option value="en">English (beta)</option></select><small>הבחירה נשמרת למשתמש ומשנה גם את כיוון הממשק. תרגום אנגלי מלא יושלם בהדרגה.</small></label>
               <label>כתובת אימייל<input type="email" value={profileForm.email || ""} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} /></label>
               {profileForm.email !== state.owner.email && <label>סיסמה נוכחית לאישור שינוי<input type="password" autoComplete="current-password" value={profileForm.accountPassword || ""} onChange={(e) => setProfileForm({ ...profileForm, accountPassword: e.target.value })} /></label>}

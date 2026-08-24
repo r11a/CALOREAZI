@@ -153,7 +153,7 @@ export async function decryptSecret(value) {
 export function publicState(state, admin = false) {
   const ai = admin
     ? { ...state.ai, encryptedKey: undefined, keyConfigured: Boolean(state.ai?.encryptedKey) }
-    : { keyConfigured: Boolean(state.ai?.encryptedKey), available: Boolean(state.ai?.encryptedKey) };
+    : { keyConfigured: Boolean(state.ai?.encryptedKey), available: Boolean(state.ai?.encryptedKey), voiceProvider: state.ai?.roles?.coach?.provider || state.ai?.provider || "openai" };
   return { ...state, adminAuth: undefined, aiUsage: admin ? state.aiUsage : [], ai, adminConfigured: Boolean(state.adminAuth?.hash) };
 }
 
@@ -163,7 +163,7 @@ export function userView(state, userId, admin = false) {
   const data = ensureUserData(state, userId);
   const ai = admin
     ? { ...state.ai, encryptedKey: undefined, keyConfigured: Boolean(state.ai?.encryptedKey) }
-    : { keyConfigured: Boolean(state.ai?.encryptedKey), available: Boolean(state.ai?.encryptedKey) };
+    : { keyConfigured: Boolean(state.ai?.encryptedKey), available: Boolean(state.ai?.encryptedKey), voiceProvider: state.ai?.roles?.coach?.provider || state.ai?.provider || "openai" };
   const usernameFor = (item) => {
     const username = String(item?.username || "").trim();
     return username && !username.includes("@") ? username : String(item?.name || "משתמש").trim();

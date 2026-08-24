@@ -5,6 +5,7 @@ import { decryptSecret, ensureUserData, readState, updateState } from "@/server/
 export const runtime = "nodejs";
 
 type CoachVoice = "male" | "female";
+type VoiceProvider = "cloud" | "device";
 
 function selectedVoice(value: unknown): CoachVoice {
   return value === "female" ? "female" : "male";
@@ -31,14 +32,15 @@ export async function PUT(request: Request) {
   const state = await readState();
   const session = requireUser(state, request);
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
-  const { voice } = await request.json();
+  const { voice, provider } = await request.json();
   const coachVoice = selectedVoice(voice);
+  const coachVoiceProvider: VoiceProvider = provider === "device" ? "device" : "cloud";
   await updateState((latest) => {
     const data = ensureUserData(latest, session.userId);
-    if (data.profile) data.profile.coachVoice = coachVoice;
+    if (data.profile) { data.profile.coachVoice = coachVoice; data.profile.coachVoiceProvider = coachVoiceProvider; }
     return latest;
   });
-  return Response.json({ coachVoice });
+  return Response.json({ coachVoice, coachVoiceProvider });
 }
 
 export async function POST(request: Request) {
@@ -50,24 +52,23 @@ export async function POST(request: Request) {
   const text = String(body.text || "").replace(/[*#_`>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 3500);
   if (!text) return Response.json({ error: "אין טקסט להקראה" }, { status: 400 });
   const voice = selectedVoice(body.voice || state.userData[session.userId]?.profile?.coachVoice);
+  if ((body.provider || state.userData[session.userId]?.profile?.coachVoiceProvider) === "device") return Response.json({ device: true }, { status: 409 });
   const apiKey = await decryptSecret(state.ai.encryptedKey);
   const role = aiRole(state.ai, "coach");
   const direction = voice === "female" ? "בקול נשי ישראלי, חם ובטוח" : "בקול גברי ישראלי, חם ובטוח";
   const delivery = `${direction}. דבר כמו מאמן אישי אנושי, בונה וסבלני, בעברית טבעית ועכשווית ובקצב שיחה רגוע. בלי הטפה, דרמה או התלהבות מלאכותית. הגה מספרים ככמות שלמה ולא ספרה אחר ספרה. אל תקריא סימני Markdown. טקסט: ${text}`;
 
   if (role.provider === "gemini") {
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent", {
       method: "POST",
       headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gemini-3.1-flash-tts-preview",
-        input: delivery,
-        response_format: { type: "audio" },
-        generation_config: { speech_config: [{ voice: voice === "female" ? "Sulafat" : "Gacrux" }] },
+        contents: [{ parts: [{ text: delivery }] }],
+        generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice === "female" ? "Sulafat" : "Gacrux" } } } },
       }),
     });
     const payload = await response.json();
-    const audio = payload?.output_audio?.data;
+    const audio = payload?.candidates?.[0]?.content?.parts?.find((part: { inlineData?: { data?: string } }) => part.inlineData?.data)?.inlineData?.data;
     if (!response.ok || !audio) return Response.json({ error: payload?.error?.message || "יצירת הקול נכשלה" }, { status: 502 });
     return new Response(pcmToWav(Buffer.from(audio, "base64")), { headers: { "Content-Type": "audio/wav", "Cache-Control": "no-store" } });
   }
