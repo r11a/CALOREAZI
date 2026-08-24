@@ -396,3 +396,17 @@ test("meal source actions share white icons on orange while food categories stay
   assert.match(css, /category-grid \.add-source-entry \.manual-meal-art\{[^}]*color:#fff[^}]*var\(--orange\)/);
   assert.doesNotMatch(page, /className="add-source-entry" onClick=\{\(\) => setQuickCategory/);
 });
+
+test("history deletion masks meal passwords and supports legacy water entries", () => {
+  assert.doesNotMatch(page, /window\.prompt\("מחיקת ארוחה/);
+  assert.match(page, /history-password-modal/);
+  assert.match(page, /type="password" autoComplete="current-password"/);
+  assert.match(page, /String\(meal\.id \|\| meal\.time\)/);
+});
+
+test("bottom navigation keeps trends visible and moves admin into the account tab", () => {
+  assert.match(page, /openNavigationScreen\("insights"\)[\s\S]{0,160}מגמות/);
+  assert.doesNotMatch(page, /openNavigationScreen\(isAdmin \? "admin" : "insights"\)/);
+  assert.match(page, /admin-center-entry/);
+  assert.match(page, /מרכז ניהול ADMIN/);
+});

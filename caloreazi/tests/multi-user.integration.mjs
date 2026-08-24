@@ -41,6 +41,16 @@ try {
   assert.notEqual(historicMeal.body.savedLocalDate, stateAfterEdit.body.today.date);
   const stateAfterHistoricSave = await json("/api/state", { headers: { Cookie: memberCookie } });
   assert.equal(stateAfterHistoricSave.body.history.some((day) => day.date === historicMeal.body.savedLocalDate && day.meals.some((meal) => meal.id === historicMeal.body.savedMealId)), true, "historic meal was not saved under its local day");
+  const historicWater = await json("/api/water", { method: "POST", headers: { "Content-Type": "application/json", Cookie: memberCookie, Origin: base }, body: JSON.stringify({ amount: 250, recordedAt: yesterday }) });
+  assert.equal(historicWater.response.status, 200, JSON.stringify(historicWater.body));
+  const historicWaterDay = historicWater.body.history.find((day) => day.date === historicMeal.body.savedLocalDate);
+  const historicWaterEvent = historicWaterDay.waterEvents.at(-1);
+  const deletedWater = await json("/api/history", { method: "DELETE", headers: { "Content-Type": "application/json", Cookie: memberCookie, Origin: base }, body: JSON.stringify({ kind: "water", id: historicWaterEvent.id, date: historicMeal.body.savedLocalDate }) });
+  assert.equal(deletedWater.response.status, 200, JSON.stringify(deletedWater.body));
+  assert.equal(deletedWater.body.history.find((day) => day.date === historicMeal.body.savedLocalDate).waterEvents.some((event) => event.id === historicWaterEvent.id), false, "historic water was not deleted");
+  const deletedHistoricMeal = await json("/api/history", { method: "DELETE", headers: { "Content-Type": "application/json", Cookie: memberCookie, Origin: base }, body: JSON.stringify({ kind: "meal", id: historicMeal.body.savedMealId, date: historicMeal.body.savedLocalDate, password: "MemberPassword123!" }) });
+  assert.equal(deletedHistoricMeal.response.status, 200, JSON.stringify(deletedHistoricMeal.body));
+  assert.equal(deletedHistoricMeal.body.history.find((day) => day.date === historicMeal.body.savedLocalDate).meals.some((meal) => meal.id === historicMeal.body.savedMealId), false, "historic meal was not deleted");
   const rejectedCoffee = await json("/api/meals", { method: "POST", headers: { "Content-Type": "application/json", Cookie: memberCookie, Origin: base }, body: JSON.stringify({ name: "קפה שגוי", source: "photo", items: [{ name: "קפה עם חלב", grams: 250, quantity: 1, kcalPer100: 549, proteinPer100: 8, carbsPer100: 55, fatPer100: 33 }] }) });
   assert.equal(rejectedCoffee.response.status, 422);
   assert.equal(rejectedCoffee.body.requiresConfirmation, true);

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.18.4
+
+- Fixed history deletion for legacy water entries that do not have a stored identifier, while removing only the selected event.
+- Replaced the browser password prompt for historic meal deletion with a masked in-app password form.
+- Added integration coverage proving that historic water and password-protected meal deletion persist after a database round trip.
+- Added a permanent Trends destination to the balanced five-item bottom navigation, and moved ADMIN management into the profile Account tab.
+
 ## 1.18.3
 
 - Water entries can now be deleted directly from history without a password after an explicit confirmation, while meal deletion remains password protected.

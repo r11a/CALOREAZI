@@ -606,6 +606,7 @@ export default function Home() {
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification === "undefined" ? "unsupported" : Notification.permission);
   const [notificationStatus, setNotificationStatus] = useState("");
   const [testingNotificationType, setTestingNotificationType] = useState("");
+  const [historyDeleteRequest, setHistoryDeleteRequest] = useState<{ kind: "meal"; id: string; date: string; password: string } | null>(null);
   useEffect(() => {
     if (!mealResult) return;
     const timer = window.setTimeout(() => setMealResult(null), 15_000);
@@ -1630,16 +1631,19 @@ export default function Home() {
       setError((e as Error).message);
     }
   }
-  async function deleteHistoryEntry(kind: "meal" | "water", id: string, date: string) {
-    const password = kind === "meal" ? window.prompt("מחיקת ארוחה מההיסטוריה דורשת את הסיסמה הנוכחית:") : "";
-    if (kind === "meal" && !password) return;
+  async function performHistoryDelete(kind: "meal" | "water", id: string, date: string, password = "") {
     const confirmed = window.confirm(kind === "water" ? "למחוק את כוס המים הזו? כמות המים והציון של אותו יום יעודכנו מיד." : "למחוק את הארוחה ולעדכן מחדש את הקלוריות, אבות המזון והציון?");
     if (!confirmed) return;
     try {
       const latest = await api("/api/history", { method: "DELETE", body: JSON.stringify({ kind, id, date, password }) });
       setState(latest); const [insights, goalPlan] = await Promise.all([api("/api/insights"), api("/api/goal-plan")]); setInsightsData({ ...insights, goalPlan });
       setError(kind === "meal" ? "הארוחה נמחקה והמדדים חושבו מחדש." : "המים נמחקו והמדדים חושבו מחדש.");
+      setHistoryDeleteRequest(null);
     } catch (e) { setError((e as Error).message); }
+  }
+  async function deleteHistoryEntry(kind: "meal" | "water", id: string, date: string) {
+    if (kind === "meal") { setHistoryDeleteRequest({ kind, id, date, password: "" }); return; }
+    await performHistoryDelete(kind, id, date);
   }
   async function undoDeleteMeal() {
     if (!undoMeal) return;
@@ -2952,7 +2956,7 @@ export default function Home() {
         </div>
       </section>
       <nav className="bottom-nav">
-        <button className={!historyOpen && !settingsOpen && !adminLoginOpen && !coachOpen ? "active" : ""} onClick={() => openNavigationScreen("home")}>
+        <button className={!historyOpen && !settingsOpen && !adminLoginOpen && !insightsOpen && !coachOpen ? "active" : ""} onClick={() => openNavigationScreen("home")}>
           <span><AppIcon name="home" /></span>היום
         </button>
         <button className={historyOpen ? "active" : ""} onClick={() => openNavigationScreen("history")}>
@@ -2965,15 +2969,16 @@ export default function Home() {
         >
           <AppIcon name="camera" />
         </button>
-        <button className={isAdmin ? (settingsOpen || adminLoginOpen ? "active" : "") : (insightsOpen ? "active" : "")} onClick={() => openNavigationScreen(isAdmin ? "admin" : "insights")}>
-          <span><AppIcon name={isAdmin ? "settings" : "activity"} /></span>
-          {isAdmin ? "ניהול" : "תובנות"}
+        <button className={insightsOpen ? "active" : ""} onClick={() => openNavigationScreen("insights")}>
+          <span><AppIcon name="activity" /></span>
+          מגמות
         </button>
         <button className={coachOpen ? "active" : ""} onClick={() => openNavigationScreen("coach")}>
           <span><AppIcon name="coach" /></span>מאמן
         </button>
       </nav>
       {calorieOverage && <div className="modal-layer overage-layer"><button className="backdrop" onClick={() => setCalorieOverage(null)} /><section className="settings-modal overage-modal"><header><div><h2>חריגה מהיעד היומי</h2><small>הארוחה נשמרה, אבל אפשר עדיין לתקן את הבחירה</small></div></header><div className="overage-ring"><strong>+{Math.round(calorieOverage.overBy)}</strong><small>קלוריות מעל היעד</small></div><p>אין צורך להילחץ מיום אחד. אפשר להשאיר את הארוחה, לערוך כמויות או לבטל את ההוספה.</p><footer><button type="button" onClick={() => setCalorieOverage(null)}>השאר ביומן</button><button type="button" onClick={() => { const meal = calorieOverage.meal; setCalorieOverage(null); editMeal({ ...meal, id: calorieOverage.id, time: meal.occurredAt }); }}>ערוך ארוחה</button><button className="danger" type="button" onClick={async () => { await deleteMeal(calorieOverage.id); setCalorieOverage(null); }}>בטל את ההוספה</button></footer></section></div>}
+      {historyDeleteRequest && <div className="modal-layer modal-nested"><button className="backdrop" type="button" onClick={() => setHistoryDeleteRequest(null)} /><form className="settings-modal compact-modal history-password-modal" onSubmit={async (event) => { event.preventDefault(); if (!historyDeleteRequest.password) return; await performHistoryDelete("meal", historyDeleteRequest.id, historyDeleteRequest.date, historyDeleteRequest.password); }}><header><div><h2>מחיקת ארוחה מההיסטוריה</h2><p>המחיקה תעדכן מיד את הקלוריות, אבות המזון והציון.</p></div></header><label>הסיסמה הנוכחית<input type="password" autoComplete="current-password" value={historyDeleteRequest.password} onChange={(event) => setHistoryDeleteRequest({ ...historyDeleteRequest, password: event.target.value })} /></label><footer><button type="button" onClick={() => setHistoryDeleteRequest(null)}>ביטול</button><button className="danger" type="submit" disabled={!historyDeleteRequest.password}>המשך למחיקה</button></footer></form></div>}
       {mealPreview && (
         <div className="modal-layer meal-preview-layer">
           <button className="backdrop" onClick={closeMealPreview} aria-label="סגירת פרטי הארוחה" />
@@ -4263,6 +4268,7 @@ export default function Home() {
               </div>
               <b>‹</b>
             </button>
+            {isAdmin && <button className="profile-sharing admin-center-entry" type="button" onClick={() => { setProfileOpen(false); void openAdmin(); }}><span><AppIcon name="settings" /></span><div><strong>מרכז ניהול ADMIN</strong><small>משתמשים, מערכת, AI, מסד נתונים וסל מחזור</small></div><b>‹</b></button>}
             <button className="profile-sharing new-cycle-entry" type="button" onClick={() => { setNewCycleForm({ currentWeight: Number(latestWeight || profile.weight), targetWeight: Number(profile.targetWeight), goal: profile.goal || "lose", journeyStage: profile.journey?.stage || "starting", journeyWeeks: Number(profile.journey?.weeksBeforeJoining || 0), journeyStartingWeight: Number(profile.journey?.startingWeight || 0), journeyRecentChangeKg: Number(profile.journey?.recentChangeKg || 0), previousCalorieTarget: Number(profile.journey?.previousCalorieTarget || 0), plateauWeeks: Number(profile.journey?.plateauWeeks || 0), priorApproach: profile.journey?.priorApproach || "", mainChallenge: profile.journey?.mainChallenge || "", trainingExperience: profile.journey?.trainingExperience || "beginner", preferredPace: profile.journey?.preferredPace || "moderate", workouts: Number(profile.workouts || 2), workoutTypes: profile.workoutTypes || [] }); setNewCycleOpen(true); }}><span>↻</span><div><strong>המסלול שלי</strong><small>הגדר נקודת כניסה, מטרה, קצב ואימונים; כל ההיסטוריה נשמרת</small></div><b>‹</b></button>
             <button
               className="profile-sharing"
@@ -4549,7 +4555,7 @@ export default function Home() {
                         <small>הציון מחושב אוטומטית במנוע 2.0 · כיסוי הנתונים: {Number(day.dailyScore?.coverage || 0)}%. נתון שלא תועד אינו מוצג כאילו נכשל.</small>
                       </section>
                       <section className="history-timeline">
-                        {timelineEntries.map((meal: any) => meal.kind === "water" ? <article className="timeline-water" key={meal.id}><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><i /><span className="timeline-icon">💧</span><div><em>שתייה</em><strong>כוס מים</strong><small>{meal.amount} מ״ל</small></div><b>{meal.amount}<small> מ״ל</small></b><button className="history-delete-entry" type="button" onClick={() => deleteHistoryEntry("water", meal.id, day.date)} aria-label="מחיקת כוס המים">מחיקה</button></article> : (
+                        {timelineEntries.map((meal: any) => meal.kind === "water" ? <article className="timeline-water" key={meal.id || meal.time}><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><i /><span className="timeline-icon">💧</span><div><em>שתייה</em><strong>כוס מים</strong><small>{meal.amount} מ״ל</small></div><b>{meal.amount}<small> מ״ל</small></b><button className="history-delete-entry" type="button" onClick={() => deleteHistoryEntry("water", String(meal.id || meal.time), day.date)} aria-label="מחיקת כוס המים">מחיקה</button></article> : (
                             <article
                               className={`timeline-${meal.period || "snack"}`}
                               key={meal.id}
