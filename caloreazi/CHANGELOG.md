@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.18.10
+
+- Made coach voice a one-tap flow: tap, speak naturally, pause to send automatically, and receive the reply aloud in the selected voice.
+- Added clear listening, thinking and speaking feedback, faster speech-end detection and safe interruption of previous playback.
+
 ## 1.18.9
 
 - Reworked coach replies into concise, patient and constructive Hebrew that leads with one useful insight instead of dumping every available metric.

@@ -119,6 +119,9 @@ test("coach uses concise human Hebrew and offers persistent male or female cloud
   assert.match(speechRoute, /gemini-3\.1-flash-tts-preview/);
   assert.match(speechRoute, /gpt-4o-mini-tts/);
   assert.match(speechRoute, /בונה וסבלני/);
+  assert.match(page, /recognition\.onspeechend = \(\) => recognition\.stop\(\)/);
+  assert.match(page, /שולח למאמן ומכין תשובה/);
+  assert.match(page, /ההודעה תישלח אוטומטית/);
 });
 
 test("offline outbox covers core entries and birth date shows the calculated age", () => {

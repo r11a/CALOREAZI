@@ -2667,16 +2667,21 @@ export default function Home() {
   function startCoachDictation() {
     const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!Recognition) { setError("הכתבה קולית אינה נתמכת בדפדפן הזה."); return; }
+    if (busy) return;
+    stopCoachSpeech();
     coachTranscript.current = "";
+    setMessage("");
     coachSpeechRecognition.current?.abort?.();
     const recognition = new Recognition();
     coachSpeechRecognition.current = recognition;
     recognition.lang = "he-IL";
     recognition.interimResults = true;
     recognition.continuous = false;
+    recognition.maxAlternatives = 1;
     recognition.onstart = () => { coachTranscript.current = ""; setCoachAutoSpeak(true); setCoachListening(true); };
     recognition.onresult = (event: any) => { const text = Array.from(event.results).map((result: any) => result[0]?.transcript || "").join(" ").trim(); if (text) { coachTranscript.current = text; setMessage(text); } };
-    recognition.onerror = () => { coachTranscript.current = ""; setCoachListening(false); setError("לא ניתן היה לזהות את ההכתבה. בדוק הרשאת מיקרופון ונסה שוב."); };
+    recognition.onspeechend = () => recognition.stop();
+    recognition.onerror = (event: any) => { coachTranscript.current = ""; setCoachListening(false); setError(event?.error === "no-speech" ? "לא שמעתי אותך. לחץ שוב ודבר כרגיל." : "לא ניתן היה לזהות את ההכתבה. בדוק הרשאת מיקרופון ונסה שוב."); };
     recognition.onend = () => { setCoachListening(false); const text = coachTranscript.current.trim(); if (text) void sendCoachText(text, true); };
     recognition.start();
   }
@@ -3113,9 +3118,9 @@ export default function Home() {
               <button type="button" className={coachVoice === "male" ? "selected" : ""} onClick={() => chooseCoachVoice("male")}>גברי</button>
               <button type="button" className={coachVoice === "female" ? "selected" : ""} onClick={() => chooseCoachVoice("female")}>נשי</button>
             </div>
-            {(coachListening || coachSpeaking) && <div className={`coach-voice-status ${coachListening ? "listening" : "speaking"}`} role="status"><span>{coachListening ? "מקשיב…" : "המאמן מדבר…"}</span><button type="button" onClick={() => coachListening ? coachSpeechRecognition.current?.stop?.() : stopCoachSpeech()}>{coachListening ? "שלח עכשיו" : "עצור"}</button></div>}
+            {(coachListening || coachSpeaking || busy) && <div className={`coach-voice-status ${coachListening ? "listening" : coachSpeaking ? "speaking" : "thinking"}`} role="status"><span>{coachListening ? "אני מקשיב — דבר חופשי…" : coachSpeaking ? `המאמן עונה בקול ${coachVoice === "female" ? "נשי" : "גברי"}…` : "שולח למאמן ומכין תשובה…"}</span>{(coachListening || coachSpeaking) && <button type="button" onClick={() => coachListening ? coachSpeechRecognition.current?.stop?.() : stopCoachSpeech()}>{coachListening ? "סיימתי" : "עצור"}</button>}</div>}
             <form onSubmit={sendMessage}>
-              <button type="button" className={`coach-dictation ${coachListening ? "listening" : ""}`} onClick={() => coachListening ? coachSpeechRecognition.current?.stop?.() : startCoachDictation()} aria-label={coachListening ? "סיום ושליחת ההודעה הקולית" : "שיחה קולית עם המאמן"} title="דבר עם המאמן"><AppIcon name="mic" /></button>
+              <button type="button" disabled={busy} className={`coach-dictation ${coachListening ? "listening" : ""}`} onClick={() => coachListening ? coachSpeechRecognition.current?.stop?.() : startCoachDictation()} aria-label={coachListening ? "סיום ושליחת ההודעה הקולית" : "לחיצה אחת לשיחה עם המאמן"} title="לחץ ודבר — ההודעה תישלח אוטומטית"><AppIcon name="mic" /></button>
               <input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
