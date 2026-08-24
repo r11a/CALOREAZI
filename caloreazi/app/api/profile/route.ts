@@ -60,6 +60,9 @@ export async function PUT(request: Request) {
       coachVoice: ["male", "female"].includes(body.coachVoice) ? body.coachVoice : (profile.coachVoice || "male"),
       coachVoiceStyle: ["warm", "clear"].includes(body.coachVoiceStyle) ? body.coachVoiceStyle : (profile.coachVoiceStyle || "warm"),
       coachVoiceProvider: ["cloud", "device"].includes(body.coachVoiceProvider) ? body.coachVoiceProvider : (profile.coachVoiceProvider || "cloud"),
+      coachName: ["CAL", "EZI"].includes(body.coachName) ? body.coachName : (profile.coachName || "CAL"),
+      coachGender: ["male", "female"].includes(body.coachGender) ? body.coachGender : (profile.coachGender || "male"),
+      userAddressGender: ["male", "female"].includes(body.userAddressGender) ? body.userAddressGender : (profile.userAddressGender || (profile.sex === "female" ? "female" : "male")),
       cameraCalibration: body.cameraCalibration && typeof body.cameraCalibration === "object" ? {
         reference: ["plate", "card", "none"].includes(body.cameraCalibration.reference) ? body.cameraCalibration.reference : "none",
         plateDiameterCm: Math.max(15, Math.min(40, Number(body.cameraCalibration.plateDiameterCm) || 26)),

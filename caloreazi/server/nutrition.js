@@ -7,6 +7,10 @@ export function ageFromBirthDate(value, now = new Date()) {
   return age >= 0 && age <= 120 ? age : null;
 }
 
+export function roundCalories(value) {
+  return Math.round(Math.max(0, Number(value) || 0));
+}
+
 export function calculateMealFromItems(items = []) {
   const totals = items.slice(0, 30).reduce((result, item) => {
     const factor = Math.max(0, Number(item.grams) || 0) * Math.max(0.1, Number(item.quantity) || 1) / 100;

@@ -131,7 +131,10 @@ test("coach uses concise human Hebrew and offers persistent male or female cloud
   assert.match(speechRoute, /gpt-4o-mini-tts/);
   assert.match(speechRoute, /בונה וסבלני/);
   assert.match(page, /recognition\.continuous = true/);
-  assert.match(page, /שולח למאמן ומכין תשובה/);
+  assert.match(page, /שולח ל\$\{coachRole\} ומכין תשובה/);
+  assert.match(page, /coachName/);
+  assert.match(page, /userAddressGender/);
+  assert.match(page, /chat-message-row/);
   assert.match(page, /לחץ כדי לעצור ולשלוח/);
   assert.match(page, /sendCoachText\(text, true\)/);
 });

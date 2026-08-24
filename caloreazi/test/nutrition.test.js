@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ageFromBirthDate, calculateDayScore, calculateMealFromItems, calculateNutritionTargets } from "../server/nutrition.js";
+import { ageFromBirthDate, calculateDayScore, calculateMealFromItems, calculateNutritionTargets, roundCalories } from "../server/nutrition.js";
+
+test("calories use standard half-up rounding", () => {
+  assert.equal(roundCalories(120.4), 120);
+  assert.equal(roundCalories(120.5), 121);
+  assert.equal(roundCalories(-4.5), 0);
+});
 
 test("calculates transparent calorie plan with BMI and activity", () => {
   const plan = calculateNutritionTargets({ sex: "male", age: 35, height: 175, weight: 85, activity: "light", goal: "lose" });

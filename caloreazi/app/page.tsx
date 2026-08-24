@@ -925,6 +925,10 @@ export default function Home() {
     };
   }, []);
   const profile = state?.profile;
+  const coachIsFemale = profile?.coachGender === "female";
+  const coachDisplayName = profile?.coachName === "EZI" ? "EZI" : "CAL";
+  const coachRole = coachIsFemale ? "המאמנת" : "המאמן";
+  const coachRecommendationTitle = coachIsFemale ? "המלצות מהמאמנת" : "המלצות מהמאמן";
   const consumed = useMemo(
     () =>
       state?.today?.meals?.reduce(
@@ -1798,6 +1802,9 @@ export default function Home() {
       coachVoice: profile.coachVoice || "male",
       coachVoiceStyle: profile.coachVoiceStyle || "warm",
       coachVoiceProvider: profile.coachVoiceProvider || "cloud",
+      coachName: profile.coachName || "CAL",
+      coachGender: profile.coachGender || "male",
+      userAddressGender: profile.userAddressGender || (profile.sex === "female" ? "female" : "male"),
       dayBoundaryMode: profile.dayBoundaryMode || "midnight",
       cameraCalibration: profile.cameraCalibration || { reference: "none", plateDiameterCm: 26, useLearnedCorrections: true },
       avatar: profile.avatar || "",
@@ -3121,8 +3128,8 @@ export default function Home() {
           <section className="panel insights-panel">
             <header>
               <div>
-                <p className="eyebrow">המלצת המאמן</p>
-                <h2>המלצות המאמן</h2>
+                <p className="eyebrow">{coachIsFemale ? "המלצת המאמנת" : "המלצת המאמן"}</p>
+                <h2>{coachRecommendationTitle}</h2>
               </div>
             </header>
             <div className="daily-insights">
@@ -3138,7 +3145,7 @@ export default function Home() {
             </div>
             <footer className="tracking-actions">
               <button onClick={() => setActivityOpen(true)}><AppIcon name="activity" /> פעילות</button>
-              <button onClick={() => setCoachOpen(true)}><AppIcon name="coach" /> שאל את המאמן</button>
+              <button onClick={() => setCoachOpen(true)}><AppIcon name="coach" /> שאל את {coachRole}</button>
             </footer>
           </section>
         </div>
@@ -3162,7 +3169,7 @@ export default function Home() {
           מגמות
         </button>
         <button className={coachOpen ? "active" : ""} onClick={() => openNavigationScreen("coach")}>
-          <span><AppIcon name="coach" /></span>מאמן
+          <span><AppIcon name="coach" /></span>{coachIsFemale ? "מאמנת" : "מאמן"}
         </button>
       </nav>
       {calorieOverage && <div className="modal-layer overage-layer"><button className="backdrop" onClick={() => setCalorieOverage(null)} /><section className="settings-modal overage-modal"><header><div><h2>חריגה מהיעד היומי</h2><small>הארוחה נשמרה, אבל אפשר עדיין לתקן את הבחירה</small></div></header><div className="overage-ring"><strong>+{Math.round(calorieOverage.overBy)}</strong><small>קלוריות מעל היעד</small></div><p>אין צורך להילחץ מיום אחד. אפשר להשאיר את הארוחה, לערוך כמויות או לבטל את ההוספה.</p><footer><button type="button" onClick={() => setCalorieOverage(null)}>השאר ביומן</button><button type="button" onClick={() => { const meal = calorieOverage.meal; setCalorieOverage(null); editMeal({ ...meal, id: calorieOverage.id, time: meal.occurredAt }); }}>ערוך ארוחה</button><button className="danger" type="button" onClick={async () => { await deleteMeal(calorieOverage.id); setCalorieOverage(null); }}>בטל את ההוספה</button></footer></section></div>}
@@ -3185,9 +3192,9 @@ export default function Home() {
           <button className="backdrop" onClick={() => setCoachOpen(false)} />
           <aside className="coach-sheet">
             <header>
-              <div className="coach-avatar"><AppIcon name="coach" /></div>
+              <div className={`coach-avatar ${coachIsFemale ? "female" : "male"}`}><AppIcon name="coach" /><b>{coachDisplayName}</b></div>
               <div>
-                <strong>המאמן האישי שלך</strong>
+                <strong>{coachDisplayName} · {coachIsFemale ? "המאמנת האישית שלך" : "המאמן האישי שלך"}</strong>
                 <small>
                   <i /> כאן איתך, בקצב שלך
                 </small>
@@ -3204,9 +3211,14 @@ export default function Home() {
                 </div>
               )}
               {messages.map((item, index) => (
-                <div key={index} className={`chat-message ${item.role}`}>
-                  <span>{item.text}</span>
-                  {item.role === "assistant" && <button type="button" className={`message-speak ${coachSpeaking || coachSpeechPending ? "speaking" : ""}`} onClick={() => coachSpeaking || coachSpeechPending ? stopCoachSpeech() : speakCoachReply(item.text)} aria-label={coachSpeaking || coachSpeechPending ? "עצירת ההקראה" : "הקראת התשובה"}><AppIcon name="speaker" />{coachSpeechPending ? "מכין קול" : coachSpeaking ? "עצור" : "הקרא"}</button>}
+                <div key={index} className={`chat-message-row ${item.role}`}>
+                  <div className={`chat-avatar ${item.role === "user" ? "user" : coachIsFemale ? "coach female" : "coach male"}`}>
+                    {item.role === "user" && profile?.avatar ? <img src={profile.avatar} alt={state.owner.name} /> : item.role === "user" ? <AppIcon name="user" /> : <><AppIcon name="coach" /><b>{coachDisplayName.slice(0, 1)}</b></>}
+                  </div>
+                  <div className={`chat-message ${item.role}`}>
+                    <span>{item.text}</span>
+                    {item.role === "assistant" && <button type="button" className={`message-speak ${coachSpeaking || coachSpeechPending ? "speaking" : ""}`} onClick={() => coachSpeaking || coachSpeechPending ? stopCoachSpeech() : speakCoachReply(item.text)} aria-label={coachSpeaking || coachSpeechPending ? "עצירת ההקראה" : "הקראת התשובה"}><AppIcon name="speaker" />{coachSpeechPending ? "מכין קול" : coachSpeaking ? "עצור" : "הקרא"}</button>}
+                  </div>
                 </div>
               ))}
               {busy && <div className="typing">חושב…</div>}
@@ -3216,7 +3228,7 @@ export default function Home() {
               <button onClick={() => setMessage("איך היום שלי נראה ומה הצעד הבא שכדאי לי לעשות?")}>איך אני מתקדם?</button>
               <button onClick={() => setMessage("תן לי משימה אחת פשוטה להמשך היום")}>תן לי משימה</button>
             </div>
-            {(coachListening || coachTranscribing || coachSpeechPending || coachSpeaking || busy) && <div className={`coach-voice-status ${coachListening ? "listening" : coachSpeaking ? "speaking" : "thinking"}`} role="status"><span>{coachListening ? "אני מקשיב — לחץ שוב כדי לשלוח" : coachTranscribing ? "מבין את ההודעה שלך…" : coachSpeechPending ? "מכין תשובה קולית אחת…" : coachSpeaking ? `המאמן עונה בקול ${coachVoice === "female" ? "נשי" : "גברי"}…` : "שולח למאמן ומכין תשובה…"}</span>{(coachListening || coachSpeechPending || coachSpeaking) && <button type="button" onClick={() => coachListening ? stopCoachListening() : stopCoachSpeech()}>{coachListening ? "שלח" : "עצור"}</button>}</div>}
+            {(coachListening || coachTranscribing || coachSpeechPending || coachSpeaking || busy) && <div className={`coach-voice-status ${coachListening ? "listening" : coachSpeaking ? "speaking" : "thinking"}`} role="status"><span>{coachListening ? "אני מקשיב — לחץ שוב כדי לשלוח" : coachTranscribing ? "מבין את ההודעה שלך…" : coachSpeechPending ? "מכין תשובה קולית אחת…" : coachSpeaking ? `${coachRole} עונה בקול ${coachVoice === "female" ? "נשי" : "גברי"}…` : `שולח ל${coachRole} ומכין תשובה…`}</span>{(coachListening || coachSpeechPending || coachSpeaking) && <button type="button" onClick={() => coachListening ? stopCoachListening() : stopCoachSpeech()}>{coachListening ? "שלח" : "עצור"}</button>}</div>}
             <form onSubmit={sendMessage}>
               <button type="button" disabled={busy || coachTranscribing} className={`coach-dictation ${coachListening ? "listening" : ""}`} onClick={() => coachListening ? stopCoachListening() : startCoachDictation()} aria-label={coachListening ? "עצירה ושליחת ההודעה" : "התחלת הודעה קולית"} title={coachListening ? "לחץ כדי לעצור ולשלוח" : "לחץ כדי לדבר"}><AppIcon name="mic" /><span>{coachListening ? "שלח" : "דבר"}</span></button>
               <input
@@ -4443,7 +4455,7 @@ export default function Home() {
             {profileTab === "account" && <section className="profile-tab-panel account-panel"><header><span><AppIcon name="settings" /></span><div><strong>העדפות וחשבון</strong><small>תצוגה, שיתוף, גיבוי וניהול מידע</small></div></header>
             <section className="account-credentials">
               <strong>פרטי התחברות</strong>
-              <div className="coach-voice-profile"><strong>קול המאמן</strong><p>הקול יופעל אוטומטית רק אחרי הודעה קולית. הודעה כתובה תקבל תשובה כתובה.</p><div><label>ספק קול<select value={profileForm.coachVoiceProvider || "cloud"} onChange={(e) => setProfileForm({ ...profileForm, coachVoiceProvider: e.target.value })}><option value="cloud">{(state.ai?.voiceProvider || state.ai?.roles?.coach?.provider || state.ai?.provider) === "gemini" ? "Gemini — קול ענן עברי" : "OpenAI — קול ענן עברי"}</option><option value="device">קול המכשיר</option></select></label><label>קול<select value={`${profileForm.coachVoice || "male"}-${profileForm.coachVoiceStyle || "warm"}`} onChange={(e) => { const [voice, style] = e.target.value.split("-"); setProfileForm({ ...profileForm, coachVoice: voice, coachVoiceStyle: style }); }}><option value="male-warm">גברי — חם ורגוע</option><option value="male-clear">גברי — ברור וישיר</option><option value="female-warm">נשי — חם ורגוע</option><option value="female-clear">נשי — ברור ובהיר</option></select></label></div></div>
+              <div className="coach-voice-profile"><strong>זהות וקול הליווי</strong><p>השם, לשון הפנייה והקול נשמרים בנפרד כדי שהשיחה תהיה עקבית ונעימה.</p><div><label>שם<select value={profileForm.coachName || "CAL"} onChange={(e) => setProfileForm({ ...profileForm, coachName: e.target.value })}><option value="CAL">CAL</option><option value="EZI">EZI</option></select></label><label>זהות<select value={profileForm.coachGender || "male"} onChange={(e) => setProfileForm({ ...profileForm, coachGender: e.target.value })}><option value="male">מאמן</option><option value="female">מאמנת</option></select></label><label>איך לפנות אליי<select value={profileForm.userAddressGender || "male"} onChange={(e) => setProfileForm({ ...profileForm, userAddressGender: e.target.value })}><option value="male">זכר</option><option value="female">נקבה</option></select></label><label>ספק קול<select value={profileForm.coachVoiceProvider || "cloud"} onChange={(e) => setProfileForm({ ...profileForm, coachVoiceProvider: e.target.value })}><option value="cloud">{(state.ai?.voiceProvider || state.ai?.roles?.coach?.provider || state.ai?.provider) === "gemini" ? "Gemini — קול ענן עברי" : "OpenAI — קול ענן עברי"}</option><option value="device">קול המכשיר</option></select></label><label>קול<select value={`${profileForm.coachVoice || "male"}-${profileForm.coachVoiceStyle || "warm"}`} onChange={(e) => { const [voice, style] = e.target.value.split("-"); setProfileForm({ ...profileForm, coachVoice: voice, coachVoiceStyle: style }); }}><option value="male-warm">גברי — חם ורגוע</option><option value="male-clear">גברי — ברור וישיר</option><option value="female-warm">נשי — חם ורגוע</option><option value="female-clear">נשי — ברור ובהיר</option></select></label></div></div>
               <label>שפת הממשק<select value={profileForm.language || "he"} onChange={(e) => setProfileForm({ ...profileForm, language: e.target.value })}><option value="he">עברית</option><option value="en">English (beta)</option></select><small>הבחירה נשמרת למשתמש ומשנה גם את כיוון הממשק. תרגום אנגלי מלא יושלם בהדרגה.</small></label>
               <label>כתובת אימייל<input type="email" value={profileForm.email || ""} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} /></label>
               {profileForm.email !== state.owner.email && <label>סיסמה נוכחית לאישור שינוי<input type="password" autoComplete="current-password" value={profileForm.accountPassword || ""} onChange={(e) => setProfileForm({ ...profileForm, accountPassword: e.target.value })} /></label>}
@@ -4973,7 +4985,10 @@ export default function Home() {
                 <p className="trend-narrative">{insightsData.narrative}</p>
                 <p className="coach-recommendation"><b>המלצת זהב:</b> {insightsData.recommendation}</p>
                 <section className="trend-comparison">
-                  <header><strong>תמונת מצב ל־30 ימים</strong><small>ממוצעים מחושבים רק מימים שבהם הוזנו ארוחות</small></header>
+                  <header><div><strong>תמונת מצב ל־30 ימים</strong><small>המסלול שלך במבט אחד · רק ימים מתועדים נכנסים לממוצע</small></div><b className={Number(insightsData.summary.calorieWeeklyChange || 0) <= 0 ? "down" : "up"}>{Number(insightsData.summary.calorieWeeklyChange || 0) === 0 ? "→ יציב" : Number(insightsData.summary.calorieWeeklyChange || 0) > 0 ? "↗ מגמת עלייה" : "↘ מגמת ירידה"}</b></header>
+                  <div className="trend-live-chart" aria-label="גרף ציונים וקלוריות ב־30 הימים האחרונים">
+                    {insightsData.daily.slice(-30).map((day: any, index: number) => <span key={day.date} style={{ "--bar-height": `${Math.max(8, Number(day.score || 0))}%`, "--bar-delay": `${index * 24}ms` } as React.CSSProperties} title={`${day.date}: ציון ${day.score || 0}`}><i className={`score-${scoreToneFor(day.score || 0)}`} /><small>{index % 5 === 0 ? new Date(`${day.date}T12:00:00`).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" }) : ""}</small></span>)}
+                  </div>
                   <div>
                     <span><small>ימי מעקב</small><strong>{insightsData.summary.monthlyTrackedDays} / 30</strong></span>
                     <span><small>קלוריות בממוצע</small><strong>{insightsData.summary.monthlyAverageCalories} kcal</strong></span>

@@ -1,5 +1,5 @@
 import { requireUser } from "@/server/auth.js";
-import { calculateMealFromItems, calculateMealScore } from "@/server/nutrition.js";
+import { calculateMealFromItems, calculateMealScore, roundCalories } from "@/server/nutrition.js";
 import { addAudit, ensureUserData, readState, updateState, userView } from "@/server/store.js";
 import { deleteMedia, saveMediaDataUrl } from "@/server/storage.js";
 import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "@/server/domains/meals/repository.js";
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   const body = await request.json(); const name = String(body.name || "").trim();
   const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
   const calculated = items.length ? calculateMealFromItems(items) : body;
-  const kcal = Math.max(0, Number(calculated.kcal) || 0);
+  const kcal = roundCalories(calculated.kcal);
   const missingFields = [...(!name ? ["שם הארוחה"] : []), ...(!kcal ? ["קלוריות"] : [])];
   if (missingFields.length) return Response.json({ error: `לא ניתן לשמור. יש להשלים: ${missingFields.join(", ")}`, fields: missingFields }, { status: 400 });
   const nutritionValidation = validateMealNutrition({ ...calculated, items });
@@ -98,14 +98,15 @@ export async function PATCH(request: Request) {
     if (body.baseUpdatedAt !== undefined && String(meal.updatedAt || "") !== String(body.baseUpdatedAt || "")) { editConflict = true; return latest; }
     if (body.scale !== undefined) {
       const scale = Math.max(.25, Math.min(4, Number(body.scale) || 1));
-      ["kcal", "protein", "carbs", "fat"].forEach((field) => { meal[field] = Math.round(Number(meal[field] || 0) * scale * 10) / 10; });
+      ["protein", "carbs", "fat"].forEach((field) => { meal[field] = Math.round(Number(meal[field] || 0) * scale * 10) / 10; });
+      meal.kcal = roundCalories(Number(meal.kcal || 0) * scale);
       meal.items = (meal.items || []).map((item) => ({ ...item, quantity: Math.round(Number(item.quantity || 1) * scale * 100) / 100 }));
     } else {
       const name = String(body.name || "").trim(); const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
       const calculated = items.length ? calculateMealFromItems(items) : body;
       if (name) meal.name = name;
       meal.period = ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : meal.period;
-      meal.kcal = Math.max(0, Number(calculated.kcal) || 0); meal.protein = Math.max(0, Number(calculated.protein) || 0); meal.carbs = Math.max(0, Number(calculated.carbs) || 0); meal.fat = Math.max(0, Number(calculated.fat) || 0); meal.sugar = Math.max(0, Number(calculated.sugar) || 0); meal.sugarTrackedItems = Math.max(0, Number(calculated.sugarTrackedItems) || 0); meal.items = items;
+      meal.kcal = roundCalories(calculated.kcal); meal.protein = Math.max(0, Number(calculated.protein) || 0); meal.carbs = Math.max(0, Number(calculated.carbs) || 0); meal.fat = Math.max(0, Number(calculated.fat) || 0); meal.sugar = Math.max(0, Number(calculated.sugar) || 0); meal.sugarTrackedItems = Math.max(0, Number(calculated.sugarTrackedItems) || 0); meal.items = items;
       const requested = new Date(body.occurredAt || meal.time); if (Number.isFinite(requested.getTime()) && requested.getTime() <= Date.now()) meal.time = requested.toISOString();
     }
     meal.score = calculateMealScore(meal); meal.updatedAt = new Date().toISOString();
