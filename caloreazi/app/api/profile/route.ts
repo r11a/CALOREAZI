@@ -55,6 +55,7 @@ export async function PUT(request: Request) {
       relevantMedications: String(body.relevantMedications || "").slice(0, 500),
       pregnancyStatus: ["none", "pregnant", "breastfeeding"].includes(body.pregnancyStatus) ? body.pregnancyStatus : "none",
       timeZone: validTimeZone(body.timeZone || profile.timeZone),
+      dayBoundaryMode: body.dayBoundaryMode === "manual" ? "manual" : "midnight",
       language: ["he", "en"].includes(body.language) ? body.language : (profile.language || "he"),
       coachVoice: ["male", "female"].includes(body.coachVoice) ? body.coachVoice : (profile.coachVoice || "male"),
       coachVoiceStyle: ["warm", "clear"].includes(body.coachVoiceStyle) ? body.coachVoiceStyle : (profile.coachVoiceStyle || "warm"),
@@ -87,6 +88,10 @@ export async function PUT(request: Request) {
       notificationPreferences: normalizeNotificationPreferences(body.notificationPreferences || profile.notificationPreferences),
       avatar,
     });
+    if (profile.dayBoundaryMode === "manual") {
+      profile.activeDayDate = latest.userData[session.userId]?.today?.date || profile.activeDayDate;
+      profile.activeDayStartedAt = profile.activeDayStartedAt || new Date().toISOString();
+    }
     const initialWeight = Number(body.initialWeight);
     if (initialWeight >= 25 && initialWeight <= 350) profile.initialWeight = initialWeight;
     const caloriePlan = calculateNutritionTargets(profile);

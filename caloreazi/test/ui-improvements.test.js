@@ -18,6 +18,16 @@ const offlineQueue = await readFile(new URL("../app/offline-queue.ts", import.me
 const waterRoute = await readFile(new URL("../app/api/water/route.ts", import.meta.url), "utf8");
 const activityRoute = await readFile(new URL("../app/api/activity/route.ts", import.meta.url), "utf8");
 const mealsRoute = await readFile(new URL("../app/api/meals/route.ts", import.meta.url), "utf8");
+const dayRoute = await readFile(new URL("../app/api/day/route.ts", import.meta.url), "utf8");
+
+test("shift workers can keep an active day open and complete it explicitly", () => {
+  assert.match(page, /רק כשאני לוחץ „סיים יום”/);
+  assert.match(page, /finish-day-button/);
+  assert.match(page, /סיים והתחל יום חדש/);
+  assert.match(dayRoute, /day\.completed_manually/);
+  assert.match(mealsRoute, /entryDateFor/);
+  assert.match(waterRoute, /entryDateFor/);
+});
 
 test("health profile is editable and explicitly bounded as non-medical advice", () => {
   for (const field of ["diabetesStatus", "hypertension", "foodAllergies", "relevantMedications", "pregnancyStatus"])

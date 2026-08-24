@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ensureUserData } from "../server/store.js";
-import { localDateAt, validTimeZone } from "../server/local-date.js";
+import { entryDateFor, localDateAt, validTimeZone } from "../server/local-date.js";
 
 test("uses the user's local midnight instead of UTC", () => {
   const instant = new Date("2026-08-20T21:30:00.000Z");
@@ -33,4 +33,12 @@ test("restores an already-created current local day instead of duplicating it", 
   assert.equal(data.today.date, current);
   assert.equal(data.today.waterMl, 250);
   assert.equal(data.history.some((day) => day.date === current), false);
+});
+
+test("manual day mode keeps a shift open after midnight and assigns new entries to it", () => {
+  const state = { userData: { u1: { profile: { timeZone: "Asia/Jerusalem", dayBoundaryMode: "manual", activeDayDate: "2025-01-01" }, today: { date: "2025-01-01", waterMl: 250, meals: [{ id: "shift-meal" }] }, history: [] } } };
+  const data = ensureUserData(state, "u1");
+  assert.equal(data.today.date, "2025-01-01");
+  assert.equal(data.today.meals[0].id, "shift-meal");
+  assert.equal(entryDateFor(data, new Date()), "2025-01-01");
 });

@@ -86,7 +86,8 @@ export function ensureUserData(state, userId) {
   data.coachHistory = Array.isArray(data.coachHistory) ? data.coachHistory : [];
   data.today = { ...structuredClone(defaultState.today), ...(data.today || {}) };
   const todayDate = localDateAt(new Date(), userTimeZone(data));
-  if (data.today.date && data.today.date !== todayDate) {
+  const manualDay = data.profile?.dayBoundaryMode === "manual";
+  if (!manualDay && data.today.date && data.today.date !== todayDate) {
     if (data.today.meals.length || data.today.waterMl) {
       const archived = data.history.find((day) => day.date === data.today.date);
       if (archived) {
@@ -101,6 +102,8 @@ export function ensureUserData(state, userId) {
       data.history = data.history.filter((day) => day !== existingToday);
     } else data.today = { date: todayDate, waterMl: 0, waterEvents: [], meals: [] };
   } else if (!data.today.date) data.today.date = todayDate;
+  if (manualDay && !data.profile.activeDayStartedAt) data.profile.activeDayStartedAt = new Date().toISOString();
+  if (manualDay) data.profile.activeDayDate = data.today.date;
   state.userData[userId] = data;
   return data;
 }

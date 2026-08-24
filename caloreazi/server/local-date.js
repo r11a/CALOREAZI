@@ -25,3 +25,10 @@ export function validTimeZone(value) {
 export function userTimeZone(data) {
   return validTimeZone(data?.profile?.timeZone || DEFAULT_TIME_ZONE);
 }
+
+/** @param {any} data @param {Date|string|number} value */
+export function entryDateFor(data, value = new Date()) {
+  const actualDate = localDateAt(value, userTimeZone(data));
+  if (data?.profile?.dayBoundaryMode !== "manual" || !data?.today?.date) return actualDate;
+  return data.today.date;
+}

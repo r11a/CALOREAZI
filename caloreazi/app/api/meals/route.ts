@@ -3,11 +3,11 @@ import { calculateMealFromItems, calculateMealScore } from "@/server/nutrition.j
 import { addAudit, ensureUserData, readState, updateState, userView } from "@/server/store.js";
 import { deleteMedia, saveMediaDataUrl } from "@/server/storage.js";
 import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "@/server/domains/meals/repository.js";
-import { localDateAt, userTimeZone } from "@/server/local-date.js";
+import { entryDateFor, localDateAt, userTimeZone } from "@/server/local-date.js";
 import { validateMealNutrition } from "@/server/meal-validation.js";
 import { databaseStateEnabled, insertDatabaseMeal } from "@/server/state-database.js";
 export const runtime = "nodejs";
-type MealRecord = { id: string; clientRequestId?: string; name: string; period: string; kcal: number; protein: number; carbs: number; fat: number; sugar: number; sugarTrackedItems: number; fiber?: number; fiberTrackedItems?: number; sodiumMg?: number; sodiumMgTrackedItems?: number; saturatedFat?: number; saturatedFatTrackedItems?: number; addedSugar?: number; addedSugarTrackedItems?: number; items: unknown[]; source: string; image: string; media: unknown; confidence: number; transcript: string; time: string; score?: number; updatedAt?: string };
+type MealRecord = { id: string; clientRequestId?: string; logicalDate?: string; name: string; period: string; kcal: number; protein: number; carbs: number; fat: number; sugar: number; sugarTrackedItems: number; fiber?: number; fiberTrackedItems?: number; sodiumMg?: number; sodiumMgTrackedItems?: number; saturatedFat?: number; saturatedFatTrackedItems?: number; addedSugar?: number; addedSugarTrackedItems?: number; items: unknown[]; source: string; image: string; media: unknown; confidence: number; transcript: string; time: string; score?: number; updatedAt?: string };
 
 export async function POST(request: Request) {
   const startedAt = Date.now();
@@ -36,12 +36,13 @@ export async function POST(request: Request) {
     const meal: MealRecord = { id, ...(clientRequestId ? { clientRequestId } : {}), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
     meal.score = calculateMealScore(meal);
     const calibrations = ["photo", "voice"].includes(source) && items.length ? items.flatMap((item: Record<string, unknown>, index) => { const before = Array.isArray(body.aiOriginalItems) ? body.aiOriginalItems[index] : null; return !before || String(before.name) !== String(item.name) || Number(before.grams) !== Number(item.grams) || Number(before.quantity) !== Number(item.quantity) ? [{ originalName: before?.name || null, name: String(item.name).slice(0, 80), grams: Math.max(1, Number(item.grams) || 1), quantity: Math.max(.1, Number(item.quantity) || 1), previousGrams: before ? Number(before.grams) : null, at: new Date().toISOString() }] : []; }) : [];
-    const localDate = localDateAt(new Date(time), userTimeZone(data));
+    const localDate = body.calendarDate ? localDateAt(new Date(time), userTimeZone(data)) : entryDateFor(data, new Date(time));
+    meal.logicalDate = localDate;
     const state = await insertDatabaseMeal({ userId: session.userId, localDate, timeZone: userTimeZone(data), meal, analysisJobId: String(body.analysisJobId || ""), calibrations });
     const persisted = [state.userData[session.userId]?.today, ...(state.userData[session.userId]?.history || [])].filter(Boolean).flatMap((day) => day.meals || []).find((item) => item.id === id || (clientRequestId && item.clientRequestId === clientRequestId));
     if (!persisted) throw new Error("השמירה הטרנזקציונית לא אומתה במסד הנתונים");
     if (persisted.id !== id && media) await deleteMedia(initial, media);
-    return Response.json({ ...userView(state, session.userId, session.role === "admin"), savedMealId: persisted.id, savedLocalDate: localDateAt(persisted.time, userTimeZone(data)), persistence: { idempotent: persisted.id !== id, transactional: true, durationMs: Date.now() - startedAt } });
+    return Response.json({ ...userView(state, session.userId, session.role === "admin"), savedMealId: persisted.id, savedLocalDate: localDate, persistence: { idempotent: persisted.id !== id, transactional: true, durationMs: Date.now() - startedAt } });
   }
   const state = await updateState(async (latest) => {
     const data = ensureUserData(latest, session.userId);
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
     const meal: MealRecord = { id, ...(clientRequestId ? { clientRequestId } : {}), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
     meal.score = calculateMealScore(meal);
     if (body.analysisJobId) { const job = latest.analysisJobs?.find((item) => item.id === body.analysisJobId && item.userId === session.userId); if (job) { job.status = "completed"; job.mealId = meal.id; job.completedAt = new Date().toISOString(); job.updatedAt = job.completedAt; } }
-    const localDate = localDateAt(new Date(time), userTimeZone(data)); savedMealId = meal.id; savedLocalDate = localDate;
+    const localDate = body.calendarDate ? localDateAt(new Date(time), userTimeZone(data)) : entryDateFor(data, new Date(time)); meal.logicalDate = localDate; savedMealId = meal.id; savedLocalDate = localDate;
     const targetDay = localDate === data.today.date ? data.today : (data.history.find((day) => day.date === localDate) || (() => { const day = { date: localDate, waterMl: 0, meals: [] }; data.history.push(day); return day; })());
     targetDay.meals.push(meal); targetDay.meals.sort((a, b) => String(a.time).localeCompare(String(b.time))); data.history.sort((a, b) => a.date.localeCompare(b.date));
     if (["photo", "voice"].includes(source) && items.length) {

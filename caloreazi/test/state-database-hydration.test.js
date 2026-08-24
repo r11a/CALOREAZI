@@ -33,3 +33,14 @@ test("empty invalid legacy day records are hidden", () => {
   assert.equal(state.userData["user-1"].history.length, 0);
   assert.notEqual(state.userData["user-1"].today.date, "Invalid Date");
 });
+
+test("database hydration respects the active manual shift day", () => {
+  const state = hydrateDatabaseState({
+    users: [{ id: "user-1" }],
+    profiles: { "user-1": { timeZone: "Asia/Jerusalem", dayBoundaryMode: "manual", activeDayDate: "2026-08-20" } },
+    days: [{ userId: "user-1", payload: { date: "2026-08-20", waterMl: 500 } }],
+    meals: [{ userId: "user-1", localDate: "2026-08-20", payload: { id: "night-meal", time: "2026-08-21T01:30:00.000Z" } }],
+  }, new Date("2026-08-21T06:00:00.000Z"));
+  assert.equal(state.userData["user-1"].today.date, "2026-08-20");
+  assert.equal(state.userData["user-1"].today.meals[0].id, "night-meal");
+});

@@ -569,6 +569,7 @@ export default function Home() {
   const [coachVoiceProvider, setCoachVoiceProvider] = useState<"cloud" | "device">("cloud");
   const [coachSpeaking, setCoachSpeaking] = useState(false);
   const [coachSpeechPending, setCoachSpeechPending] = useState(false);
+  const [dayCloseConfirm, setDayCloseConfirm] = useState(false);
   const coachAudio = useRef<HTMLAudioElement | null>(null);
   const coachAudioUrl = useRef("");
   const coachAudioContext = useRef<AudioContext | null>(null);
@@ -1333,7 +1334,7 @@ export default function Home() {
     waterMutationInFlight.current = true;
     try {
       const recordedAt = new Date().toISOString();
-      const localDate = clientLocalDate(new Date(), profile?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone);
+      const localDate = profile?.dayBoundaryMode === "manual" ? state.today.date : clientLocalDate(new Date(), profile?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone);
       const mutationKey = crypto.randomUUID();
       if (!navigator.onLine) {
         await queueMutation("/api/water", "POST", JSON.stringify({ amount, recordedAt, localDate }));
@@ -1350,6 +1351,17 @@ export default function Home() {
     } catch (e) {
       setError((e as Error).message);
     } finally { window.setTimeout(() => { waterMutationInFlight.current = false; }, 900); }
+  }
+  async function finishActiveDay() {
+    if (!navigator.onLine) { setError("כדי לסיים יום ידנית נדרש חיבור לרשת, כדי שההיסטוריה והציון יישמרו בשלמותם."); return; }
+    setBusy(true);
+    try {
+      const latest = await api("/api/day", { method: "POST" });
+      setState(latest);
+      setDayCloseConfirm(false);
+      setMealResult({ name: "היום נשמר בהיסטוריה והתחיל יום פעיל חדש", kcal: 0, protein: 0, carbs: 0, fat: 0 });
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
   }
   function openWaterEditor() {
     setWaterValue(Number(state?.today?.waterMl || 0));
@@ -1383,6 +1395,7 @@ export default function Home() {
     setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false); setTasteWizardOpen(false);
     setForgottenOpen(false);
     setNewCycleOpen(false);
+    setDayCloseConfirm(false);
     setSyncCenterOpen(false);
     setMacroDetail(""); setMealPreview(null); setPendingQuickFood(null); setEditingFood(null);
   }
@@ -1586,7 +1599,7 @@ export default function Home() {
         const payload = editingMealId ? { ...finalMeal, id: editingMealId, baseUpdatedAt: mealEditBaseUpdatedAt.current } : { ...finalMeal, clientRequestId: requestId };
         if (!navigator.onLine) {
           await queueMutation("/api/meals", editingMealId ? "PATCH" : "POST", JSON.stringify(payload), requestId);
-          savedMealId = editingMealId || `offline-${requestId}`; savedLocalDate = normalizedDateTime.slice(0, 10);
+          savedMealId = editingMealId || `offline-${requestId}`; savedLocalDate = profile.dayBoundaryMode === "manual" ? state.today.date : normalizedDateTime.slice(0, 10);
           const optimisticMeal = { ...finalMeal, id: savedMealId, clientRequestId: requestId, time: finalMeal.occurredAt, pendingSync: true };
           latest = structuredClone(state);
           if (savedLocalDate === latest.today.date) latest.today.meals = editingMealId ? latest.today.meals.map((meal: any) => meal.id === editingMealId ? optimisticMeal : meal) : [...latest.today.meals, optimisticMeal];
@@ -1785,6 +1798,7 @@ export default function Home() {
       coachVoice: profile.coachVoice || "male",
       coachVoiceStyle: profile.coachVoiceStyle || "warm",
       coachVoiceProvider: profile.coachVoiceProvider || "cloud",
+      dayBoundaryMode: profile.dayBoundaryMode || "midnight",
       cameraCalibration: profile.cameraCalibration || { reference: "none", plateDiameterCm: 26, useLearnedCorrections: true },
       avatar: profile.avatar || "",
     });
@@ -2019,7 +2033,7 @@ export default function Home() {
         const [hours, minutes] = String(meal.time || "12:00").split(":").map(Number);
         occurred.setHours(hours || 0, minutes || 0, 0, 0);
         const totals = calculateMealDraft(meal.items, {});
-        await api("/api/meals", { method: "POST", body: JSON.stringify({ name: meal.name || meal.description, period: meal.period, occurredAt: occurred.toISOString(), ...totals, items: meal.items, source: "manual", confidence: .7 }) });
+        await api("/api/meals", { method: "POST", body: JSON.stringify({ name: meal.name || meal.description, period: meal.period, occurredAt: occurred.toISOString(), calendarDate: true, ...totals, items: meal.items, source: "manual", confidence: .7 }) });
       }
       const latest = await api("/api/state");
       setState(latest); setForgottenOpen(false); setForgottenMeals([]);
@@ -2932,6 +2946,7 @@ export default function Home() {
         <header className="daily-card-heading">
           <div><span>כמות קלוריות יומית</span><strong>{dailyCalorieTarget.toLocaleString()}</strong></div>
           <div><span>נותרו להיום</span><strong>{remaining.toLocaleString()}</strong></div>
+          {profile.dayBoundaryMode === "manual" && <button type="button" className="finish-day-button" onClick={() => setDayCloseConfirm(true)}><AppIcon name="history" /><span><small>יום פעיל · {state.today.date}</small><strong>סיים יום</strong></span></button>}
         </header>
         <details className="calorie-details">
           <summary aria-label="פתיחת מידע על חישוב יעד הקלוריות">
@@ -3151,6 +3166,7 @@ export default function Home() {
         </button>
       </nav>
       {calorieOverage && <div className="modal-layer overage-layer"><button className="backdrop" onClick={() => setCalorieOverage(null)} /><section className="settings-modal overage-modal"><header><div><h2>חריגה מהיעד היומי</h2><small>הארוחה נשמרה, אבל אפשר עדיין לתקן את הבחירה</small></div></header><div className="overage-ring"><strong>+{Math.round(calorieOverage.overBy)}</strong><small>קלוריות מעל היעד</small></div><p>אין צורך להילחץ מיום אחד. אפשר להשאיר את הארוחה, לערוך כמויות או לבטל את ההוספה.</p><footer><button type="button" onClick={() => setCalorieOverage(null)}>השאר ביומן</button><button type="button" onClick={() => { const meal = calorieOverage.meal; setCalorieOverage(null); editMeal({ ...meal, id: calorieOverage.id, time: meal.occurredAt }); }}>ערוך ארוחה</button><button className="danger" type="button" onClick={async () => { await deleteMeal(calorieOverage.id); setCalorieOverage(null); }}>בטל את ההוספה</button></footer></section></div>}
+      {dayCloseConfirm && <div className="modal-layer"><button className="backdrop" onClick={() => setDayCloseConfirm(false)} /><section className="settings-modal compact-modal finish-day-modal"><header><div><h2>לסיים את היום הפעיל?</h2><small>היום יישמר בהיסטוריה והמדדים יתחילו מחדש</small></div></header><div className="finish-day-summary"><span><small>קלוריות</small><strong>{consumed.toLocaleString()}</strong></span><span><small>ארוחות</small><strong>{state.today.meals.length}</strong></span><span><small>מים</small><strong>{Number(state.today.waterMl || 0).toLocaleString()} מ״ל</strong></span></div><p>הפעולה אינה מוחקת דבר. אפשר יהיה לפתוח את היום הזה מההיסטוריה.</p><footer><button type="button" onClick={() => setDayCloseConfirm(false)}>חזור</button><button className="primary" type="button" disabled={busy} onClick={finishActiveDay}>{busy ? "שומר…" : "סיים והתחל יום חדש"}</button></footer></section></div>}
       {historyDeleteRequest && <div className="modal-layer modal-nested"><button className="backdrop" type="button" onClick={() => setHistoryDeleteRequest(null)} /><form className="settings-modal compact-modal history-password-modal" onSubmit={async (event) => { event.preventDefault(); if (!historyDeleteRequest.password) return; await performHistoryDelete("meal", historyDeleteRequest.id, historyDeleteRequest.date, historyDeleteRequest.password); }}><header><div><h2>מחיקת ארוחה מההיסטוריה</h2><p>המחיקה תעדכן מיד את הקלוריות, אבות המזון והציון.</p></div></header><label>הסיסמה הנוכחית<input type="password" autoComplete="current-password" value={historyDeleteRequest.password} onChange={(event) => setHistoryDeleteRequest({ ...historyDeleteRequest, password: event.target.value })} /></label><footer><button type="button" onClick={() => setHistoryDeleteRequest(null)}>ביטול</button><button className="danger" type="submit" disabled={!historyDeleteRequest.password}>המשך למחיקה</button></footer></form></div>}
       {mealPreview && (
         <div className="modal-layer meal-preview-layer">
@@ -4376,6 +4392,7 @@ export default function Home() {
               <div className="settings-grid">
                 <label>אופן חישוב<select value={profileForm.targetMode || "automatic"} onChange={(e) => setProfileForm({ ...profileForm, targetMode: e.target.value })}><option value="automatic">אוטומטי ובטוח</option><option value="custom">מותאם אישית</option></select></label>
                 <label>תוספת קלוריות ביום אימון<input type="number" min="0" max="600" step="25" value={profileForm.trainingDayBonus || 0} onChange={(e) => setProfileForm({ ...profileForm, trainingDayBonus: Number(e.target.value) })} /></label>
+                <label className="wide">מתי מתחיל יום חדש?<select value={profileForm.dayBoundaryMode || "midnight"} onChange={(e) => setProfileForm({ ...profileForm, dayBoundaryMode: e.target.value })}><option value="midnight">אוטומטית בחצות</option><option value="manual">רק כשאני לוחץ „סיים יום”</option></select><small>{profileForm.dayBoundaryMode === "manual" ? "מתאים למשמרות: ארוחות, מים ופעילות אחרי חצות יישארו ביום הפעיל עד שתסיים אותו." : "המדדים מתאפסים בכל יום בשעה 00:00 לפי אזור הזמן שלך."}</small></label>
                 {profileForm.targetMode === "custom" && <>
                   <label>קלוריות<input type="number" value={profileForm.customCalories || ""} onChange={(e) => setProfileForm({ ...profileForm, customCalories: Number(e.target.value) })} /></label>
                   <label>חלבון<input type="number" value={profileForm.customProtein || ""} onChange={(e) => setProfileForm({ ...profileForm, customProtein: Number(e.target.value) })} /></label>
