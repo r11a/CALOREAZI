@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.18.6
+
+- Moved ADMIN management out of the user profile and into a subtle settings icon beside the administrator avatar.
+- Rebuilt ADMIN as a focused control center with desktop side navigation, mobile task tabs, clear section hierarchy and one relevant workspace at a time.
+
 ## 1.18.5
 
 - Unified desktop overlays into large system-style screens with sticky headers and footers, consistent spacing and hidden scrollbars.

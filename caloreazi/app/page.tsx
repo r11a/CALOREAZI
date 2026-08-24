@@ -2708,6 +2708,7 @@ export default function Home() {
           />
         </div>
         <div className="top-actions">
+          {isAdmin && <button className="admin-header-settings" type="button" onClick={() => void openAdmin()} title="מרכז ניהול ADMIN" aria-label="פתיחת מרכז ניהול ADMIN"><AppIcon name="settings" /></button>}
           <button className="avatar" onClick={openProfile} title="הפרופיל שלי">
             {profile.avatar ? (
               <img src={profile.avatar} alt="" />
@@ -3117,56 +3118,66 @@ export default function Home() {
               <div>
                 <p className="eyebrow">CALOREAZI ADMIN</p>
                 <h2>מרכז ניהול</h2>
+                <small className="admin-header-help">הגדרות, ניטור ותחזוקת המערכת במקום אחד</small>
               </div>
               <span className="admin-badge">ADMIN</span>
               {adminHealth && <span className="admin-version">גרסה {adminHealth.version}<small>{adminHealth.build === "development" ? "פיתוח" : adminHealth.build?.slice(0, 7)}</small></span>}
               <button onClick={() => setSettingsOpen(false)}>×</button>
             </header>
+            <div className="admin-workspace">
             <nav className="admin-nav">
               <button
                 className={adminTab === "ai" ? "active" : ""}
                 onClick={() => setAdminTab("ai")}
               >
-                AI וטוקנים
+                <AppIcon name="sparkles" /><span><strong>AI ומודלים</strong><small>ספקים, מודלים ועלויות</small></span>
               </button>
               <button
                 className={adminTab === "users" ? "active" : ""}
                 onClick={() => setAdminTab("users")}
               >
-                משתמשים
+                <AppIcon name="user" /><span><strong>משתמשים</strong><small>חשבונות והרשאות</small></span>
               </button>
               <button
                 className={adminTab === "security" ? "active" : ""}
                 onClick={() => setAdminTab("security")}
               >
-                אבטחה
+                <AppIcon name="lock" /><span><strong>אבטחה</strong><small>סיסמאות וגישה</small></span>
               </button>
               <button
                 className={adminTab === "storage" ? "active" : ""}
                 onClick={() => setAdminTab("storage")}
               >
-                אחסון
+                <AppIcon name="image" /><span><strong>אחסון ומדיה</strong><small>נפח ומדיניות תמונות</small></span>
               </button>
               <button
                 className={adminTab === "database" ? "active" : ""}
                 onClick={() => setAdminTab("database")}
               >
-                מסד נתונים
+                <AppIcon name="list" /><span><strong>מסד נתונים</strong><small>מצב ותחזוקה</small></span>
               </button>
               <button
                 className={adminTab === "backups" ? "active" : ""}
                 onClick={() => setAdminTab("backups")}
               >
-                גיבויים
+                <AppIcon name="history" /><span><strong>גיבויים</strong><small>יצירה ושחזור</small></span>
               </button>
               <button
                 className={adminTab === "audit" ? "active" : ""}
                 onClick={() => setAdminTab("audit")}
               >
-                Audit
+                <AppIcon name="activity" /><span><strong>יומן מערכת</strong><small>פעולות ואירועים</small></span>
               </button>
-              <button className={adminTab === "trash" ? "active" : ""} onClick={() => void openTrash()}>סל מחזור</button>
+              <button className={adminTab === "trash" ? "active" : ""} onClick={() => void openTrash()}><AppIcon name="history" /><span><strong>סל מחזור</strong><small>שחזור ומחיקה</small></span></button>
             </nav>
+            <main className="admin-content">
+            <div className="admin-page-heading">
+              <div>
+                <p className="eyebrow">{adminTab === "ai" ? "בינה מלאכותית" : adminTab === "users" ? "גישה למערכת" : adminTab === "security" ? "אבטחה" : adminTab === "storage" ? "אחסון" : adminTab === "database" ? "תשתית" : adminTab === "backups" ? "הגנת מידע" : adminTab === "audit" ? "ניטור" : "שחזור"}</p>
+                <h3>{adminTab === "ai" ? "AI ומודלים" : adminTab === "users" ? "ניהול משתמשים" : adminTab === "security" ? "הגדרות אבטחה" : adminTab === "storage" ? "אחסון ומדיה" : adminTab === "database" ? "מסד נתונים" : adminTab === "backups" ? "גיבויים ושחזור" : adminTab === "audit" ? "יומן פעילות" : "סל מחזור"}</h3>
+              </div>
+              {adminHealth && <span className={adminHealth.ai === "configured" ? "admin-system-state ok" : "admin-system-state warn"}><i />{adminHealth.ai === "configured" ? "המערכת פעילה" : "נדרשת בדיקה"}</span>}
+            </div>
             {adminTab === "ai" && adminHealth && (
               <section className="health-grid">
                 <article>
@@ -3795,6 +3806,8 @@ export default function Home() {
               </div>
             </section>}
             {adminTab === "ai" && aiStatus && <p className="settings-status">{aiStatus}</p>}
+            </main>
+            </div>
             <footer>
               <button onClick={() => saveAi(false)} disabled={busy}>
                 שמור
@@ -4268,7 +4281,6 @@ export default function Home() {
               </div>
               <b>‹</b>
             </button>
-            {isAdmin && <button className="profile-sharing admin-center-entry" type="button" onClick={() => { setProfileOpen(false); void openAdmin(); }}><span><AppIcon name="settings" /></span><div><strong>מרכז ניהול ADMIN</strong><small>משתמשים, מערכת, AI, מסד נתונים וסל מחזור</small></div><b>‹</b></button>}
             <button className="profile-sharing new-cycle-entry" type="button" onClick={() => { setNewCycleForm({ currentWeight: Number(latestWeight || profile.weight), targetWeight: Number(profile.targetWeight), goal: profile.goal || "lose", journeyStage: profile.journey?.stage || "starting", journeyWeeks: Number(profile.journey?.weeksBeforeJoining || 0), journeyStartingWeight: Number(profile.journey?.startingWeight || 0), journeyRecentChangeKg: Number(profile.journey?.recentChangeKg || 0), previousCalorieTarget: Number(profile.journey?.previousCalorieTarget || 0), plateauWeeks: Number(profile.journey?.plateauWeeks || 0), priorApproach: profile.journey?.priorApproach || "", mainChallenge: profile.journey?.mainChallenge || "", trainingExperience: profile.journey?.trainingExperience || "beginner", preferredPace: profile.journey?.preferredPace || "moderate", workouts: Number(profile.workouts || 2), workoutTypes: profile.workoutTypes || [] }); setNewCycleOpen(true); }}><span>↻</span><div><strong>המסלול שלי</strong><small>הגדר נקודת כניסה, מטרה, קצב ואימונים; כל ההיסטוריה נשמרת</small></div><b>‹</b></button>
             <button
               className="profile-sharing"

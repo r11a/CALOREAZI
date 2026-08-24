@@ -404,11 +404,20 @@ test("history deletion masks meal passwords and supports legacy water entries", 
   assert.match(page, /String\(meal\.id \|\| meal\.time\)/);
 });
 
-test("bottom navigation keeps trends visible and moves admin into the account tab", () => {
+test("bottom navigation keeps trends visible and exposes admin from the header", () => {
   assert.match(page, /openNavigationScreen\("insights"\)[\s\S]{0,160}מגמות/);
   assert.doesNotMatch(page, /openNavigationScreen\(isAdmin \? "admin" : "insights"\)/);
-  assert.match(page, /admin-center-entry/);
+  assert.match(page, /admin-header-settings/);
+  assert.doesNotMatch(page, /admin-center-entry/);
   assert.match(page, /מרכז ניהול ADMIN/);
+});
+
+test("admin uses a focused control-center workspace", () => {
+  assert.match(page, /admin-workspace/);
+  assert.match(page, /admin-content/);
+  assert.match(page, /admin-page-heading/);
+  assert.match(expansionCss, /grid-template-columns:238px minmax\(0,1fr\)/);
+  assert.match(expansionCss, /admin-center\.admin-tab-trash \.admin-content>#admin-trash/);
 });
 
 test("desktop destinations use a full system-screen shell without visible scrollbars", () => {

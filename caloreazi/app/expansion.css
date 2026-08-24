@@ -139,6 +139,52 @@
   .meal-meta{flex-wrap:wrap;gap:5px!important}
   .meal-meta time{font-size:12px}.meal-meta em{font-size:10px}
 }
+
+/* ADMIN control center: task-oriented navigation and one focused workspace. */
+.admin-center{overflow:hidden!important}
+.admin-center>header{position:relative!important;top:auto!important;flex:none;background:var(--surface)}
+.admin-header-help{display:block;margin-top:4px;color:var(--muted);font-size:11px;font-weight:600}
+.admin-workspace{min-height:0;flex:1;display:grid;grid-template-columns:238px minmax(0,1fr);overflow:hidden;background:color-mix(in srgb,var(--canvas) 58%,var(--surface))}
+.admin-workspace>.admin-nav{min-height:0;margin:0;padding:18px 12px;display:flex;flex-direction:column;gap:7px;overflow-y:auto;border:0;border-left:1px solid var(--line);background:var(--surface);scrollbar-width:none}
+.admin-workspace>.admin-nav::-webkit-scrollbar,.admin-content::-webkit-scrollbar{display:none}
+.admin-workspace>.admin-nav button{width:100%;min-height:62px;padding:9px 11px;display:grid;grid-template-columns:36px minmax(0,1fr);align-items:center;gap:10px;border:1px solid transparent;border-radius:13px;color:var(--muted);background:transparent;text-align:right;transition:background .18s ease,border-color .18s ease,transform .18s ease}
+.admin-workspace>.admin-nav button:hover{border-color:var(--line);background:var(--canvas);transform:translateX(-2px)}
+.admin-workspace>.admin-nav button.active{border-color:color-mix(in srgb,var(--orange) 36%,var(--line));color:var(--ink);background:color-mix(in srgb,var(--orange) 10%,var(--surface));box-shadow:inset -4px 0 var(--orange)}
+.admin-workspace>.admin-nav .app-icon{width:20px;height:20px;justify-self:center;color:currentColor}
+.admin-workspace>.admin-nav button>span{min-width:0;display:grid;gap:3px}
+.admin-workspace>.admin-nav button strong{font-size:13px}.admin-workspace>.admin-nav button small{overflow:hidden;color:var(--muted);font-size:9px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+.admin-content{min-height:0;padding:24px 28px 38px;overflow-y:auto;scrollbar-width:none}
+.admin-page-heading{margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.admin-page-heading h3{margin:2px 0 0;font-size:27px}.admin-page-heading .eyebrow{margin:0}
+.admin-system-state{padding:8px 11px;display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:var(--surface);font-size:10px;font-weight:800;white-space:nowrap}.admin-system-state i{width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 4px color-mix(in srgb,var(--amber) 13%,transparent)}.admin-system-state.ok i{background:var(--green);box-shadow:0 0 0 4px color-mix(in srgb,var(--green) 13%,transparent)}
+.admin-content>.health-grid{margin:0 0 16px;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px}.admin-content>.health-grid article{min-height:92px;padding:15px;border-color:var(--line);border-radius:15px;background:var(--surface)}
+.admin-content>.admin-intro,.admin-content>.settings-grid,.admin-content>.usage-summary,.admin-content>.admin-users{margin:0 0 14px;padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}
+.admin-content>.admin-intro{display:grid;gap:5px;background:linear-gradient(135deg,color-mix(in srgb,var(--orange) 9%,var(--surface)),var(--surface))}.admin-content>.admin-intro span{color:var(--muted);font-size:12px}
+.admin-content>.settings-grid{margin-top:0}.admin-content>.usage-summary{display:grid;gap:5px}.admin-content>.admin-users{padding-top:18px;border-top:1px solid var(--line)}
+.admin-content .admin-section-title{margin-bottom:15px}.admin-content .admin-section-title h3{font-size:22px}.admin-content .new-user-form{border:1px solid var(--line);background:var(--canvas)}
+.admin-content .user-list article,.admin-content .backup-list article,.admin-content .audit-list article,.admin-content .trash-list article{min-height:58px;background:color-mix(in srgb,var(--surface) 87%,var(--canvas))}
+.admin-content .database-summary article{background:var(--canvas)}
+.admin-center.admin-tab-ai .admin-content>#admin-ai,.admin-center.admin-tab-ai .admin-content>#admin-ai+.settings-grid,.admin-center.admin-tab-ai .admin-content>.usage-summary{display:grid}
+.admin-center:not(.admin-tab-ai) .admin-content>#admin-ai,.admin-center:not(.admin-tab-ai) .admin-content>#admin-ai+.settings-grid,.admin-center:not(.admin-tab-ai) .admin-content>.usage-summary{display:none!important}
+.admin-center[class*="admin-tab-"] .admin-content>#admin-security,.admin-center[class*="admin-tab-"] .admin-content>#admin-users,.admin-center[class*="admin-tab-"] .admin-content>#admin-storage,.admin-center[class*="admin-tab-"] .admin-content>#admin-database,.admin-center[class*="admin-tab-"] .admin-content>#admin-backups,.admin-center[class*="admin-tab-"] .admin-content>#admin-audit,.admin-center[class*="admin-tab-"] .admin-content>#admin-trash{display:none}
+.admin-center.admin-tab-security .admin-content>#admin-security,.admin-center.admin-tab-users .admin-content>#admin-users,.admin-center.admin-tab-storage .admin-content>#admin-storage,.admin-center.admin-tab-database .admin-content>#admin-database,.admin-center.admin-tab-backups .admin-content>#admin-backups,.admin-center.admin-tab-audit .admin-content>#admin-audit,.admin-center.admin-tab-trash .admin-content>#admin-trash{display:block}
+.admin-center>footer{position:relative!important;bottom:auto!important;flex:none;margin:0!important;padding:12px 24px max(12px,env(safe-area-inset-bottom));background:var(--surface)}
+.theme-dark .admin-workspace{background:#111514}.theme-dark .admin-workspace>.admin-nav,.theme-dark .admin-content>.admin-intro,.theme-dark .admin-content>.settings-grid,.theme-dark .admin-content>.usage-summary,.theme-dark .admin-content>.admin-users,.theme-dark .admin-content>.health-grid article{background:#1b201f}.theme-dark .admin-workspace>.admin-nav button.active{background:#35271f}
+@media(max-width:760px),(pointer:coarse){
+ .admin-header-help{display:none}
+ .admin-workspace{display:flex;flex-direction:column;background:var(--surface)}
+ .admin-workspace>.admin-nav{min-height:72px;flex:none;padding:8px 10px;flex-direction:row;overflow-x:auto;overflow-y:hidden;border:0;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 96%,transparent);scroll-snap-type:x proximity}
+ .admin-workspace>.admin-nav button{width:auto;min-width:94px;min-height:54px;padding:7px 10px;grid-template-columns:22px auto;gap:6px;border-radius:9px;scroll-snap-align:start}
+ .admin-workspace>.admin-nav button:hover{transform:none}.admin-workspace>.admin-nav button.active{box-shadow:inset 0 -3px var(--orange)}
+ .admin-workspace>.admin-nav button small{display:none}.admin-workspace>.admin-nav button strong{font-size:12px;white-space:nowrap}
+ .admin-workspace>.admin-nav .app-icon{width:17px;height:17px}
+ .admin-content{padding:16px 12px calc(32px + env(safe-area-inset-bottom))}
+ .admin-page-heading{margin:0 2px 14px}.admin-page-heading h3{font-size:23px}.admin-system-state{padding:7px 9px;font-size:9px}
+ .admin-content>.health-grid{grid-template-columns:1fr 1fr!important}.admin-content>.health-grid article{min-width:0;min-height:84px;padding:12px}
+ .admin-content>.admin-intro,.admin-content>.settings-grid,.admin-content>.usage-summary,.admin-content>.admin-users{padding:14px;border-radius:15px}
+ .admin-content .admin-section-title{align-items:flex-start;gap:10px}.admin-content .admin-section-title h3{font-size:19px}
+ .admin-center>footer{padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+}
 .admin-user-credentials {
   grid-column: 1 / -1;
   width: 100%;
