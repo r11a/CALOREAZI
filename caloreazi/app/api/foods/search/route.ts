@@ -4,6 +4,7 @@ import { cacheFoodSearch, cachedFoodSearch } from "@/server/food-search-cache.js
 import { nutritionConfidence } from "@/server/meal-validation.js";
 
 export const runtime = "nodejs";
+const FOOD_DATA_USER_AGENT = "CALOREAZI nutrition client (https://github.com/r11a/CALOREAZI)";
 
 type OpenFoodProduct = {
   code?: string; product_name?: string; product_name_he?: string; brands?: string;
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
     if (cached) return Response.json({ ...cached, cached: true }, { headers: { "Cache-Control": "private, max-age=86400" } });
     for (const host of ["world.openfoodfacts.org", "world.openfoodfacts.net"]) {
       try {
-        const response = await fetch(`https://${host}/api/v2/product/${barcode}.json?fields=code,product_name,product_name_he,brands,quantity,image_front_small_url,nutriments`, { headers: { "User-Agent": "CALOREAZI/1.9.0 (https://github.com/r11a/CALOREAZI)" }, signal: AbortSignal.timeout(8000), next: { revalidate: 86400 } });
+        const response = await fetch(`https://${host}/api/v2/product/${barcode}.json?fields=code,product_name,product_name_he,brands,quantity,image_front_small_url,nutriments`, { headers: { "User-Agent": FOOD_DATA_USER_AGENT }, signal: AbortSignal.timeout(8000), next: { revalidate: 86400 } });
         if (!response.ok || !response.headers.get("content-type")?.includes("json")) continue;
         const payload = await response.json();
         const product = payload.product as OpenFoodProduct | undefined;
@@ -78,7 +79,7 @@ export async function GET(request: Request) {
   for (const host of ["world.openfoodfacts.org", "world.openfoodfacts.net"]) {
     try {
       const response = await fetch(`https://${host}/cgi/search.pl?${params}`, {
-        headers: { "User-Agent": "CALOREAZI/1.9.0 (https://github.com/r11a/CALOREAZI)" },
+        headers: { "User-Agent": FOOD_DATA_USER_AGENT },
         signal: AbortSignal.timeout(8000),
         next: { revalidate: 3600 },
       });

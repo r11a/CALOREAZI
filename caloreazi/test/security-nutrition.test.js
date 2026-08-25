@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { energyKcal, enrichVisionItems, estimateMealSugar, findNutritionFood } from "../server/nutrition-catalog.js";
+import { energyKcal, enrichVisionItems, estimateMealSugar, findMohNutritionFood, findNutritionFood } from "../server/nutrition-catalog.js";
 import { checkRateLimit, requireSameOrigin } from "../server/security.js";
 import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "../server/domains/meals/repository.js";
 import { parseVisionResult } from "../server/meal-analysis.js";
@@ -38,6 +38,15 @@ test("legacy meals derive dietary sugar from catalog items without inventing zer
 test("USDA energy respects units and converts kilojoules to kilocalories", () => {
   assert.equal(energyKcal({ foodNutrients: [{ nutrientName: "Energy", unitName: "KJ", value: 383 }, { nutrientName: "Energy", unitName: "KCAL", value: 92 }] }), 92);
   assert.ok(Math.abs(energyKcal({ foodNutrients: [{ nutrientName: "Energy", unitName: "KJ", value: 383 }] }) - 91.54) < .01);
+});
+
+test("Israeli nutrition adapter accepts only a close Hebrew match with traceable values", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ result: { records: [{ Code: "777", shmmitzrach: "קובה סלק מבושלת", food_energy: 142, protein: 5.2, carbohydrates: 21, total_fat: 4.1, sodium: 310 }] } }), { status: 200, headers: { "Content-Type": "application/json" } }));
+  const food = await findMohNutritionFood("קובה סלק מבושלת");
+  assert.equal(food.source, "MOH_ISRAEL");
+  assert.equal(food.sourceId, "777");
+  assert.equal(food.kcalPer100, 142);
+  assert.equal(food.sodiumMgPer100, 310);
 });
 
 test("vision parser accepts identification fields without nutrition estimates", () => {

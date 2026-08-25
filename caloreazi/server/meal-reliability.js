@@ -2,7 +2,7 @@ import { calculateMealFromItems } from "./nutrition.js";
 import { validateMealNutrition } from "./meal-validation.js";
 
 const sourceProfiles = [
-  { test: (value) => value.includes("משרד הבריאות") || value.includes("MOH"), score: 96, label: "מאגר ממשלתי" },
+  { test: (value) => value.includes("משרד הבריאות") || value.includes("MOH"), score: 96, label: "מאגר התזונה הלאומי הישראלי" },
   { test: (value) => value.includes("CALOREAZI_CURATED"), score: 92, label: "קטלוג CALOREAZI מאומת" },
   { test: (value) => value.includes("USDA"), score: 89, label: "מאגר USDA" },
   { test: (value) => value.includes("Open Food Facts"), score: 80, label: "מאגר ברקודים קהילתי" },

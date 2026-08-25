@@ -76,25 +76,42 @@ export function enrichVisionItems(items) {
   return { items: enriched, nutritionStatus: unmatched ? "needs_confirmation" : "matched", unmatched };
 }
 
-const usdaCache = new Map();
+const remoteNutritionCache = new Map();
+const REMOTE_CACHE_LIMIT = 500;
+const REMOTE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+function cachedRemote(key) { const entry = remoteNutritionCache.get(key); if (!entry || entry.expiresAt <= Date.now()) { remoteNutritionCache.delete(key); return undefined; } remoteNutritionCache.delete(key); remoteNutritionCache.set(key, entry); return structuredClone(entry.value); }
+function cacheRemote(key, value) { remoteNutritionCache.delete(key); remoteNutritionCache.set(key, { value: structuredClone(value), expiresAt: Date.now() + REMOTE_CACHE_TTL_MS }); while (remoteNutritionCache.size > REMOTE_CACHE_LIMIT) remoteNutritionCache.delete(remoteNutritionCache.keys().next().value); return value; }
 function nutrientValue(food, names) { const nutrient = (food.foodNutrients || []).find((item) => names.includes(String(item.nutrientName || item.nutrient?.name || "").toLowerCase())); return Math.max(0, Number(nutrient?.value ?? nutrient?.amount) || 0); }
 export function energyKcal(food) { const nutrients = food.foodNutrients || []; const kcal = nutrients.find((item) => String(item.nutrientName || item.nutrient?.name || "").toLowerCase() === "energy" && String(item.unitName || item.nutrient?.unitName || "").toUpperCase() === "KCAL"); if (kcal) return Math.max(0, Number(kcal.value ?? kcal.amount) || 0); const kj = nutrients.find((item) => String(item.nutrientName || item.nutrient?.name || "").toLowerCase() === "energy" && String(item.unitName || item.nutrient?.unitName || "").toUpperCase() === "KJ"); return kj ? Math.max(0, (Number(kj.value ?? kj.amount) || 0) / 4.184) : 0; }
+export async function findMohNutritionFood(name) {
+  const query = String(name || "").trim(); if (!query || !/[\u0590-\u05ff]/.test(query)) return null;
+  const key = `moh:${normalize(query)}`; const cached = cachedRemote(key); if (cached !== undefined) return cached;
+  const params = new URLSearchParams({ resource_id: "c3cb0630-0650-46c1-a068-82d575c094b2", q: query, limit: "12" });
+  const response = await fetch(`https://data.gov.il/api/3/action/datastore_search?${params}`, { signal: AbortSignal.timeout(6000) });
+  if (!response.ok) throw new Error(`Israel nutrition database returned ${response.status}`);
+  const records = (await response.json())?.result?.records || []; const target = normalize(query);
+  const ranked = records.map((record) => { const recordName = normalize(record.shmmitzrach); const exact = recordName === target; const contained = recordName.includes(target) || target.includes(recordName); return { record, rank: exact ? 3 : contained ? 2 : 0 }; }).filter((item) => item.rank > 0).sort((a, b) => b.rank - a.rank);
+  const record = ranked[0]?.record; const kcal = Number(record?.food_energy || 0);
+  const result = record && kcal > 0 ? { source: "MOH_ISRAEL", sourceId: String(record.Code || record._id || ""), sourceVersion: "live", name: String(record.shmmitzrach || query).trim(), aliases: [query], kcalPer100: kcal, proteinPer100: Number(record.protein || 0), carbsPer100: Number(record.carbohydrates || 0), fatPer100: Number(record.total_fat || 0), sugarPer100: record.total_sugars == null ? null : Number(record.total_sugars || 0), fiberPer100: record.dietary_fiber == null ? null : Number(record.dietary_fiber || 0), sodiumMgPer100: record.sodium == null ? null : Number(record.sodium || 0) } : null;
+  return cacheRemote(key, result);
+}
 async function findUsdaFood(name) {
   const apiKey = process.env.CALOREAZI_USDA_API_KEY || "DEMO_KEY";
   const query = String(name || "").trim();
   if (!apiKey || !query) return null;
-  const cacheKey = normalize(query); if (usdaCache.has(cacheKey)) return usdaCache.get(cacheKey);
+  const cacheKey = `usda:${normalize(query)}`; const cached = cachedRemote(cacheKey); if (cached !== undefined) return cached;
   const response = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(apiKey)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query, pageSize: 5, dataType: ["Foundation", "SR Legacy"] }), signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`USDA FoodData Central returned ${response.status}`);
   const food = (await response.json()).foods?.[0];
   const result = food ? { source: "USDA_FDC", sourceId: String(food.fdcId), sourceVersion: food.publicationDate || "live", name: food.description, aliases: [], kcalPer100: energyKcal(food), proteinPer100: nutrientValue(food, ["protein"]), carbsPer100: nutrientValue(food, ["carbohydrate, by difference"]), fatPer100: nutrientValue(food, ["total lipid (fat)"]), sugarPer100: nutrientValue(food, ["sugars, total including nlea", "sugars, total"]), fiberPer100: nutrientValue(food, ["fiber, total dietary"]), sodiumMgPer100: nutrientValue(food, ["sodium, na"]), saturatedFatPer100: nutrientValue(food, ["fatty acids, total saturated"]) } : null;
-  usdaCache.set(cacheKey, result); return result;
+  return cacheRemote(cacheKey, result);
 }
 
 export async function enrichVisionItemsAuthoritative(items) {
   let unmatched = 0; const enriched = [];
   for (const item of items) {
     let food = findNutritionFood(item.name);
+    if (!food) { try { food = await findMohNutritionFood(item.name); } catch { food = null; } }
     if (!food) { try { food = await findUsdaFood(item.searchNameEn || item.name); } catch { food = null; } }
     if (!food || !(food.kcalPer100 > 0)) { unmatched += 1; enriched.push({ ...item, kcalPer100: 0, proteinPer100: 0, carbsPer100: 0, fatPer100: 0, sugarPer100: null, nutritionSource: null, nutritionStatus: "needs_confirmation" }); continue; }
     enriched.push({ ...item, kcalPer100: food.kcalPer100, proteinPer100: food.proteinPer100, carbsPer100: food.carbsPer100, fatPer100: food.fatPer100, sugarPer100: food.sugarPer100, fiberPer100: food.fiberPer100 ?? null, sodiumMgPer100: food.sodiumMgPer100 ?? null, saturatedFatPer100: food.saturatedFatPer100 ?? null, addedSugarPer100: food.addedSugarPer100 ?? null, nutritionSource: { source: food.source, sourceId: food.sourceId, sourceVersion: food.sourceVersion }, nutritionStatus: "matched" });
