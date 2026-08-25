@@ -47,3 +47,16 @@ test("scores past days with score engine 2 and reports data coverage", () => {
   assert.ok(result.coverage > 0 && result.coverage <= 100);
   assert.ok(result.parameters.some((item) => item.key === "produce"));
 });
+
+test("produce contributes to the score regardless of meal entry path", () => {
+  const profile = { calories: 2000, protein: 120, carbs: 220, fat: 65, waterMl: 2000 };
+  const day = { date: "2026-08-25", waterMl: 0, meals: [
+    { name: "שזיף בינוני", kcal: 30, protein: 0, carbs: 8, fat: 0, items: [] },
+    { name: "שני כריכים עם ירקות", kcal: 520, protein: 22, carbs: 70, fat: 15, items: [] },
+  ] };
+  const score = calculateDayScore(day, profile, []);
+  const produce = score.parameters.find((item) => item.key === "produce");
+  assert.ok(produce.available);
+  assert.equal(produce.value, 130);
+  assert.ok(produce.score > 0);
+});

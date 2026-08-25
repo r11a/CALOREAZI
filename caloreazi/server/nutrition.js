@@ -61,6 +61,40 @@ export function calculateNutritionTargets(input) {
   };
 }
 
+const produceIds = new Set(["tomato","cucumber","lettuce","avocado","apple","banana","orange","mango","plum","melon","grapefruit","watermelon","kiwi","peach","potato-boiled","sweet-potato-cooked"]);
+const producePortions = [
+  { pattern: /(?:^|\s)(?:שזיף|שזיפים|plum|plums)(?:\s|$)/i, grams: 70 },
+  { pattern: /(?:^|\s)(?:תפוח(?: עץ)?|apple)(?:\s|$)/i, grams: 180 },
+  { pattern: /(?:^|\s)(?:בננה|בננות|banana|bananas)(?:\s|$)/i, grams: 120 },
+  { pattern: /(?:^|\s)(?:תפוז|orange)(?:\s|$)/i, grams: 130 },
+  { pattern: /(?:^|\s)(?:מנגו|mango)(?:\s|$)/i, grams: 165 },
+  { pattern: /(?:^|\s)(?:מלון|אבטיח|אשכולית|קיווי|אפרסק|אפרסקים|ענבים|תותים|אגס|אגסים|fruit|fruits|פרי|פירות)(?:\s|$)/i, grams: 120 },
+  { pattern: /(?:^|\s)(?:עגבני(?:י)?ה|עגבניות|מלפפון|מלפפונים|גזר|גזרים|פלפל|פלפלים|ברוקולי|קישוא|קישואים|חציל|חצילים|כרובית|חסה|בטטה|בטטות|vegetable|vegetables)(?:\s|$)/i, grams: 100 },
+];
+const genericProducePattern = /(?:ירק|ירקות|סלט)/i;
+
+function inferredProducePortion(name) {
+  const normalized = String(name || "").replace(/[׳'״".,()·:;-]/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized) return 0;
+  const explicit = producePortions.filter((item) => item.pattern.test(normalized)).reduce((sum, item) => sum + item.grams, 0);
+  return Math.min(400, Math.max(explicit, genericProducePattern.test(normalized) ? (/כרי(?:ך|כים)|sandwich/i.test(normalized) ? 60 : 120) : 0));
+}
+
+function produceAmountForMeal(meal) {
+  const items = Array.isArray(meal?.items) ? meal.items : [];
+  let amount = 0;
+  for (const item of items) {
+    const sourceId = item.nutritionSource?.sourceId;
+    const inferred = inferredProducePortion(item.confirmedName || item.name);
+    const explicitlyProduce = item.foodGroup === "produce" || produceIds.has(sourceId);
+    if (!explicitlyProduce && !inferred) continue;
+    const grams = Math.max(0, Number(item.grams) || 0);
+    const quantity = Math.max(.1, Number(item.quantity) || 1);
+    amount += explicitlyProduce && grams ? grams * quantity : inferred * quantity;
+  }
+  return Math.min(600, amount || inferredProducePortion(meal?.name));
+}
+
 export function calculateDayScore(day, profile, activity = []) {
   const meals = Array.isArray(day?.meals) ? day.meals : [];
   const totals = meals.reduce((sum, meal) => ({
@@ -71,8 +105,7 @@ export function calculateDayScore(day, profile, activity = []) {
   }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
   const items = meals.flatMap((meal) => meal.items || []); const itemCount = items.length; const micronutrients = calculateMealFromItems(items);
   for (const field of ["fiber","sodiumMg","saturatedFat","addedSugar"]) { totals[field] = Number(micronutrients[field] || 0); totals[`${field}TrackedItems`] = Number(micronutrients[`${field}TrackedItems`] || 0); }
-  const produceIds = new Set(["tomato","cucumber","lettuce","avocado","apple","banana","orange","mango","plum","melon","grapefruit","watermelon","kiwi","peach","potato-boiled","sweet-potato-cooked"]);
-  const produceGrams = items.reduce((sum, item) => sum + (item.foodGroup === "produce" || produceIds.has(item.nutritionSource?.sourceId) ? Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1) : 0), 0);
+  const produceGrams = meals.reduce((sum, meal) => sum + produceAmountForMeal(meal), 0);
   const uniqueFoods = new Set(items.map((item) => String(item.confirmedName || item.name || "").trim().toLocaleLowerCase()).filter(Boolean)).size;
   const calorieTarget = Math.max(1, Number(profile?.calories || 2000)); const proteinTarget = Math.max(1, Number(profile?.protein || 100)); const carbsTarget = Math.max(1, Number(profile?.carbs || calorieTarget * .45 / 4)); const fatTarget = Math.max(1, Number(profile?.fat || calorieTarget * .3 / 9)); const waterTarget = Math.max(1, Number(profile?.waterMl || 2000));
   const ratioScore = (actual, target, max, low = .9, high = 1.1) => { const ratio = actual / target; if (ratio >= low && ratio <= high) return max; const distance = ratio < low ? (low - ratio) / low : (ratio - high) / high; return Math.max(0, max * (1 - distance * 1.7)); };
@@ -81,7 +114,7 @@ export function calculateDayScore(day, profile, activity = []) {
   const tracked = (field) => itemCount > 0 && Number(totals[`${field}TrackedItems`] || 0) / itemCount >= .7;
   const end = new Date(`${day?.date || new Date().toISOString().slice(0,10)}T23:59:59`); const start = new Date(end); start.setDate(start.getDate() - 6); const weeklyMinutes = activity.filter((item) => { const date = new Date(`${item.date || ""}T12:00:00`); return Number.isFinite(date.getTime()) && date >= start && date <= end; }).reduce((sum, item) => sum + Number(item.minutes || 0), 0);
   const parameters = [
-    { key: "produce", group: "quality", label: "ירקות ופירות", value: produceGrams, target: 400, unit: "גרם", max: 10, score: adequacy(produceGrams, 400, 10), available: itemCount > 0, tip: "להוסיף ירק או פרי למנה הבאה." },
+    { key: "produce", group: "quality", label: "ירקות ופירות", value: produceGrams, target: 400, unit: "גרם", max: 10, score: adequacy(produceGrams, 400, 10), available: itemCount > 0 || produceGrams > 0, tip: "להוסיף ירק או פרי למנה הבאה." },
     { key: "fiber", group: "quality", label: "סיבים", value: totals.fiber, target: 25, unit: "גרם", max: 10, score: adequacy(totals.fiber, 25, 10), available: tracked("fiber"), tip: "להעדיף ירקות, קטניות ודגנים מלאים." },
     { key: "saturatedFat", group: "quality", label: "שומן רווי", value: totals.saturatedFat, target: calorieTarget * .1 / 9, unit: "גרם עד", max: 7, score: moderation(totals.saturatedFat, calorieTarget * .1 / 9, 7), available: tracked("saturatedFat"), tip: "להפחית מזונות עשירים בשומן רווי." },
     { key: "addedSugar", group: "quality", label: "סוכר מוסף", value: totals.addedSugar, target: calorieTarget * .1 / 4, unit: "גרם עד", max: 7, score: moderation(totals.addedSugar, calorieTarget * .1 / 4, 7), available: tracked("addedSugar"), tip: "לצמצם משקאות ומזונות עם סוכר מוסף." },
