@@ -72,6 +72,10 @@ const goalLabels: Record<string, string> = {
 };
 const workoutTypeLabels: Record<string, string> = { walking: "הליכה", running: "ריצה", strength: "אימון כוח", cycling: "רכיבה", swimming: "שחייה", yoga: "יוגה / גמישות", other: "אחר" };
 const journeyStageLabels: Record<string, string> = { starting: "אני מתחיל עכשיו", early: "כבר התחלתי לאחרונה", established: "אני כבר בתהליך קבוע", plateau: "אני בתקיעות", returning: "חוזר אחרי הפסקה", transition: "עובר ממסה לחיטוב או להפך" };
+const coachHelpQuestions = {
+  coach: ["מה כדאי לי לאכול עכשיו לפי מה שחסר לי היום?", "איך היום שלי מתקדם ומה הצעד החשוב הבא?", "איך לשפר את איכות התזונה בלי לשנות הכול?", "הכן לי רעיון לארוחה שמתאים להעדפות וליעד שלי."],
+  app: ["איך מוסיפים ארוחה מצילום?", "איך מתקנים ערכים של ארוחה שכבר הוספתי?", "איך מעדכנים משקל ורואים מגמה?", "איך מחושב הציון היומי?", "איך מפעילים התראות ומגדירים שעות שקטות?"],
+};
 const notificationPreferenceDefaults = { enabled: true, morningBrief: true, mealReminders: true, waterReminders: true, dailySummary: true, insights: true, coachTips: true, weeklyTrends: true, weightReminder: true, achievements: false, breakfastTime: "09:00", lunchTime: "14:00", dinnerTime: "20:00", waterTime: "16:30", summaryTime: "21:15", coachTime: "11:30", weeklyTime: "10:00", quietStart: "22:30", quietEnd: "07:00", maxPerDay: 5 };
 const notificationTypeOptions = [
   ["morningBrief", "בוקר טוב וסיכום אתמול", "בכל יום ב־07:30: הציון והקלוריות של אתמול יחד עם מבט להיום"],
@@ -583,6 +587,7 @@ export default function Home() {
   const [messages, setMessages] = useState<
     { role: "user" | "assistant"; text: string; usage?: string }[]
   >([]);
+  const [coachHelpOpen, setCoachHelpOpen] = useState(false);
   const [aiForm, setAiForm] = useState({
     provider: "openai",
     model: "gpt-5-mini",
@@ -980,11 +985,19 @@ export default function Home() {
     ...(currentStreak >= 7 ? [{ icon: "★", label: "שבוע של עקביות" }] : []),
     ...(dailyScore >= 80 ? [{ icon: "◎", label: "יום מאוזן" }] : []),
   ].slice(0, 3);
-  const calmChallenges = [
-    { label: "לתעד שתי ארוחות", value: Math.min(2, state?.today?.meals?.length || 0), target: 2 },
-    { label: "להתקרב ליעד המים", value: Math.min(Number(profile?.waterMl || 1), Number(state?.today?.waterMl || 0)), target: Number(profile?.waterMl || 1) },
-    { label: "20 דקות תנועה", value: Math.min(20, (state?.activity || []).filter((item: any) => item.date === state?.today?.date).reduce((sum: number, item: any) => sum + Number(item.minutes || 0), 0)), target: 20 },
+  const activityToday = (state?.activity || []).filter((item: any) => item.date === state?.today?.date).reduce((sum: number, item: any) => sum + Number(item.minutes || 0), 0);
+  const challengeParameter = (key: string) => (state?.dailyScore?.parameters || []).find((item: any) => item.key === key && item.available);
+  const calmChallengePool = [
+    ...(macros.protein < Number(profile?.protein || 0) * .75 ? [{ label: "חלבון בקצב נוח", value: macros.protein, target: Number(profile?.protein || 1), unit: "גרם", tone: "protein" }] : []),
+    ...(Number(state?.today?.waterMl || 0) < Number(profile?.waterMl || 0) * .8 ? [{ label: "שתייה לאורך היום", value: Number(state?.today?.waterMl || 0), target: Number(profile?.waterMl || 1), unit: "מ״ל", tone: "water" }] : []),
+    ...(challengeParameter("produce")?.percent < 80 ? [{ label: "ירקות ופירות", value: Number(challengeParameter("produce")?.value || 0), target: Number(challengeParameter("produce")?.target || 400), unit: "גרם", tone: "produce" }] : []),
+    ...(challengeParameter("fiber")?.percent < 80 ? [{ label: "מקור סיבים היום", value: Number(challengeParameter("fiber")?.value || 0), target: Number(challengeParameter("fiber")?.target || 25), unit: "גרם", tone: "fiber" }] : []),
+    ...(activityToday < 20 ? [{ label: profile?.journey?.stage === "plateau" ? "תנועה קלה לשבירת שגרה" : "תנועה שמתאימה לקצב שלך", value: activityToday, target: 20, unit: "דקות", tone: "activity" }] : []),
+    ...((state?.today?.meals?.length || 0) < 2 ? [{ label: "תיעוד שמאפשר למאמן לדייק", value: state?.today?.meals?.length || 0, target: 2, unit: "ארוחות", tone: "tracking" }] : []),
   ];
+  const calmChallengeOptions = [...calmChallengePool, { label: "לשמור על רצף בלי לחץ", value: Math.min(1, state?.today?.meals?.length || 0), target: 1, unit: "צעד", tone: "steady" }];
+  const calmChallengeOffset = (Number(String(state?.today?.date || "").replaceAll("-", "")) + Math.floor(now.getHours() / 4)) % calmChallengeOptions.length;
+  const calmChallenges = Array.from({ length: Math.min(3, calmChallengeOptions.length) }, (_, index) => calmChallengeOptions[(calmChallengeOffset + index) % calmChallengeOptions.length]);
   const mealSuggestions = useMemo(() => {
     const taste = profile?.tasteProfile || { likes: [], dislikes: [] }; const likes = taste.likes || []; const dislikes = taste.dislikes || []; const blocked = `${profile?.restrictions || ""} ${profile?.foodAllergies || ""}`.toLocaleLowerCase("he");
     const proteinGap = Math.max(0, Number(profile?.protein || 0) - macros.protein); const carbsGap = Math.max(0, Number(profile?.carbs || 0) - macros.carbs); const fatGap = Math.max(0, Number(profile?.fat || 0) - macros.fat);
@@ -2957,7 +2970,7 @@ export default function Home() {
           {consistencyBadges.map((badge) => <span key={badge.label}><b>{badge.icon}</b>{badge.label}</span>)}
         </div>
       )}
-      <details className="calm-challenges"><summary><span>◇</span><div><strong>יעדים רגועים להיום</strong><small>בלי לחץ ובלי רצף שנשבר — כל צעד נחשב</small></div></summary><div>{calmChallenges.map((challenge) => <span key={challenge.label}><small>{challenge.label}</small><i><b style={{ width: `${Math.min(100, challenge.value / Math.max(1, challenge.target) * 100)}%` }} /></i><em>{Math.round(challenge.value)} / {challenge.target}</em></span>)}</div></details>
+      <details className="calm-challenges" open><summary><span>◇</span><div><strong>יעדים רגועים להיום</strong><small>מותאמים לשעה, לפערים ולשלב שלך בתהליך</small></div></summary><div>{calmChallenges.map((challenge) => <span className={`challenge-${challenge.tone}`} key={challenge.label}><small>{challenge.label}</small><i><b style={{ width: `${Math.min(100, challenge.value / Math.max(1, challenge.target) * 100)}%` }} /></i><em>{Math.round(challenge.value).toLocaleString()} מתוך {challenge.target.toLocaleString()} {challenge.unit}</em></span>)}</div></details>
       <details className={`daily-score-details score-${scoreTone}`}>
         <summary aria-label="פתיחת הסבר על הציון היומי">
           <div className="daily-score-bar" role="progressbar" aria-label="ציון יומי" aria-valuemin={0} aria-valuemax={100} aria-valuenow={dailyScore}>
@@ -3020,21 +3033,21 @@ export default function Home() {
         <div className="daily-copy">
           <div className="macro-grid">
             <button type="button" className="macro-bar protein" aria-expanded={macroDetail === "protein"} onClick={() => setMacroDetail((current) => current === "protein" ? "" : "protein")} style={{ "--progress": `${Math.min(100, Math.round((macros.protein / Math.max(1, profile.protein)) * 100))}%` } as any}>
-              <strong>חלבון · {profile.protein}g ליום</strong>
+              <strong>חלבון · {profile.protein} גרם ליום</strong>
               <b>{Math.round((macros.protein / Math.max(1, profile.protein)) * 100)}%</b>
-              <small>{macros.protein}g נצרכו</small>
+              <small>{macros.protein} גרם נצרכו</small>
             </button>
-            {macroDetail === "protein" && <div className="macro-source-inline protein">{state.today.meals.filter((meal) => Number(meal.protein || 0) > 0).sort((a, b) => Number(b.protein || 0) - Number(a.protein || 0)).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.protein))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.protein || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
+            {macroDetail === "protein" && <div className="macro-source-inline protein">{state.today.meals.filter((meal) => Number(meal.protein || 0) > 0).sort((a, b) => Number(b.protein || 0) - Number(a.protein || 0)).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.protein))} גרם</b></span>)}{!state.today.meals.some((meal) => Number(meal.protein || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
             <button type="button" className="macro-bar carbs" aria-expanded={macroDetail === "carbs"} onClick={() => setMacroDetail((current) => current === "carbs" ? "" : "carbs")} style={{ "--progress": `${Math.min(100, Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100))}%` } as any}>
-              <strong>פחמימות · {profile.carbs}g ליום</strong>
+              <strong>פחמימות · {profile.carbs} גרם ליום</strong>
               <b>{Math.round((macros.carbs / Math.max(1, profile.carbs)) * 100)}%</b>
-              <small>{macros.carbs}g נצרכו</small>
+              <small>{macros.carbs} גרם נצרכו</small>
             </button>
             {macroDetail === "carbs" && <div className="macro-source-inline carbs">{state.today.meals.filter((meal) => Number(meal.carbs || 0) > 0).sort((a, b) => Number(b.carbs || 0) - Number(a.carbs || 0)).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.carbs))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.carbs || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
             <button type="button" className="macro-bar fat" aria-expanded={macroDetail === "fat"} onClick={() => setMacroDetail((current) => current === "fat" ? "" : "fat")} style={{ "--progress": `${Math.min(100, Math.round((macros.fat / Math.max(1, profile.fat)) * 100))}%` } as any}>
-              <strong>שומן · {profile.fat}g ליום</strong>
+              <strong>שומן · {profile.fat} גרם ליום</strong>
               <b>{Math.round((macros.fat / Math.max(1, profile.fat)) * 100)}%</b>
-              <small>{macros.fat}g נצרכו</small>
+              <small>{macros.fat} גרם נצרכו</small>
             </button>
             {macroDetail === "fat" && <div className="macro-source-inline fat">{state.today.meals.filter((meal) => Number(meal.fat || 0) > 0).sort((a, b) => Number(b.fat || 0) - Number(a.fat || 0)).map((meal) => <span key={meal.id}><strong>{meal.name}</strong><b>{Math.round(Number(meal.fat))}g</b></span>)}{!state.today.meals.some((meal) => Number(meal.fat || 0) > 0) && <p>אין מאכלים ברשימה.</p>}</div>}
           </div>
@@ -3049,7 +3062,7 @@ export default function Home() {
       )}
       {offlineQueueCount > 0 && !syncCenterOpen && <button className="offline-queue-status" type="button" onClick={async () => { setOfflineQueueItems(await listOfflineQueue()); setSyncCenterOpen(true); }}>{offlineQueueCount} {offlineQueueCount === 1 ? "פעולה ממתינה" : "פעולות ממתינות"} לסנכרון · לפרטים</button>}
       {syncCenterOpen && <div className="modal-layer sync-center-layer"><button className="backdrop" onClick={() => setSyncCenterOpen(false)} /><section className="settings-modal sync-center"><header><div><h2>מרכז הסנכרון</h2><p>{!online ? "אין חיבור כרגע. אפשר להמשיך לעבוד כרגיל." : syncStatus === "syncing" ? "הנתונים נשלחים כעת לפי סדר ההזנה." : offlineQueueItems.length ? "הנתונים שמורים במכשיר ולא ייעלמו." : "כל הנתונים מעודכנים בשרת."}</p></div><button type="button" onClick={() => setSyncCenterOpen(false)} aria-label="סגור">×</button></header><div className="sync-summary"><span className={online ? "connected" : "disconnected"}><i />{online ? "מחובר" : "Offline"}</span><strong>{offlineQueueItems.length}</strong><small>פעולות ממתינות</small></div><div className="sync-items">{offlineQueueItems.map((item) => <article className={item.attempts >= 3 ? "failed" : ""} key={`${item.kind}-${item.id}`}><div><strong>{item.label}</strong><small>נשמר {new Date(item.createdAt).toLocaleString("he-IL")}</small>{item.attempts >= 3 && <><em>לא הצלחנו לסנכרן אחרי {item.attempts} ניסיונות</em>{item.lastError && <small>{item.lastError}</small>}</>}</div>{item.attempts >= 3 ? <button type="button" disabled={!online} onClick={async () => { await retryOfflineItem(item); setOfflineQueueItems(await listOfflineQueue()); setSyncRequested((value) => value + 1); }}>נסה שוב</button> : <span>{syncStatus === "syncing" ? "מסנכרן" : "ממתין"}</span>}</article>)}{!offlineQueueItems.length && <div className="sync-empty"><b>✓</b><strong>הכול מסונכרן</strong><span>אין פעולות שממתינות לשליחה.</span></div>}</div><footer><button type="button" onClick={() => setSyncCenterOpen(false)}>סגור</button><button className="primary" type="button" disabled={!online || !offlineQueueItems.length || syncStatus === "syncing"} onClick={() => setSyncRequested((value) => value + 1)}>סנכרן עכשיו</button></footer></section></div>}
-      {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הארוחה עודכנה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name} · {mealResult.kcal} קלוריות</span><small>{mealResult.protein}g חלבון · {mealResult.carbs}g פחמימות · {mealResult.fat}g שומן{mealResult.imageCompleted ? " · תמונה הושלמה" : ""}</small></div><button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
+      {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הארוחה עודכנה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name} · {mealResult.kcal} קלוריות</span><small>{mealResult.protein} גרם חלבון · {mealResult.carbs} גרם פחמימות · {mealResult.fat} גרם שומן{mealResult.imageCompleted ? " · תמונה הושלמה" : ""}</small></div><button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
       {undoMeal && (
         <aside className="undo-toast" role="status">
           <span>“{undoMeal.name}” נמחקה</span>
@@ -3213,7 +3226,7 @@ export default function Home() {
           <section className="settings-modal meal-preview-modal">
             <header><div><h2>{mealPreview.name}</h2><small>{periodLabels[mealPreview.period || "snack"]} · {new Date(mealPreview.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</small></div><button onClick={closeMealPreview}>×</button></header>
             {mealPreview.image ? <img className="meal-preview-image" src={mealPreview.image} alt={mealPreview.name} /> : <div className="meal-preview-placeholder">🍽</div>}
-            <div className="meal-preview-values"><span className="calories"><small>קלוריות</small><strong>{mealPreview.kcal}</strong><b>kcal</b></span><span className="protein"><small>חלבון</small><strong>{mealPreview.protein}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{mealPreview.carbs}g</strong></span><span className="fat"><small>שומן</small><strong>{mealPreview.fat}g</strong></span></div>
+            <div className="meal-preview-values"><span className="calories"><small>קלוריות</small><strong>{mealPreview.kcal}</strong></span><span className="protein"><small>חלבון</small><strong>{mealPreview.protein} גרם</strong></span><span className="carbs"><small>פחמימות</small><strong>{mealPreview.carbs} גרם</strong></span><span className="fat"><small>שומן</small><strong>{mealPreview.fat} גרם</strong></span></div>
             {Array.isArray(mealPreview.items) && mealPreview.items.length > 0 && <div className="meal-preview-items"><strong>מרכיבי הארוחה</strong>{mealPreview.items.map((item: any, index: number) => <span key={`${item.name}-${index}`}><b>{item.name}</b><small>{item.grams ? `${item.grams} גרם` : item.quantity ? `כמות ${item.quantity}` : ""}</small></span>)}</div>}
             <footer><button type="button" onClick={() => addMealToFavorites(mealPreview.id)} disabled={state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name)}>{state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name) ? "כבר במועדפים" : "הוסף למועדפים"}</button><button className="primary" type="button" onClick={closeMealPreview}>{mealPreviewReturnToHistory ? "חזרה להיסטוריה" : "חזרה למה אכלתי היום"}</button></footer>
           </section>
@@ -3232,10 +3245,12 @@ export default function Home() {
                 </small>
               </div>
               <div className="coach-header-actions">
+                <button className={`coach-help-toggle ${coachHelpOpen ? "active" : ""}`} onClick={() => setCoachHelpOpen((open) => !open)} title="שאלות לדוגמה ועזרה בשימוש" aria-label="פתיחת שאלות ועזרה"><AppIcon name="info" /></button>
                 <button className="clear-chat" onClick={clearCoachDisplay} title="ניקוי התצוגה בלבד; ההיסטוריה נשמרת בזיכרון המאמן והמלל לא יחזור">נקה מסך</button>
                 <button onClick={() => setCoachOpen(false)} aria-label="סגירת המאמן">×</button>
               </div>
             </header>
+            {coachHelpOpen && <section className="coach-help-panel"><header><div><strong>איך אפשר לעזור?</strong><small>בחר שאלה, ערוך אותה אם צריך ושלח</small></div><button type="button" onClick={() => setCoachHelpOpen(false)} aria-label="סגירת העזרה">×</button></header><div><section><strong>שאלות למאמן</strong>{coachHelpQuestions.coach.map((question) => <button type="button" key={question} onClick={() => { setMessage(question); setCoachHelpOpen(false); }}>{question}</button>)}</section><section><strong>עזרה בשימוש באפליקציה</strong>{coachHelpQuestions.app.map((question) => <button type="button" key={question} onClick={() => { setMessage(question); setCoachHelpOpen(false); }}>{question}</button>)}</section></div></section>}
             <div className="chat-feed">
               {messages.length === 0 && (
                 <div className="coach-message">
@@ -3249,16 +3264,11 @@ export default function Home() {
                   </div>
                   <div className={`chat-message ${item.role}`}>
                     <span>{item.text}</span>
-                    {item.role === "assistant" && <button type="button" className={`message-speak ${coachSpeaking || coachSpeechPending ? "speaking" : ""}`} onClick={() => coachSpeaking || coachSpeechPending ? stopCoachSpeech() : speakCoachReply(item.text)} aria-label={coachSpeaking || coachSpeechPending ? "עצירת ההקראה" : "הקראת התשובה"}><AppIcon name="speaker" />{coachSpeechPending ? "מכין קול" : coachSpeaking ? "עצור" : "הקרא"}</button>}
+                    {item.role === "assistant" && <button type="button" className={`message-speak ${coachSpeaking || coachSpeechPending ? "speaking" : ""}`} onClick={() => coachSpeaking || coachSpeechPending ? stopCoachSpeech() : speakCoachReply(item.text)} aria-label={coachSpeaking || coachSpeechPending ? "עצירת ההקראה" : "הקראת התשובה שנכתבה"} title="אפשר להקשיב גם לתשובה שהתקבלה אחרי הודעת טקסט"><AppIcon name="speaker" />{coachSpeechPending ? "מכין קול" : coachSpeaking ? "עצור" : "הקרא תשובה"}</button>}
                   </div>
                 </div>
               ))}
               {busy && <div className="typing">חושב…</div>}
-            </div>
-            <div className="quick-prompts">
-              <button onClick={() => setMessage("מה כדאי לי לאכול עכשיו?")}>מה כדאי עכשיו?</button>
-              <button onClick={() => setMessage("איך היום שלי נראה ומה הצעד הבא שכדאי לי לעשות?")}>איך אני מתקדם?</button>
-              <button onClick={() => setMessage("תן לי משימה אחת פשוטה להמשך היום")}>תן לי משימה</button>
             </div>
             {(coachListening || coachTranscribing || coachSpeechPending || coachSpeaking || busy) && <div className={`coach-voice-status ${coachListening ? "listening" : coachSpeaking ? "speaking" : "thinking"}`} role="status"><span>{coachListening ? "אני מקשיב — לחץ שוב כדי לשלוח" : coachTranscribing ? "מבין את ההודעה שלך…" : coachSpeechPending ? "מכין תשובה קולית אחת…" : coachSpeaking ? `${coachRole} עונה בקול ${coachVoice === "female" ? "נשי" : "גברי"}…` : `שולח ל${coachRole} ומכין תשובה…`}</span>{(coachListening || coachSpeechPending || coachSpeaking) && <button type="button" onClick={() => coachListening ? stopCoachListening() : stopCoachSpeech()}>{coachListening ? "שלח" : "עצור"}</button>}</div>}
             <form onSubmit={sendMessage}>
@@ -4977,7 +4987,7 @@ export default function Home() {
               <p className="modal-help">מחשב מגמות…</p>
             ) : (
               <>
-                <section className="water-hours-insight"><header><strong>מתי שותים הכי הרבה?</strong><small>התפלגות השתייה לפי שעות ב־30 הימים האחרונים</small></header><div>{waterByHour.map((item) => <span key={item.hour} title={`${String(item.hour).padStart(2,"0")}:00 · ${item.amount} מ״ל`}><i style={{ height: `${item.amount ? Math.max(6, item.amount / maximumWaterHour * 100) : 2}%` }} /><small>{item.hour % 3 === 0 ? String(item.hour).padStart(2,"0") : ""}</small></span>)}</div>{!waterByHour.some((item) => item.amount > 0) && <p>הגרף יתחיל להיבנות מהוספות המים הבאות.</p>}</section>
+                <section className="water-hours-insight"><header><strong>מתי שותים הכי הרבה?</strong><small>התפלגות השתייה לפי שעות ב־30 הימים האחרונים · כוס מחושבת כ־250 מ״ל</small></header><div>{waterByHour.map((item) => { const cups = Math.round(Number(item.amount || 0) / 250); return <span key={item.hour} title={`${String(item.hour).padStart(2,"0")}:00 · ${item.amount} מ״ל · ${cups} כוסות`}><i style={{ height: `${item.amount ? Math.max(6, item.amount / maximumWaterHour * 100) : 2}%` }}>{cups > 1 && <b>{cups}</b>}</i><small>{item.hour % 3 === 0 ? String(item.hour).padStart(2,"0") : ""}</small></span>; })}</div>{!waterByHour.some((item) => item.amount > 0) && <p>הגרף יתחיל להיבנות מהוספות המים הבאות.</p>}</section>
                 {insightsData.sugar?.enabled && (
                   <section className="sugar-insights">
                     <header><div><strong>סוכרים תזונתיים משוערים</strong><small>מוצג בגלל מצב הסוכר שסומן בכרטיס האישי</small></div><b>לא גלוקוז בדם</b></header>
@@ -5003,7 +5013,7 @@ export default function Home() {
                   </article>
                   <article className={Number(insightsData.summary.averageProtein) >= Number(profile.protein) * .9 ? "kpi-protein is-good" : "kpi-protein needs-attention"}><i>●</i>
                     <small>חלבון ממוצע</small>
-                    <strong>{insightsData.summary.averageProtein}g</strong>
+                    <strong>{insightsData.summary.averageProtein} גרם</strong>
                     <span>ליום</span>
                   </article>
                   <article className={Number(insightsData.summary.activeMinutes) >= 120 ? "kpi-activity is-good" : "kpi-activity needs-attention"}><i>↗</i>
@@ -5032,21 +5042,21 @@ export default function Home() {
                     </> : <p className="trend-empty">הגרף יתחיל להיבנות לאחר תיעוד היום הראשון.</p>}
                   </div>
                   <div>
-                    <span><small>ימי מעקב</small><strong>{insightsData.summary.monthlyTrackedDays} / 30</strong></span>
-                    <span><small>קלוריות בממוצע</small><strong>{insightsData.summary.monthlyAverageCalories} kcal</strong></span>
-                    <span><small>חלבון בממוצע</small><strong>{insightsData.summary.monthlyAverageProtein}g</strong></span>
-                    <span><small>מים בממוצע</small><strong>{Number(insightsData.summary.monthlyAverageWater || 0).toLocaleString()} מ״ל</strong></span>
-                    <span><small>משקל מול ההתחלה</small><strong>{insightsData.summary.referenceWeight ? `${Number(insightsData.summary.currentWeight).toFixed(1)} / ${Number(insightsData.summary.referenceWeight).toFixed(1)} ק״ג` : "אין ייחוס"}</strong></span>
-                    <span><small>קלוריות מול שבוע קודם</small><strong>{insightsData.summary.previousAverageCalories ? `${insightsData.summary.calorieWeeklyChange > 0 ? "+" : ""}${insightsData.summary.calorieWeeklyChange} kcal` : "אין מספיק נתונים"}</strong></span>
+                    <span className="metric-tracking"><small>ימי מעקב</small><strong>{insightsData.summary.monthlyTrackedDays} מתוך 30 ימים</strong></span>
+                    <span className="metric-calories"><small>קלוריות בממוצע</small><strong>{Number(insightsData.summary.monthlyAverageCalories || 0).toLocaleString()} קלוריות</strong></span>
+                    <span className="metric-protein"><small>חלבון בממוצע</small><strong>{insightsData.summary.monthlyAverageProtein} גרם</strong></span>
+                    <span className="metric-water"><small>מים בממוצע</small><strong>{Number(insightsData.summary.monthlyAverageWater || 0).toLocaleString()} מ״ל</strong></span>
+                    <span className="metric-weight"><small>משקל נוכחי מול ההתחלה</small><strong>{insightsData.summary.referenceWeight ? `${Number(insightsData.summary.currentWeight).toFixed(1)} מול ${Number(insightsData.summary.referenceWeight).toFixed(1)} ק״ג` : "אין ייחוס"}</strong></span>
+                    <span className="metric-change"><small>שינוי קלורי מול שבוע קודם</small><strong>{insightsData.summary.previousAverageCalories ? `${insightsData.summary.calorieWeeklyChange > 0 ? "+" : ""}${insightsData.summary.calorieWeeklyChange} קלוריות` : "אין מספיק נתונים"}</strong></span>
                   </div>
                 </section>
                 <section className="weekly-goal-progress">
                   <header><strong>ממוצע 7 ימים מול היעדים שלך</strong><small>הפס מציג אחוז מהיעד; המספרים מראים בפועל מול היעד</small></header>
                   {[
-                    { label: "קלוריות ליום", actual: insightsData.summary.averageCalories, target: profile.calories, unit: "kcal", note: "טווח רצוי: 90%–105% מהיעד", tone: "calories" },
-                    { label: "חלבון ליום", actual: insightsData.summary.averageProtein, target: profile.protein, unit: "g", note: "לפחות 90% מהיעד תומך בשובע ובשמירת שריר", tone: "protein" },
-                    { label: "פחמימות ליום", actual: insightsData.summary.averageCarbs, target: profile.carbs, unit: "g", note: "ממוצע יומי מול היעד האישי", tone: "carbs" },
-                    { label: "שומן ליום", actual: insightsData.summary.averageFat, target: profile.fat, unit: "g", note: "ממוצע יומי מול היעד האישי", tone: "fat" },
+                    { label: "קלוריות ליום", actual: insightsData.summary.averageCalories, target: profile.calories, unit: "קלוריות", note: "טווח רצוי: 90%–105% מהיעד", tone: "calories" },
+                    { label: "חלבון ליום", actual: insightsData.summary.averageProtein, target: profile.protein, unit: "גרם", note: "לפחות 90% מהיעד תומך בשובע ובשמירת שריר", tone: "protein" },
+                    { label: "פחמימות ליום", actual: insightsData.summary.averageCarbs, target: profile.carbs, unit: "גרם", note: "ממוצע יומי מול היעד האישי", tone: "carbs" },
+                    { label: "שומן ליום", actual: insightsData.summary.averageFat, target: profile.fat, unit: "גרם", note: "ממוצע יומי מול היעד האישי", tone: "fat" },
                     { label: "מים ליום", actual: insightsData.summary.averageWater, target: profile.waterMl, unit: "מ״ל", note: "ממוצע השתייה בימים האחרונים", tone: "water" },
                     { label: "פעילות שבועית", actual: insightsData.summary.activeMinutes, target: 150, unit: "דק׳", note: "יעד בסיס שימושי: 150 דקות בשבוע", tone: "activity" },
                   ].map((metric) => { const percent = Math.round(Number(metric.actual || 0) / Math.max(1, Number(metric.target || 0)) * 100); const upper = metric.tone === "calories" ? 105 : metric.tone === "activity" || metric.tone === "water" ? 130 : 115; const status = percent < 70 ? "needs-work" : percent < 90 ? "close" : percent <= upper ? "strong" : "over"; const statusLabel = status === "needs-work" ? "דורש שיפור" : status === "close" ? "מתקרב ליעד" : status === "strong" ? "בטווח טוב" : "מעל הטווח"; return <article className={`goal-progress ${metric.tone} metric-${status}`} key={metric.label}><div><strong>{metric.label}</strong><b>{Number(metric.actual || 0).toLocaleString()} / {Number(metric.target || 0).toLocaleString()} {metric.unit}</b></div><span><i style={{ width: `${Math.min(100, percent)}%` }} /></span><footer><small>{metric.note}</small><em>{statusLabel} · {percent}%</em></footer></article>; })}

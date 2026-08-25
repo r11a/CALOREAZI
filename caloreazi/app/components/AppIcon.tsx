@@ -1,4 +1,4 @@
-export type AppIconName = "camera" | "image" | "plus" | "coach" | "sparkles" | "edit" | "calculator" | "list" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic" | "speaker" | "user" | "heart" | "target" | "bell";
+export type AppIconName = "camera" | "image" | "plus" | "coach" | "sparkles" | "edit" | "calculator" | "list" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic" | "speaker" | "user" | "heart" | "target" | "bell" | "info";
 
 export function AppIcon({ name }: { name: AppIconName }) {
   const paths = {
@@ -23,6 +23,7 @@ export function AppIcon({ name }: { name: AppIconName }) {
     heart: <path d="M20.8 5.7a5.5 5.5 0 0 0-7.8 0L12 6.8l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 22l8.8-8.5a5.5 5.5 0 0 0 0-7.8Z"/>,
     target: <><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="m15 9 6-6M17 3h4v4"/></>,
     bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
+    info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></>,
   };
   return <svg className="app-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }

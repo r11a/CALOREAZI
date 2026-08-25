@@ -235,11 +235,11 @@ test("meal save explains missing fields, infers safe values and blocks duplicate
   assert.match(css, /meal-save-feedback/);
 });
 
-test("coach can clear only its visible transcript and offers focused prompts", () => {
+test("coach can clear only its visible transcript and moves focused prompts into help", () => {
   assert.match(page, /setMessages\(\[\]\)/);
   assert.match(page, /ניקוי התצוגה בלבד; ההיסטוריה נשמרת/);
-  assert.match(page, /מה כדאי עכשיו/);
-  assert.match(page, /תן לי משימה/);
+  assert.match(page, /מה כדאי לי לאכול עכשיו/);
+  assert.match(page, /עזרה בשימוש באפליקציה/);
 });
 
 test("history daily summary follows the five-band score color", () => {
@@ -479,6 +479,18 @@ test("coach supports a complete opt-in voice conversation", () => {
   assert.match(page, /source\.playbackRate\.value/);
   assert.match(page, /female-clear/);
   assert.match(css, /coach-voice-wave/);
+});
+
+test("coach help, contextual goals and Hebrew trend units stay explicit", () => {
+  assert.match(page, /coachHelpQuestions/);
+  assert.match(page, /coach-help-panel/);
+  assert.match(page, /הקרא תשובה/);
+  assert.match(page, /calmChallengePool/);
+  assert.match(page, /מותאמים לשעה, לפערים ולשלב שלך בתהליך/);
+  assert.match(page, /cups > 1/);
+  assert.match(page, /מתוך 30 ימים/);
+  assert.match(page, /monthlyAverageProtein\} גרם/);
+  assert.match(css, /metric-protein/);
 });
 
 test("desktop destinations use a full system-screen shell without visible scrollbars", () => {
