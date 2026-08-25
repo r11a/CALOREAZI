@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   const recentConversation = userData.coachHistory.slice(-12);
   const goalPlan = evaluateGoalPlan({ profile, measurements, days: trackedDays });
   const context = {
-    identity: { name: user.name, conversationAlreadyStarted: recentConversation.length > 0, coachName: profile.coachName || "CAL", coachGender: profile.coachGender || "male", userAddressGender: profile.userAddressGender || (profile.sex === "female" ? "female" : "male") },
+    identity: { name: user.name, conversationAlreadyStarted: recentConversation.length > 0, coachName: String(profile.coachName || "Cal").toLowerCase() === "ezi" ? "Eazi" : "Cal", coachGender: profile.coachGender || "male", userAddressGender: profile.userAddressGender || (profile.sex === "female" ? "female" : "male") },
     goals: { goal: profile.goal, currentWeightKg: currentWeight, targetWeightKg: Number(profile.targetWeight), remainingKg: Number((currentWeight - Number(profile.targetWeight)).toFixed(1)), journey: profile.journey || { stage: "starting" } },
     bodyAndPlan: { sex: profile.sex, age: profile.age, heightCm: profile.height, bmi: profile.caloriePlan?.bmi, bmr: profile.caloriePlan?.bmr, maintenanceKcal: profile.caloriePlan?.maintenanceCalories, dailyTargetKcal: profile.calories, proteinTargetG: profile.protein, carbsTargetG: profile.carbs, fatTargetG: profile.fat, waterTargetMl: profile.waterMl },
     preferences: { activityLevel: profile.activity, workoutsPerWeek: profile.workouts, diet: profile.diet, restrictions: profile.restrictions || "אין מגבלות מתועדות", tasteProfile: profile.tasteProfile || { status: "שאלון הטעמים טרם מולא" }, acquaintance: profile.acquaintance || { status: "שאלון נעים להכיר טרם מולא" } },
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   const instructions = `אתה המאמן האישי המתמשך של CALOREAZI. השב בעברית טבעית, מדויקת ולא שיפוטית, כאדם שמכיר את המשתמש ואת התהליך שלו.
 כללי חובה:
 - ענה קודם ישירות על השאלה. השתמש בנתונים המספריים רק כשהם רלוונטיים.
-- זהותך נקבעת ב-identity: שמך CAL או EZI. אם coachGender=female דבר על עצמך בלשון נקבה; אחרת בלשון זכר. פנה למשתמש לפי userAddressGender ושמור על עברית טבעית ועקבית.
+- זהותך נקבעת ב-identity: שמך Cal או Eazi. אם coachGender=female דבר על עצמך בלשון נקבה; אחרת בלשון זכר. פנה למשתמש לפי userAddressGender ושמור על עברית טבעית ועקבית.
 - יעד המשקל, המשקל העדכני, התוכנית, הארוחות, המדידות וההיסטוריה נמצאים ב-USER_CONTEXT; אל תגיד שאינך יודע פרט שמופיע שם.
 - אל תפתח ב"היי", "שלום" או בשם המשתמש אם conversationAlreadyStarted=true. גם בתחילת שיחה השתמש בברכה פעם אחת בלבד.
 - אל תחזור על המלצה שכבר ניתנה בשיחה. בפרט אל תזכיר מים אלא אם המשתמש שאל על שתייה/התייבשות, או שיש סיבה מיידית ומשמעותית והרלוונטיות מוסברת במשפט אחד.

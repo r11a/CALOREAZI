@@ -60,7 +60,7 @@ export async function PUT(request: Request) {
       coachVoice: ["male", "female"].includes(body.coachVoice) ? body.coachVoice : (profile.coachVoice || "male"),
       coachVoiceStyle: ["warm", "clear"].includes(body.coachVoiceStyle) ? body.coachVoiceStyle : (profile.coachVoiceStyle || "warm"),
       coachVoiceProvider: ["cloud", "device"].includes(body.coachVoiceProvider) ? body.coachVoiceProvider : (profile.coachVoiceProvider || "cloud"),
-      coachName: ["CAL", "EZI"].includes(body.coachName) ? body.coachName : (profile.coachName || "CAL"),
+      coachName: ["cal", "eazi"].includes(String(body.coachName || "").toLowerCase()) ? (String(body.coachName).toLowerCase() === "eazi" ? "Eazi" : "Cal") : (String(profile.coachName || "Cal").toLowerCase() === "ezi" ? "Eazi" : "Cal"),
       coachGender: ["male", "female"].includes(body.coachGender) ? body.coachGender : (profile.coachGender || "male"),
       userAddressGender: ["male", "female"].includes(body.userAddressGender) ? body.userAddressGender : (profile.userAddressGender || (profile.sex === "female" ? "female" : "male")),
       cameraCalibration: body.cameraCalibration && typeof body.cameraCalibration === "object" ? {
