@@ -14,6 +14,18 @@ test("meal validation accepts a realistic coffee", () => {
   assert.equal(result.valid, true);
 });
 
+test("meal validation flags an implausibly low cake estimate", () => {
+  const result = validateMealNutrition({
+    kcal: 30,
+    protein: 1,
+    carbs: 5,
+    fat: 1,
+    items: [{ name: "עוגת קרמל", grams: 100, quantity: 1, kcalPer100: 30 }],
+  });
+  assert.equal(result.valid, false);
+  assert.ok(result.issues.some((issue) => issue.code === "implausible_energy_density"));
+});
+
 test("nutrition confidence distinguishes government and community sources", () => {
   assert.equal(nutritionConfidence({ source: "משרד הבריאות", kcal: 100, protein: 1, carbs: 20, fat: 1 }).level, "high");
   assert.equal(nutritionConfidence({ source: "Open Food Facts", barcode: "7290000000000", kcal: 100, protein: 1, carbs: 20, fat: 1 }).level, "medium");

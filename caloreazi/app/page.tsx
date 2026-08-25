@@ -132,7 +132,7 @@ const periodLabels: Record<string, string> = {
   dinner: "ארוחת ערב",
   snack: "בין הארוחות",
 };
-const calculateMealDraft = (items: any[], form: any) => items.length ? items.reduce((total, item) => { const factor = Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1) / 100; return { kcal: total.kcal + Number(item.kcalPer100 || 0) * factor, protein: total.protein + Number(item.proteinPer100 || 0) * factor, carbs: total.carbs + Number(item.carbsPer100 || 0) * factor, fat: total.fat + Number(item.fatPer100 || 0) * factor }; }, { kcal: 0, protein: 0, carbs: 0, fat: 0 }) : form;
+const calculateMealDraft = (items: any[], form: any) => items.length ? items.reduce((total, item) => { const quantity = Math.max(.1, Number(item.quantity) || 1); const factor = Math.max(0, Number(item.grams) || 0) * quantity / 100; return { kcal: total.kcal + (Number(item.kcalPerUnit) > 0 ? Number(item.kcalPerUnit) * quantity : Number(item.kcalPer100 || 0) * factor), protein: total.protein + Number(item.proteinPer100 || 0) * factor, carbs: total.carbs + Number(item.carbsPer100 || 0) * factor, fat: total.fat + Number(item.fatPer100 || 0) * factor }; }, { kcal: 0, protein: 0, carbs: 0, fat: 0 }) : form;
 const newForgottenMeal = () => ({ id: crypto.randomUUID(), description: "", dayOffset: 0, time: new Date().toTimeString().slice(0, 5), period: mealPeriodFor(), name: "", items: [] as any[], calculated: false, error: "" });
 function localDateTimeInput(date = new Date()) {
   const local = new Date(date);
@@ -1579,12 +1579,12 @@ export default function Home() {
     setError("");
     const completedFields: string[] = [];
     const normalizedItems = mealItems
-      .filter((item) => item.name || item.searchNameEn || item.grams || item.kcalPer100 || item.proteinPer100 || item.carbsPer100 || item.fatPer100)
+      .filter((item) => item.name || item.searchNameEn || item.grams || item.kcalPerUnit || item.kcalPer100 || item.proteinPer100 || item.carbsPer100 || item.fatPer100)
       .map((item) => {
         const next = { ...item };
         if (!String(next.name || "").trim() && String(next.searchNameEn || "").trim()) { next.name = String(next.searchNameEn).trim(); completedFields.push("שם פריט"); }
         if (!(Number(next.quantity) > 0)) { next.quantity = 1; completedFields.push(`כמות עבור ${next.name || "פריט"}`); }
-        if (!(Number(next.kcalPer100) > 0)) {
+        if (!(Number(next.kcalPerUnit) > 0) && !(Number(next.kcalPer100) > 0)) {
           const macroCalories = Number(next.proteinPer100 || 0) * 4 + Number(next.carbsPer100 || 0) * 4 + Number(next.fatPer100 || 0) * 9;
           if (macroCalories > 0) { next.kcalPer100 = Math.round(macroCalories); completedFields.push(`קלוריות עבור ${next.name || "פריט"}`); }
         }
@@ -1604,7 +1604,7 @@ export default function Home() {
     normalizedItems.forEach((item, index) => {
       if (!String(item.name || "").trim()) validationErrors[`item-name-${index}`] = `חסר שם בפריט ${index + 1}`;
       if (!(Number(item.grams) > 0)) validationErrors[`item-grams-${index}`] = `חסר משקל בגרם עבור ${item.name || `פריט ${index + 1}`}`;
-      if (!(Number(item.kcalPer100) > 0)) validationErrors[`item-kcal-${index}`] = `חסרות קלוריות ל־100 גרם עבור ${item.name || `פריט ${index + 1}`}`;
+      if (!(Number(item.kcalPerUnit) > 0) && !(Number(item.kcalPer100) > 0)) validationErrors[`item-kcal-${index}`] = `חסר ערך קלורי ליחידה או ל־100 גרם עבור ${item.name || `פריט ${index + 1}`}`;
     });
     if (!normalizedItems.length && !(Number(normalizedForm.kcal) > 0)) validationErrors.kcal = "חסרה כמות הקלוריות של הארוחה";
     setMealForm(normalizedForm);
@@ -5585,21 +5585,21 @@ export default function Home() {
                         /><button type="button" onClick={() => adjustMealItem(index, "quantity", 1, 1, 50)}>＋</button></div>
                       </label>
                       <label>
-                        קל׳ ל־100 גרם
-                        <div className="number-stepper"><button type="button" onClick={() => adjustMealItem(index, "kcalPer100", -10, 0, 1000)}>−</button><input
+                        {Number(item.kcalPerUnit) > 0 ? "קלוריות ליחידה" : "קלוריות ל־100 גרם"}
+                        <div className="number-stepper"><button type="button" onClick={() => adjustMealItem(index, Number(item.kcalPerUnit) > 0 ? "kcalPerUnit" : "kcalPer100", -10, 0, 1000)}>−</button><input
                           type="number"
                           min="0"
                           max="1000"
-                          value={item.kcalPer100 || ""}
+                          value={Number(item.kcalPerUnit) > 0 ? item.kcalPerUnit : item.kcalPer100 || ""}
                           onChange={(e) =>
                             updateMealItem(
                               index,
-                              "kcalPer100",
+                              Number(item.kcalPerUnit) > 0 ? "kcalPerUnit" : "kcalPer100",
                               Number(e.target.value),
                             )
                           }
-                        /><button type="button" onClick={() => adjustMealItem(index, "kcalPer100", 10, 0, 1000)}>＋</button></div>
-                        <small>{Math.round(Number(item.kcalPer100 || 0) * Number(item.grams || 0) * Number(item.quantity || 1) / 100)} קלוריות לכמות שנבחרה</small>
+                        /><button type="button" onClick={() => adjustMealItem(index, Number(item.kcalPerUnit) > 0 ? "kcalPerUnit" : "kcalPer100", 10, 0, 1000)}>＋</button></div>
+                        <small>{Number(item.kcalPerUnit) > 0 ? `${item.quantity || 1} × ${item.kcalPerUnit} = ` : ""}{Math.round(Number(item.kcalPerUnit) > 0 ? Number(item.kcalPerUnit) * Number(item.quantity || 1) : Number(item.kcalPer100 || 0) * Number(item.grams || 0) * Number(item.quantity || 1) / 100)} קלוריות לכמות שנבחרה</small>
                       </label>
                       <button
                         className="remove-item"

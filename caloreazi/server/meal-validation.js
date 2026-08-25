@@ -1,4 +1,5 @@
 const beveragePattern = /(קפה|אספרסו|לאטה|קפוצ.?ינו|תה|שוקו|coffee|espresso|latte|cappuccino|tea|cocoa)/i;
+const energyDensePattern = /(עוגה|עוגת|ביסקוויט|עוגייה|עוגיות|שוקולד|קרמל|cake|cookie|biscuit|chocolate|caramel)/i;
 
 export function validateMealNutrition(input = {}) {
   const items = Array.isArray(input.items) ? input.items : [];
@@ -11,11 +12,13 @@ export function validateMealNutrition(input = {}) {
     const name = String(item.name || "");
     const grams = Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1);
     const per100 = Math.max(0, Number(item.kcalPer100) || 0);
-    const servingKcal = grams * per100 / 100;
+    const servingKcal = Number(item.kcalPerUnit) > 0 ? Number(item.kcalPerUnit) * Math.max(.1, Number(item.quantity) || 1) : grams * per100 / 100;
     if (grams > 3000 || per100 > 950 || servingKcal > 2500)
       issues.push({ code: "implausible_portion", item: name, message: `הכמות או הערך של ${name || "הפריט"} אינם סבירים.` });
     if (beveragePattern.test(name) && (grams > 750 || servingKcal > 300))
       issues.push({ code: "implausible_beverage", item: name, message: "זוהה חישוב לא סביר למשקה. בדוק את הסוג, הכמות והתוספות." });
+    if (!Number(item.kcalPerUnit) && energyDensePattern.test(name) && grams >= 80 && grams <= 150 && per100 > 0 && per100 < 120)
+      issues.push({ code: "implausible_energy_density", item: name, message: `הערך הקלורי של ${name || "הפריט"} נמוך באופן חריג. יש לבדוק אם הערך הוא ליחידה או ל־100 גרם.` });
   }
   return { valid: issues.length === 0, issues };
 }

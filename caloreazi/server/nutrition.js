@@ -14,7 +14,10 @@ export function roundCalories(value) {
 export function calculateMealFromItems(items = []) {
   const totals = items.slice(0, 30).reduce((result, item) => {
     const factor = Math.max(0, Number(item.grams) || 0) * Math.max(0.1, Number(item.quantity) || 1) / 100;
-    result.kcal += Math.max(0, Number(item.kcalPer100) || 0) * factor;
+    const quantity = Math.max(0.1, Number(item.quantity) || 1);
+    result.kcal += Number(item.kcalPerUnit) > 0
+      ? Math.max(0, Number(item.kcalPerUnit)) * quantity
+      : Math.max(0, Number(item.kcalPer100) || 0) * factor;
     result.protein += Math.max(0, Number(item.proteinPer100) || 0) * factor;
     result.carbs += Math.max(0, Number(item.carbsPer100) || 0) * factor;
     result.fat += Math.max(0, Number(item.fatPer100) || 0) * factor;

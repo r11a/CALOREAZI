@@ -34,6 +34,14 @@ test("calculates an edited meal from weight and quantity", () => {
   assert.equal(result.fat, 9);
 });
 
+test("keeps explicit per-unit calories exact instead of treating them as per-100g", () => {
+  const result = calculateMealFromItems([
+    { name: "פריכית", grams: 8, quantity: 5, kcalPerUnit: 24 },
+    { name: "מעדן פרו", grams: 200, quantity: 1, kcalPerUnit: 108 },
+  ]);
+  assert.equal(result.kcal, 228);
+});
+
 test("derives age precisely from birth date", () => {
   assert.equal(ageFromBirthDate("1990-09-01", new Date("2026-08-23T12:00:00Z")), 35);
   assert.equal(ageFromBirthDate("1990-08-01", new Date("2026-08-23T12:00:00Z")), 36);
