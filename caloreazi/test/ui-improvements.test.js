@@ -493,6 +493,14 @@ test("coach help, contextual goals and Hebrew trend units stay explicit", () => 
   assert.match(css, /metric-protein/);
 });
 
+test("insights waits for stable data before revealing animated charts", () => {
+  assert.match(page, /setInsightsData\(null\);[\s\S]{0,80}setInsightsOpen\(true\)/);
+  assert.match(page, /insights-modal \$\{!insightsData \? "loading" : ""\}/);
+  assert.match(page, /insights-loading/);
+  assert.match(css, /insights-modal\.loading>\.goal-plan-card/);
+  assert.match(css, /insights-loading-spin/);
+});
+
 test("desktop destinations use a full system-screen shell without visible scrollbars", () => {
   assert.match(expansionCss, /@media\(min-width:761px\)/);
   assert.match(expansionCss, /height:calc\(100dvh - 48px\)/);

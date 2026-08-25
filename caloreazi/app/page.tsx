@@ -1467,6 +1467,7 @@ export default function Home() {
     recognition.start();
   }
   async function openInsights() {
+    setInsightsData(null);
     setInsightsOpen(true);
     setWeightValue(Number(latestWeight || 0));
     setWeightDate(state?.today?.date || new Date().toISOString().slice(0, 10));
@@ -4945,7 +4946,7 @@ export default function Home() {
       {insightsOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setInsightsOpen(false)} />
-          <section className="settings-modal insights-modal">
+          <section className={`settings-modal insights-modal ${!insightsData ? "loading" : ""}`}>
             <header>
               <div>
                 <h2>מגמות ותובנות</h2>
@@ -4984,7 +4985,7 @@ export default function Home() {
               {visibleWeightEntries.length > 0 && <div className="weight-history-list">{[...visibleWeightEntries].reverse().slice(0, 5).map((entry: any, index: number, entries: any[]) => { const previous = entries[index + 1]; const delta = previous ? Number(entry.weight) - Number(previous.weight) : 0; return <span key={entry.id || entry.date}><small>{new Date(`${entry.date}T12:00:00`).toLocaleDateString("he-IL")}</small><strong>{Number(entry.weight).toFixed(1)} ק״ג</strong><b>{previous ? `${delta > 0 ? "+" : ""}${delta.toFixed(1)}` : "מדידה ראשונה"}</b></span>; })}</div>}
             </section>
             {!insightsData ? (
-              <p className="modal-help">מחשב מגמות…</p>
+              <div className="insights-loading" role="status" aria-live="polite"><span /><strong>מכין את תמונת המגמות שלך</strong><small>מחשב נתונים ומסדר את הגרפים…</small><i><b /></i></div>
             ) : (
               <>
                 <section className="water-hours-insight"><header><strong>מתי שותים הכי הרבה?</strong><small>התפלגות השתייה לפי שעות ב־30 הימים האחרונים · כוס מחושבת כ־250 מ״ל</small></header><div>{waterByHour.map((item) => { const cups = Math.round(Number(item.amount || 0) / 250); return <span key={item.hour} title={`${String(item.hour).padStart(2,"0")}:00 · ${item.amount} מ״ל · ${cups} כוסות`}><i style={{ height: `${item.amount ? Math.max(6, item.amount / maximumWaterHour * 100) : 2}%` }}>{cups > 1 && <b>{cups}</b>}</i><small>{item.hour % 3 === 0 ? String(item.hour).padStart(2,"0") : ""}</small></span>; })}</div>{!waterByHour.some((item) => item.amount > 0) && <p>הגרף יתחיל להיבנות מהוספות המים הבאות.</p>}</section>
