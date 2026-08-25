@@ -2675,6 +2675,12 @@ export default function Home() {
     setCoachSpeaking(false);
     setCoachSpeechPending(false);
   }
+  function openTopMealPreview() {
+    const id = insightsData?.summary?.topMealDetails?.id;
+    if (!id) return;
+    const meal = [state.today, ...(state.history || [])].flatMap((day: any) => day.meals || []).find((item: any) => item.id === id);
+    if (meal) { setMealPreviewReturnToHistory(false); setMealPreview(meal); }
+  }
   function unlockCoachAudio() {
     if (typeof window === "undefined") return;
     const AudioContextConstructor = window.AudioContext || (window as any).webkitAudioContext;
@@ -3197,11 +3203,11 @@ export default function Home() {
         </div>
       </section>
       <nav className="bottom-nav">
-        <button className={!historyOpen && !settingsOpen && !adminLoginOpen && !insightsOpen && !coachOpen ? "active" : ""} onClick={() => openNavigationScreen("home")}>
-          <span><AppIcon name="home" /></span>היום
+        <button aria-label="היום" title="היום" className={!historyOpen && !settingsOpen && !adminLoginOpen && !insightsOpen && !coachOpen ? "active" : ""} onClick={() => openNavigationScreen("home")}>
+          <span><AppIcon name="home" /></span><span className="nav-label">היום</span>
         </button>
-        <button className={historyOpen ? "active" : ""} onClick={() => openNavigationScreen("history")}>
-          <span><AppIcon name="history" /></span>היסטוריה
+        <button aria-label="היסטוריה" title="היסטוריה" className={historyOpen ? "active" : ""} onClick={() => openNavigationScreen("history")}>
+          <span><AppIcon name="history" /></span><span className="nav-label">היסטוריה</span>
         </button>
         <button
           className="nav-camera"
@@ -3210,12 +3216,12 @@ export default function Home() {
         >
           <AppIcon name="camera" />
         </button>
-        <button className={insightsOpen ? "active" : ""} onClick={() => openNavigationScreen("insights")}>
+        <button aria-label="מגמות" title="מגמות" className={insightsOpen ? "active" : ""} onClick={() => openNavigationScreen("insights")}>
           <span><AppIcon name="activity" /></span>
-          מגמות
+          <span className="nav-label">מגמות</span>
         </button>
-        <button className={coachOpen ? "active" : ""} onClick={() => openNavigationScreen("coach")}>
-          <span><AppIcon name="coach" /></span>{coachIsFemale ? "מאמנת" : "מאמן"}
+        <button aria-label={coachIsFemale ? "מאמנת" : "מאמן"} title={coachIsFemale ? "מאמנת" : "מאמן"} className={coachOpen ? "active" : ""} onClick={() => openNavigationScreen("coach")}>
+          <span><AppIcon name="coach" /></span><span className="nav-label">{coachIsFemale ? "מאמנת" : "מאמן"}</span>
         </button>
       </nav>
       {calorieOverage && <div className="modal-layer overage-layer"><button className="backdrop" onClick={() => setCalorieOverage(null)} /><section className="settings-modal overage-modal"><header><div><h2>חריגה מהיעד היומי</h2><small>הארוחה נשמרה, אבל אפשר עדיין לתקן את הבחירה</small></div></header><div className="overage-ring"><strong>+{Math.round(calorieOverage.overBy)}</strong><small>קלוריות מעל היעד</small></div><p>אין צורך להילחץ מיום אחד. אפשר להשאיר את הארוחה, לערוך כמויות או לבטל את ההוספה.</p><footer><button type="button" onClick={() => setCalorieOverage(null)}>השאר ביומן</button><button type="button" onClick={() => { const meal = calorieOverage.meal; setCalorieOverage(null); editMeal({ ...meal, id: calorieOverage.id, time: meal.occurredAt }); }}>ערוך ארוחה</button><button className="danger" type="button" onClick={async () => { await deleteMeal(calorieOverage.id); setCalorieOverage(null); }}>בטל את ההוספה</button></footer></section></div>}
@@ -5023,7 +5029,7 @@ export default function Home() {
                     <span>דקות השבוע</span>
                   </article>
                   <article className={Number(insightsData.summary.targetCompliance) >= 70 ? "kpi-range is-good" : "kpi-range needs-attention"}><i>✓</i><small>ימים בטווח</small><strong>{insightsData.summary.targetCompliance}%</strong><span>{insightsData.summary.trackedDays} ימי מעקב</span></article>
-                  <article className="kpi-meal"><i>★</i><small>הארוחה המאוזנת</small><strong className="trend-meal-name">{insightsData.summary.topMeal}</strong><span>לפי ציון הארוחה</span></article>
+                  <article className={`kpi-meal ${insightsData.summary.topMealDetails?.id ? "is-clickable" : ""}`} role={insightsData.summary.topMealDetails?.id ? "button" : undefined} tabIndex={insightsData.summary.topMealDetails?.id ? 0 : undefined} onClick={openTopMealPreview} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && insightsData.summary.topMealDetails?.id) { event.preventDefault(); openTopMealPreview(); } }} aria-label={insightsData.summary.topMealDetails?.id ? `פתיחת פרטי ${insightsData.summary.topMeal}` : undefined}><i>★</i><small>הארוחה המאוזנת</small><strong className="trend-meal-name" title={insightsData.summary.topMeal}>{String(insightsData.summary.topMeal || "—").length > 42 ? `${String(insightsData.summary.topMeal).slice(0, 39).trim()}…` : insightsData.summary.topMeal}</strong><span>{insightsData.summary.topMealDetails?.id ? "לחץ להצגת הארוחה" : "לפי ציון הארוחה"}</span></article>
                 </div>
                 <p className="trend-narrative">{insightsData.narrative}</p>
                 <p className="coach-recommendation"><b>המלצת זהב:</b> {insightsData.recommendation}</p>

@@ -501,6 +501,16 @@ test("insights waits for stable data before revealing animated charts", () => {
   assert.match(css, /insights-loading-spin/);
 });
 
+test("balanced meal opens its full preview and mobile navigation is icon-led", () => {
+  assert.match(page, /topMealDetails/);
+  assert.match(page, /openTopMealPreview/);
+  assert.match(page, /length > 42/);
+  assert.match(page, /className="nav-label"/);
+  assert.match(page, /aria-label="מגמות"/);
+  assert.match(css, /bottom-nav \.nav-label/);
+  assert.match(css, /width:29px;height:29px/);
+});
+
 test("desktop destinations use a full system-screen shell without visible scrollbars", () => {
   assert.match(expansionCss, /@media\(min-width:761px\)/);
   assert.match(expansionCss, /height:calc\(100dvh - 48px\)/);
