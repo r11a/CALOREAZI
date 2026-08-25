@@ -6,8 +6,9 @@ import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "@/server/domai
 import { entryDateFor, localDateAt, userTimeZone } from "@/server/local-date.js";
 import { validateMealNutrition } from "@/server/meal-validation.js";
 import { databaseStateEnabled, insertDatabaseMeal } from "@/server/state-database.js";
+import { assessMealReliability } from "@/server/meal-reliability.js";
 export const runtime = "nodejs";
-type MealRecord = { id: string; clientRequestId?: string; logicalDate?: string; name: string; period: string; kcal: number; protein: number; carbs: number; fat: number; sugar: number; sugarTrackedItems: number; fiber?: number; fiberTrackedItems?: number; sodiumMg?: number; sodiumMgTrackedItems?: number; saturatedFat?: number; saturatedFatTrackedItems?: number; addedSugar?: number; addedSugarTrackedItems?: number; items: unknown[]; source: string; image: string; media: unknown; confidence: number; transcript: string; time: string; score?: number; updatedAt?: string };
+type MealRecord = { id: string; clientRequestId?: string; logicalDate?: string; name: string; period: string; kcal: number; protein: number; carbs: number; fat: number; sugar: number; sugarTrackedItems: number; fiber?: number; fiberTrackedItems?: number; sodiumMg?: number; sodiumMgTrackedItems?: number; saturatedFat?: number; saturatedFatTrackedItems?: number; addedSugar?: number; addedSugarTrackedItems?: number; items: unknown[]; source: string; image: string; media: unknown; confidence: number; nutritionReliability?: unknown; transcript: string; time: string; score?: number; updatedAt?: string };
 
 export async function POST(request: Request) {
   const startedAt = Date.now();
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
   const missingFields = [...(!name ? ["שם הארוחה"] : []), ...(!kcal ? ["קלוריות"] : [])];
   if (missingFields.length) return Response.json({ error: `לא ניתן לשמור. יש להשלים: ${missingFields.join(", ")}`, fields: missingFields }, { status: 400 });
   const nutritionValidation = validateMealNutrition({ ...calculated, items });
+  const nutritionReliability = assessMealReliability({ ...body, ...calculated, items });
   const hasBlockingNutritionIssue = nutritionValidation.issues.some((issue: { code?: string }) => ["photo", "voice"].includes(body.source) || issue.code === "implausible_energy_density");
   if (hasBlockingNutritionIssue)
     return Response.json({ error: nutritionValidation.issues[0].message, issues: nutritionValidation.issues, requiresConfirmation: true }, { status: 422 });
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     const originalImage = /^data:image\/(jpeg|png|webp);base64,/.test(String(body.image || "")) && String(body.image).length <= 8_000_000 ? String(body.image) : "";
     const media = originalImage ? await saveMediaDataUrl(initial, originalImage, id, { maxSize: 512, quality: 72 }) : null;
-    const meal: MealRecord = { id, ...(clientRequestId ? { clientRequestId } : {}), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
+    const meal: MealRecord = { id, ...(clientRequestId ? { clientRequestId } : {}), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), nutritionReliability, transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
     meal.score = calculateMealScore(meal);
     const calibrations = ["photo", "voice"].includes(source) && items.length ? items.flatMap((item: Record<string, unknown>, index) => { const before = Array.isArray(body.aiOriginalItems) ? body.aiOriginalItems[index] : null; return !before || String(before.name) !== String(item.name) || Number(before.grams) !== Number(item.grams) || Number(before.quantity) !== Number(item.quantity) ? [{ originalName: before?.name || null, name: String(item.name).slice(0, 80), grams: Math.max(1, Number(item.grams) || 1), quantity: Math.max(.1, Number(item.quantity) || 1), previousGrams: before ? Number(before.grams) : null, at: new Date().toISOString() }] : []; }) : [];
     const localDate = body.calendarDate ? localDateAt(new Date(time), userTimeZone(data)) : entryDateFor(data, new Date(time));
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
     const source = ["photo", "voice"].includes(body.source) ? body.source : "manual";
     const originalImage = /^data:image\/(jpeg|png|webp);base64,/.test(String(body.image || "")) && String(body.image).length <= 8_000_000 ? String(body.image) : ""; const id = crypto.randomUUID(); const media = originalImage ? await saveMediaDataUrl(latest, originalImage, id, { maxSize: 512, quality: 72 }) : null;
     const requestedTime = new Date(body.occurredAt || Date.now()); const time = Number.isFinite(requestedTime.getTime()) && requestedTime.getTime() <= Date.now() ? requestedTime.toISOString() : new Date().toISOString();
-    const meal: MealRecord = { id, ...(clientRequestId ? { clientRequestId } : {}), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
+    const meal: MealRecord = { id, ...(clientRequestId ? { clientRequestId } : {}), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence: Math.max(0, Math.min(1, Number(body.confidence) || .75)), nutritionReliability, transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
     meal.score = calculateMealScore(meal);
     if (body.analysisJobId) { const job = latest.analysisJobs?.find((item) => item.id === body.analysisJobId && item.userId === session.userId); if (job) { job.status = "completed"; job.mealId = meal.id; job.completedAt = new Date().toISOString(); job.updatedAt = job.completedAt; } }
     const localDate = body.calendarDate ? localDateAt(new Date(time), userTimeZone(data)) : entryDateFor(data, new Date(time)); meal.logicalDate = localDate; savedMealId = meal.id; savedLocalDate = localDate;
@@ -109,6 +111,7 @@ export async function PATCH(request: Request) {
       if (name) meal.name = name;
       meal.period = ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : meal.period;
       meal.kcal = roundCalories(calculated.kcal); meal.protein = Math.max(0, Number(calculated.protein) || 0); meal.carbs = Math.max(0, Number(calculated.carbs) || 0); meal.fat = Math.max(0, Number(calculated.fat) || 0); meal.sugar = Math.max(0, Number(calculated.sugar) || 0); meal.sugarTrackedItems = Math.max(0, Number(calculated.sugarTrackedItems) || 0); meal.items = items;
+      meal.nutritionReliability = assessMealReliability({ ...body, ...calculated, items });
       const requested = new Date(body.occurredAt || meal.time); if (Number.isFinite(requested.getTime()) && requested.getTime() <= Date.now()) meal.time = requested.toISOString();
     }
     meal.score = calculateMealScore(meal); meal.updatedAt = new Date().toISOString();

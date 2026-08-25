@@ -11,6 +11,7 @@ import {
 } from "react";
 import { flushOfflineCaptures, flushOfflineMutations, listOfflineQueue, offlinePendingCount, queueOfflineCapture, queueOfflineMutation, retryOfflineItem, type OfflineQueueItem } from "./offline-queue";
 import { AppIcon } from "./components/AppIcon";
+import { assessMealReliability } from "../server/meal-reliability.js";
 
 type AppState = {
   authenticated?: boolean;
@@ -1640,6 +1641,7 @@ export default function Home() {
         image: photoPreview,
         analysisJobId,
         confidence: mealConfidence === "high" ? .9 : mealConfidence === "medium" ? .7 : .45,
+        nutritionReliability: mealReliabilityPreview,
       };
       let latest: AppState = state;
       let savedMealId = editingMealId;
@@ -2939,6 +2941,7 @@ export default function Home() {
     );
 
   const mealDraftPreview = calculateMealDraft(mealItems, mealForm);
+  const mealReliabilityPreview = assessMealReliability({ ...mealForm, items: mealItems, source: mealSource, explicitCalories: mealItems.length === 0 && mealSource === "manual" && Number(mealForm.kcal) > 0 });
 
   return (
     <main className={dark ? "app-shell theme-dark" : "app-shell"} dir={profile?.language === "en" ? "ltr" : "rtl"} lang={profile?.language || "he"}>
@@ -5687,7 +5690,12 @@ export default function Home() {
                 </>
               )}
             </div></details>}
-            {(mealForm.name || mealItems.length > 0) && <section className="meal-review-summary"><header><div><small>הארוחה שלך</small><strong>{mealForm.name || "ארוחה חדשה"}</strong></div><b>{Math.round(Number(mealDraftPreview.kcal || 0))}<small> kcal</small></b></header><div><span className="protein"><small>חלבון</small><strong>{Math.round(Number(mealDraftPreview.protein || 0))}g</strong></span><span className="carbs"><small>פחמימות</small><strong>{Math.round(Number(mealDraftPreview.carbs || 0))}g</strong></span><span className="fat"><small>שומן</small><strong>{Math.round(Number(mealDraftPreview.fat || 0))}g</strong></span></div><p>זה הסיכום שיתווסף ליומן. אפשר לאשר או לפתוח את העריכה המתקדמת.</p><button className="meal-recalculate-button" type="button" onClick={recalculateMealWithAi} disabled={busy}>{busy ? "מחשב מחדש…" : "חשב מחדש לפי השינויים"}</button></section>}
+            {(mealForm.name || mealItems.length > 0) && <section className="meal-review-summary"><header><div><small>הארוחה שלך</small><strong>{mealForm.name || "ארוחה חדשה"}</strong></div><b>{Math.round(Number(mealDraftPreview.kcal || 0))}<small> קק״ל</small></b></header><div><span className="protein"><small>חלבון</small><strong>{Math.round(Number(mealDraftPreview.protein || 0))} גרם</strong></span><span className="carbs"><small>פחמימות</small><strong>{Math.round(Number(mealDraftPreview.carbs || 0))} גרם</strong></span><span className="fat"><small>שומן</small><strong>{Math.round(Number(mealDraftPreview.fat || 0))} גרם</strong></span></div><p>זה הסיכום שיתווסף ליומן. אפשר לאשר או לפתוח את העריכה המתקדמת.</p><button className="meal-recalculate-button" type="button" onClick={recalculateMealWithAi} disabled={busy}>{busy ? "מחשב מחדש…" : "חשב מחדש לפי השינויים"}</button></section>}
+            {(mealForm.name || mealItems.length > 0) && <details className={`meal-reliability ${mealReliabilityPreview.level}`} open={mealReliabilityPreview.level === "low"}>
+              <summary><span><AppIcon name={mealReliabilityPreview.level === "high" ? "target" : "info"} /><b>{mealReliabilityPreview.label}</b><small>{mealReliabilityPreview.score}/100 · כיסוי {mealReliabilityPreview.coverage}%</small></span><i aria-hidden="true" /></summary>
+              {mealReliabilityPreview.items.length > 0 && <div>{mealReliabilityPreview.items.map((item: any, index: number) => <article key={`${item.name}-${index}`}><header><strong>{item.name}</strong><b>{item.score}/100</b></header><p>{item.source}</p><small>{item.formula}</small></article>)}</div>}
+              {mealReliabilityPreview.issues.length > 0 && <ul>{mealReliabilityPreview.issues.map((issue: any, index: number) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}</ul>}
+            </details>}
             {mealItems.length > 0 && (
               <section className="ai-correction-box">
                 <div><strong>צריך לתקן את הזיהוי?</strong><small>כתוב רק מה לא נכון — ה־AI יעדכן את הטיוטה בלי לשמור אותה.</small></div>

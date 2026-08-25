@@ -20,6 +20,12 @@ export function validateMealNutrition(input = {}) {
       issues.push({ code: "implausible_beverage", item: name, message: "זוהה חישוב לא סביר למשקה. בדוק את הסוג, הכמות והתוספות." });
     if (item.explicitCalories !== true && !Number(item.kcalPerUnit) && energyDensePattern.test(name) && grams >= 80 && grams <= 150 && per100 > 0 && per100 < 120)
       issues.push({ code: "implausible_energy_density", item: name, message: `הערך הקלורי של ${name || "הפריט"} נמוך באופן חריג. יש לבדוק אם הערך הוא ליחידה או ל־100 גרם.` });
+    if (item.explicitCalories !== true && Number(item.kcalPerUnit) > 0 && per100 > 0 && grams > 0) {
+      const perUnit = Number(item.kcalPerUnit) * Math.max(.1, Number(item.quantity) || 1);
+      const fromWeight = grams * per100 / 100;
+      if (Math.abs(perUnit - fromWeight) / Math.max(perUnit, fromWeight) > .4)
+        issues.push({ code: "calorie_basis_conflict", item: name, message: `יש סתירה בין הקלוריות ליחידה לבין הערך ל־100 גרם עבור ${name || "הפריט"}. יש לבחור בסיס חישוב אחד.` });
+    }
   }
   return { valid: issues.length === 0, issues };
 }

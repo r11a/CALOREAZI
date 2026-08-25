@@ -12,4 +12,7 @@ test("meal benchmark measures accuracy, recall, corrections and latency", () => 
   assert.equal(report.correctionRatePercent, 50);
   assert.equal(report.p95LatencyMs, 9000);
   assert.ok(report.medianCalorieErrorPercent > 10);
+  assert.equal(report.readiness, "insufficient-sample");
+  assert.ok(Number.isFinite(report.meanCalorieBiasPercent));
+  assert.ok(report.within20Percent >= report.within10Percent);
 });

@@ -7,7 +7,7 @@ export function evaluateMealBenchmark(cases) {
     const expectedNames = new Set((item.expected.items || []).map((value) => String(value).trim().toLocaleLowerCase()).filter(Boolean));
     const actualNames = new Set((item.actual.items || []).map((value) => String(value).trim().toLocaleLowerCase()).filter(Boolean));
     const matched = [...expectedNames].filter((name) => actualNames.has(name)).length;
-    return { id: String(item.id || ""), calorieErrorPercent: Math.abs(actualKcal - expectedKcal) / expectedKcal * 100, itemRecallPercent: expectedNames.size ? matched / expectedNames.size * 100 : 100, latencyMs: Math.max(0, finite(item.actual.latencyMs)), requiredCorrection: Boolean(item.actual.requiredCorrection) };
+    return { id: String(item.id || ""), signedCalorieErrorPercent: (actualKcal - expectedKcal) / expectedKcal * 100, calorieErrorPercent: Math.abs(actualKcal - expectedKcal) / expectedKcal * 100, itemRecallPercent: expectedNames.size ? matched / expectedNames.size * 100 : 100, latencyMs: Math.max(0, finite(item.actual.latencyMs)), requiredCorrection: Boolean(item.actual.requiredCorrection) };
   });
   const sortedErrors = rows.map((row) => row.calorieErrorPercent).sort((a, b) => a - b);
   const percentile = (values, ratio) => values.length ? values[Math.min(values.length - 1, Math.ceil(values.length * ratio) - 1)] : 0;
@@ -20,6 +20,10 @@ export function evaluateMealBenchmark(cases) {
     p50LatencyMs: percentile(rows.map((row) => row.latencyMs).sort((a, b) => a - b), .5),
     p95LatencyMs: percentile(rows.map((row) => row.latencyMs).sort((a, b) => a - b), .95),
     correctionRatePercent: average(rows.map((row) => row.requiredCorrection ? 100 : 0)),
+    meanCalorieBiasPercent: average(rows.map((row) => row.signedCalorieErrorPercent)),
+    within10Percent: average(rows.map((row) => row.calorieErrorPercent <= 10 ? 100 : 0)),
+    within20Percent: average(rows.map((row) => row.calorieErrorPercent <= 20 ? 100 : 0)),
+    readiness: rows.length < 100 ? "insufficient-sample" : percentile(sortedErrors, .5) <= 15 && average(rows.map((row) => row.itemRecallPercent)) >= 90 ? "candidate" : "needs-improvement",
     rows,
   };
 }
