@@ -20,7 +20,8 @@ export async function POST(request: Request) {
   const missingFields = [...(!name ? ["שם הארוחה"] : []), ...(!kcal ? ["קלוריות"] : [])];
   if (missingFields.length) return Response.json({ error: `לא ניתן לשמור. יש להשלים: ${missingFields.join(", ")}`, fields: missingFields }, { status: 400 });
   const nutritionValidation = validateMealNutrition({ ...calculated, items });
-  if (["photo", "voice"].includes(body.source) && !nutritionValidation.valid)
+  const hasBlockingNutritionIssue = nutritionValidation.issues.some((issue: { code?: string }) => ["photo", "voice"].includes(body.source) || issue.code === "implausible_energy_density");
+  if (hasBlockingNutritionIssue)
     return Response.json({ error: nutritionValidation.issues[0].message, issues: nutritionValidation.issues, requiresConfirmation: true }, { status: 422 });
   const clientRequestId = String(body.clientRequestId || request.headers.get("idempotency-key") || "").trim().slice(0, 120);
   let savedMealId = ""; let savedLocalDate = ""; let idempotent = false;
@@ -88,7 +89,8 @@ export async function PATCH(request: Request) {
   const editedItems = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
   const editedNutrition = editedItems.length ? calculateMealFromItems(editedItems) : body;
   const editedValidation = validateMealNutrition({ ...editedNutrition, items: editedItems });
-  if (["photo", "voice"].includes(body.source) && !editedValidation.valid)
+  const hasBlockingEditedNutritionIssue = editedValidation.issues.some((issue: { code?: string }) => ["photo", "voice"].includes(body.source) || issue.code === "implausible_energy_density");
+  if (hasBlockingEditedNutritionIssue)
     return Response.json({ error: editedValidation.issues[0].message, issues: editedValidation.issues, requiresConfirmation: true }, { status: 422 });
   let foundMeal = false; let savedLocalDate = ""; let editConflict = false;
   const state = await updateState((latest) => {

@@ -2270,7 +2270,7 @@ export default function Home() {
     }
   }
   async function completeMissingNutrition(name: string, items: any[]) {
-    const missing = items.map((item, index) => Number(item.kcalPer100 || 0) > 0 ? -1 : index).filter((index) => index >= 0);
+    const missing = items.map((item, index) => Number(item.kcalPerUnit || 0) > 0 || Number(item.kcalPer100 || 0) > 0 ? -1 : index).filter((index) => index >= 0);
     if (!missing.length) return items;
     const completion = await api("/api/ai/analyze-text", { method: "POST", body: JSON.stringify({ correction: "השלם רק ערכים תזונתיים חסרים ל־100 גרם לפי המזון המזוהה. אל תשנה שמות, כמויות או משקלים.", draft: { name, items } }) });
     return items.map((item, index) => {
@@ -2476,7 +2476,7 @@ export default function Home() {
           "הניתוח עדיין לא הסתיים. הוא נשמר וניתן לנסות שוב בעוד רגע.",
         );
       let nutritionCompletionWarning = "";
-      if (result.items.some((item: any) => !(Number(item.kcalPer100) > 0))) {
+      if (result.items.some((item: any) => !(Number(item.kcalPerUnit) > 0) && !(Number(item.kcalPer100) > 0))) {
         setPhotoStatus("הזיהוי הושלם. משלים ערך קלורי לכל מרכיב לפי המשקל…");
         try { result = { ...result, items: await completeMissingNutrition(result.name, result.items) }; }
         catch { nutritionCompletionWarning = " חלק מהערכים לא הושלמו; אפשר ללחוץ על חשב מחדש."; }

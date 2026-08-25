@@ -6,7 +6,8 @@ export function validateMealNutrition(input = {}) {
   const issues = [];
   const kcal = Math.max(0, Number(input.kcal) || 0);
   const macroKcal = Math.max(0, Number(input.protein) || 0) * 4 + Math.max(0, Number(input.carbs) || 0) * 4 + Math.max(0, Number(input.fat) || 0) * 9;
-  if (kcal > 0 && macroKcal > 0 && Math.abs(kcal - macroKcal) / Math.max(kcal, macroKcal) > .35)
+  const hasExplicitCalories = items.some((item) => item.explicitCalories === true && Number(item.kcalPerUnit) > 0);
+  if (!hasExplicitCalories && kcal > 0 && macroKcal > 0 && Math.abs(kcal - macroKcal) / Math.max(kcal, macroKcal) > .35)
     issues.push({ code: "macro_calorie_mismatch", message: "הקלוריות אינן תואמות לערכי החלבון, הפחמימות והשומן. יש לבדוק את הערכים." });
   for (const item of items) {
     const name = String(item.name || "");
@@ -17,7 +18,7 @@ export function validateMealNutrition(input = {}) {
       issues.push({ code: "implausible_portion", item: name, message: `הכמות או הערך של ${name || "הפריט"} אינם סבירים.` });
     if (beveragePattern.test(name) && (grams > 750 || servingKcal > 300))
       issues.push({ code: "implausible_beverage", item: name, message: "זוהה חישוב לא סביר למשקה. בדוק את הסוג, הכמות והתוספות." });
-    if (!Number(item.kcalPerUnit) && energyDensePattern.test(name) && grams >= 80 && grams <= 150 && per100 > 0 && per100 < 120)
+    if (item.explicitCalories !== true && !Number(item.kcalPerUnit) && energyDensePattern.test(name) && grams >= 80 && grams <= 150 && per100 > 0 && per100 < 120)
       issues.push({ code: "implausible_energy_density", item: name, message: `הערך הקלורי של ${name || "הפריט"} נמוך באופן חריג. יש לבדוק אם הערך הוא ליחידה או ל־100 גרם.` });
   }
   return { valid: issues.length === 0, issues };

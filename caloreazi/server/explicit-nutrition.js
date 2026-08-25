@@ -1,11 +1,20 @@
 const verificationPattern = /(בדוק|תבדוק|אשר|תאשר|לא בטוח|לא בטוחה|בערך|משוער|אולי)/i;
+const quantityWords = new Map([
+  ["עשרים", 20], ["תשעה עשר", 19], ["תשע עשרה", 19], ["שמונה עשר", 18], ["שמונה עשרה", 18], ["שבעה עשר", 17], ["שבע עשרה", 17], ["שישה עשר", 16], ["שש עשרה", 16], ["חמישה עשר", 15], ["חמש עשרה", 15], ["ארבעה עשר", 14], ["ארבע עשרה", 14], ["שלושה עשר", 13], ["שלוש עשרה", 13], ["שנים עשר", 12], ["שתים עשרה", 12], ["אחד עשר", 11], ["אחת עשרה", 11], ["עשרה", 10], ["עשר", 10], ["תשעה", 9], ["תשע", 9], ["שמונה", 8], ["שבעה", 7], ["שבע", 7], ["שישה", 6], ["שש", 6], ["חמישה", 5], ["חמש", 5], ["ארבעה", 4], ["ארבע", 4], ["שלושה", 3], ["שלוש", 3], ["שניים", 2], ["שני", 2], ["שתיים", 2], ["שתי", 2], ["אחד", 1], ["אחת", 1],
+]);
+
+function normalizeQuantityWords(value) {
+  let result = String(value || "");
+  for (const [word, number] of [...quantityWords].sort((left, right) => right[0].length - left[0].length)) result = result.replace(new RegExp(`(?<!שכל)(?<!כל)(^|\\s)${word}(?=\\s)`, "g"), `$1${number}`);
+  return result;
+}
 
 function normalizedNumber(value) {
   return Math.max(0, Number(String(value || "").replace(",", ".")) || 0);
 }
 
 export function explicitCalorieFacts(text = "") {
-  const source = String(text || "").replace(/־/g, "-");
+  const source = normalizeQuantityWords(String(text || "").replace(/־/g, "-"));
   const facts = [];
   const repeated = /(\d+(?:[.,]\d+)?)\s+([^\d,;.]{2,45}?)\s+(?:שכל\s+(?:אחד|אחת)(?:\s+מהם)?|כל\s+(?:אחד|אחת)|של)\s*(\d+(?:[.,]\d+)?)\s*(?:קלוריות|קלוריה|קל[׳'])/gi;
   for (const match of source.matchAll(repeated)) facts.push({ quantity: normalizedNumber(match[1]), name: match[2].trim(), kcalPerUnit: normalizedNumber(match[3]) });

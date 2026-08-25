@@ -42,6 +42,14 @@ test("keeps explicit per-unit calories exact instead of treating them as per-100
   assert.equal(result.kcal, 228);
 });
 
+test("calorie calculations handle fractional portions and preserve unit precedence", () => {
+  const result = calculateMealFromItems([
+    { name: "חצי מנה", grams: 100, quantity: 0.5, kcalPer100: 200 },
+    { name: "ביסקוויט", grams: 12, quantity: 13, kcalPerUnit: 35, kcalPer100: 999 },
+  ]);
+  assert.equal(result.kcal, 555);
+});
+
 test("derives age precisely from birth date", () => {
   assert.equal(ageFromBirthDate("1990-09-01", new Date("2026-08-23T12:00:00Z")), 35);
   assert.equal(ageFromBirthDate("1990-08-01", new Date("2026-08-23T12:00:00Z")), 36);

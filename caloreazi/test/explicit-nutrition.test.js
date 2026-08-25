@@ -20,3 +20,9 @@ test("explicit user calories override estimates unless verification was requeste
   assert.equal(verify.items[0].kcalPerUnit, undefined);
   assert.equal(verify.enforced, false);
 });
+
+test("spoken Hebrew quantity words remain exact", () => {
+  const facts = explicitCalorieFacts("שתי פריכיות שכל אחת 24 קלוריות");
+  assert.equal(facts[0].quantity, 2);
+  assert.equal(facts[0].kcalPerUnit, 24);
+});

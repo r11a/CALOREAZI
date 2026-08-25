@@ -26,6 +26,17 @@ test("meal validation flags an implausibly low cake estimate", () => {
   assert.ok(result.issues.some((issue) => issue.code === "implausible_energy_density"));
 });
 
+test("explicit user calories are not invalidated by estimated macro values", () => {
+  const result = validateMealNutrition({
+    kcal: 228,
+    protein: 40,
+    carbs: 70,
+    fat: 20,
+    items: [{ name: "פריכיות", grams: 8, quantity: 5, kcalPerUnit: 24, explicitCalories: true }],
+  });
+  assert.equal(result.issues.some((issue) => issue.code === "macro_calorie_mismatch"), false);
+});
+
 test("nutrition confidence distinguishes government and community sources", () => {
   assert.equal(nutritionConfidence({ source: "משרד הבריאות", kcal: 100, protein: 1, carbs: 20, fat: 1 }).level, "high");
   assert.equal(nutritionConfidence({ source: "Open Food Facts", barcode: "7290000000000", kcal: 100, protein: 1, carbs: 20, fat: 1 }).level, "medium");
