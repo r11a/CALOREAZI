@@ -83,6 +83,12 @@ function inferredProducePortion(name) {
 
 function produceAmountForMeal(meal) {
   const items = Array.isArray(meal?.items) ? meal.items : [];
+  const mealName = String(meal?.name || "");
+  const compositeMeal = compositeMealPattern.test(mealName);
+  if (compositeMeal) {
+    const containsProduce = genericProducePattern.test(mealName) || inferredProducePortion(mealName) > 0 || items.some((item) => item.foodGroup === "produce" || produceIds.has(item.nutritionSource?.sourceId) || inferredProducePortion(item.confirmedName || item.name) > 0);
+    return containsProduce ? 70 : 0;
+  }
   let amount = 0;
   for (const item of items) {
     const sourceId = item.nutritionSource?.sourceId;
@@ -98,7 +104,7 @@ function produceAmountForMeal(meal) {
     else if (explicitlyProduce && grams) amount += Math.min(grams, inferred ? inferred * 1.5 : 180) * quantity;
     else amount += inferred * quantity;
   }
-  return Math.min(400, amount || inferredProducePortion(meal?.name));
+  return Math.min(400, amount || inferredProducePortion(mealName));
 }
 
 export function calculateDayScore(day, profile, activity = []) {

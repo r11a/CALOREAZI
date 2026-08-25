@@ -57,7 +57,7 @@ test("produce contributes to the score regardless of meal entry path", () => {
   const score = calculateDayScore(day, profile, []);
   const produce = score.parameters.find((item) => item.key === "produce");
   assert.ok(produce.available);
-  assert.equal(produce.value, 130);
+  assert.equal(produce.value, 140);
   assert.ok(produce.score > 0);
 });
 
@@ -68,6 +68,18 @@ test("a composite meal never counts its full weight as produce", () => {
     items: [{ name: "כריך עם ירקות", foodGroup: "produce", grams: 600, quantity: 1, kcalPer100: 100 }],
   }] }, { calories: 2000, protein: 120, carbs: 220, fat: 65, waterMl: 2000 }, []);
   const produce = result.parameters.find((item) => item.key === "produce");
-  assert.equal(produce.value, 60);
+  assert.equal(produce.value, 70);
   assert.ok(produce.percent < 20);
+});
+
+test("several detected vegetables inside a sandwich remain one realistic portion", () => {
+  const result = calculateDayScore({ date: "2026-08-25", waterMl: 0, meals: [{
+    name: "כריך גבינה עם ירקות",
+    kcal: 500, protein: 25, carbs: 60, fat: 18,
+    items: [
+      { name: "עגבנייה", grams: 280, quantity: 1, nutritionSource: { sourceId: "tomato" } },
+      { name: "מלפפון", grams: 320, quantity: 1, nutritionSource: { sourceId: "cucumber" } },
+    ],
+  }] }, { calories: 2000, protein: 120, carbs: 220, fat: 65, waterMl: 2000 }, []);
+  assert.equal(result.parameters.find((item) => item.key === "produce").value, 70);
 });
