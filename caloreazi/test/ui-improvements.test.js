@@ -206,7 +206,9 @@ test("photo capture skips manual entry and shows a focused animated recognition 
   assert.match(page, /setManualAiMode\(false\)/);
   assert.match(page, /photo-analyzing/);
   assert.match(page, /מזהה מה יש בתמונה/);
-  assert.match(page, /recognition-stars/);
+  assert.match(page, /recognition-score/);
+  assert.match(page, /ציון זיהוי/);
+  assert.match(page, /meal-preview-recognition/);
   assert.match(page, /צריך צילום ברור יותר/);
   assert.match(css, /scan-progress/);
   assert.match(css, /photo-review-hero/);

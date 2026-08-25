@@ -1641,6 +1641,7 @@ export default function Home() {
         image: photoPreview,
         analysisJobId,
         confidence: mealConfidence === "high" ? .9 : mealConfidence === "medium" ? .7 : .45,
+        recognitionScore: ["photo", "voice"].includes(mealSource) ? mealRecognitionScore : null,
         nutritionReliability: mealReliabilityPreview,
       };
       let latest: AppState = state;
@@ -2942,6 +2943,7 @@ export default function Home() {
 
   const mealDraftPreview = calculateMealDraft(mealItems, mealForm);
   const mealReliabilityPreview = assessMealReliability({ ...mealForm, items: mealItems, source: mealSource, explicitCalories: mealItems.length === 0 && mealSource === "manual" && Number(mealForm.kcal) > 0 });
+  const mealRecognitionScore = mealConfidence === "high" ? 90 : mealConfidence === "medium" ? 70 : 45;
 
   return (
     <main className={dark ? "app-shell theme-dark" : "app-shell"} dir={profile?.language === "en" ? "ltr" : "rtl"} lang={profile?.language || "he"}>
@@ -3245,6 +3247,7 @@ export default function Home() {
           <section className="settings-modal meal-preview-modal">
             <header><div><h2>{mealPreview.name}</h2><small>{periodLabels[mealPreview.period || "snack"]} · {new Date(mealPreview.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</small></div><button onClick={closeMealPreview}>×</button></header>
             {mealPreview.image ? <img className="meal-preview-image" src={mealPreview.image} alt={mealPreview.name} /> : <div className="meal-preview-placeholder">🍽</div>}
+            {Number(mealPreview.recognitionScore) > 0 && <div className={`meal-preview-recognition ${Number(mealPreview.recognitionScore) >= 85 ? "high" : Number(mealPreview.recognitionScore) >= 60 ? "medium" : "low"}`}><span><small>ציון הזיהוי בעת ההוספה</small><strong>{Math.round(Number(mealPreview.recognitionScore))}/100</strong></span><p>{Number(mealPreview.recognitionScore) >= 85 ? "הזיהוי היה ברור" : Number(mealPreview.recognitionScore) >= 60 ? "הזיהוי טוב, אך הכמות הוערכה" : "הזיהוי נשמר לאחר בדיקת המשתמש"}</p></div>}
             <div className="meal-preview-values"><span className="calories"><small>קלוריות</small><strong>{mealPreview.kcal}</strong></span><span className="protein"><small>חלבון</small><strong>{mealPreview.protein} גרם</strong></span><span className="carbs"><small>פחמימות</small><strong>{mealPreview.carbs} גרם</strong></span><span className="fat"><small>שומן</small><strong>{mealPreview.fat} גרם</strong></span></div>
             {Array.isArray(mealPreview.items) && mealPreview.items.length > 0 && <div className="meal-preview-items"><strong>מרכיבי הארוחה</strong>{mealPreview.items.map((item: any, index: number) => <span key={`${item.name}-${index}`}><b>{item.name}</b><small>{item.grams ? `${item.grams} גרם` : item.quantity ? `כמות ${item.quantity}` : ""}</small></span>)}</div>}
             <footer><button type="button" onClick={() => addMealToFavorites(mealPreview.id)} disabled={state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name)}>{state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name) ? "כבר במועדפים" : "הוסף למועדפים"}</button><button className="primary" type="button" onClick={closeMealPreview}>{mealPreviewReturnToHistory ? "חזרה להיסטוריה" : mealPreviewReturnToInsights ? "חזרה למגמות" : "חזרה למה אכלתי היום"}</button></footer>
@@ -5469,7 +5472,7 @@ export default function Home() {
             {(!manualAiMode || mealItems.length > 0) && <>
             {mealSource === "photo" ? <section className={`photo-review-hero ${photoQuality?.level === "warning" ? "retry" : ""} ${busy && !mealReviewReady ? "analyzing" : ""}`}>
               {photoPreview ? <img src={photoPreview} alt="התמונה שצולמה" /> : <div className="photo-placeholder"><AppIcon name="camera" /></div>}
-              {photoQuality?.level === "warning" ? <div className="photo-retry-message"><strong>צריך צילום ברור יותר</strong><p>{photoStatus}</p><button type="button" onClick={() => directCameraInput.current?.click()}><AppIcon name="camera" /> צלם שוב</button></div> : busy && !mealReviewReady ? <div className="photo-analyzing" role="status"><span className="scan-spark"><AppIcon name="sparkles" /></span><strong>מזהה מה יש בתמונה</strong><p>{photoStatus}</p><i><b /></i></div> : <div className="photo-detection"><small>זוהה בתמונה</small><h3>{mealForm.name || "הארוחה שלך"}</h3>{mealReviewReady && <><div className="recognition-stars" aria-label={`אמינות זיהוי ${mealConfidence === "high" ? "גבוהה" : mealConfidence === "medium" ? "טובה" : "נמוכה"}`}>{[1,2,3,4,5].map((star) => <span className={star <= (mealConfidence === "high" ? 5 : mealConfidence === "medium" ? 4 : 2) ? "filled" : ""} key={star}>★</span>)}<b>{mealConfidence === "high" ? "זיהוי מצוין" : mealConfidence === "medium" ? "זיהוי טוב" : "כדאי לבדוק"}</b></div><strong className="detected-calories">{Math.round(Number(mealDraftPreview.kcal || 0))} <small>קלוריות</small></strong></>}</div>}
+              {photoQuality?.level === "warning" ? <div className="photo-retry-message"><strong>צריך צילום ברור יותר</strong><p>{photoStatus}</p><button type="button" onClick={() => directCameraInput.current?.click()}><AppIcon name="camera" /> צלם שוב</button></div> : busy && !mealReviewReady ? <div className="photo-analyzing" role="status"><span className="scan-spark"><AppIcon name="sparkles" /></span><strong>מזהה מה יש בתמונה</strong><p>{photoStatus}</p><i><b /></i></div> : <div className="photo-detection"><small>זוהה בתמונה</small><h3>{mealForm.name || "הארוחה שלך"}</h3>{mealReviewReady && <><div className={`recognition-score ${mealConfidence}`} aria-label={`ציון זיהוי ${mealRecognitionScore} מתוך 100`}><span><small>ציון זיהוי</small><strong>{mealRecognitionScore}<i>/100</i></strong></span><b>{mealConfidence === "high" ? "זיהוי ברור" : mealConfidence === "medium" ? "מומלץ לבדוק כמויות" : "נדרשת בדיקה"}</b></div><strong className="detected-calories">{Math.round(Number(mealDraftPreview.kcal || 0))} <small>קלוריות</small></strong></>}</div>}
             </section> : <section className="meal-review-intro">
               <span className={`meal-source-icon ${mealSource}`}><AppIcon name={mealSource === "voice" ? "mic" : "plus"} /></span>
               <div><small>{mealSource === "voice" ? "זוהה מהכתבה" : "הוספה ידנית"}</small><strong>{busy ? "מכין את התוצאה…" : mealReviewReady ? "מוכן לבדיקה ולאישור" : "ממתין לפרטים"}</strong>{photoStatus && <p className="photo-status">{photoStatus}</p>}</div>
