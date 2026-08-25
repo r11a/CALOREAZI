@@ -359,6 +359,10 @@ test("coach recommendations rotate, food refresh changes results and score quali
   assert.match(page, /suggestionRefresh \* 3/);
   assert.match(page, /qualityGap/);
   assert.match(page, /אפשר לחזק את הסיבים/);
+  assert.match(page, /dayProgress/);
+  assert.match(page, /movingWithGoal/);
+  assert.match(page, /nextMeal/);
+  assert.match(page, /weight-chart-point/);
   assert.match(page, /part\.why/);
   assert.match(page, /הציון מחושב אוטומטית במנוע 2\.0/);
   assert.doesNotMatch(page, /<summary>ניתוח היום לפי מנוע הציון/);

@@ -1078,19 +1078,26 @@ export default function Home() {
     const items: { icon: string; title: string; text: string; priority: number }[] = [];
     const parameter = (key: string) => (state?.dailyScore?.parameters || []).find((item: any) => item.key === key && item.available);
     const fiber = parameter("fiber"); const produce = parameter("produce");
-    if (waterRemaining >= 500)
+    const hour = now.getHours();
+    const dayProgress = Math.max(0, Math.min(1, (hour - 7) / 15));
+    const waterProgress = Number(state?.today?.waterMl || 0) / Math.max(1, Number(profile.waterMl));
+    const proteinProgress = macros.protein / Math.max(1, Number(profile.protein));
+    const recommendationBucket = Number(String(state?.today?.date || "").replaceAll("-", "")) + Math.floor(hour / 3);
+    const choose = (values: string[]) => values[Math.abs(recommendationBucket) % values.length];
+    const nextMeal = hour < 11 ? "ארוחת הבוקר" : hour < 15 ? "ארוחת הצהריים" : hour < 19 ? "ארוחת הביניים או הערב" : "ארוחת הערב";
+    if (waterRemaining >= 500 && waterProgress + .12 < dayProgress)
       items.push({
         icon: "💧",
-        title: "כדאי להשלים שתייה",
-        text: `חסרים עוד ${waterRemaining.toLocaleString()} מ״ל ליעד היומי.`,
-        priority: Math.round(waterRemaining / Math.max(1, Number(profile.waterMl)) * 100),
+        title: hour < 17 ? "קצב השתייה נמוך כרגע" : "כדאי להשלים שתייה בהדרגה",
+        text: choose([`עד השעה הזו הגעת ל־${Math.round(waterProgress * 100)}% מיעד השתייה. כוס עכשיו ועוד אחת בהמשך יסגרו את הפער בנוחות.`, `נותרו ${waterRemaining.toLocaleString()} מ״ל. עדיף לפזר אותם עד הערב ולא להשלים הכול בבת אחת.`]),
+        priority: Math.round((dayProgress - waterProgress) * 100) + 35,
       });
-    if (proteinRemaining >= 20)
+    if (proteinRemaining >= 20 && (proteinProgress + .15 < dayProgress || hour >= 16))
       items.push({
         icon: "◉",
-        title: "חלבון עדיין נמוך",
-        text: `חסרים כ־${proteinRemaining} גרם. העדף מקור חלבון בארוחה הבאה.`,
-        priority: Math.round(proteinRemaining / Math.max(1, Number(profile.protein)) * 100) + 8,
+        title: `כדאי לחזק חלבון ב${nextMeal}`,
+        text: choose([`נשארו כ־${proteinRemaining} גרם ליעד. בחר מקור חלבון שאתה אוהב ושלב אותו בארוחה הקרובה.`, `הגעת ל־${Math.round(proteinProgress * 100)}% מיעד החלבון. פיזור החסר בין הארוחות יהיה נוח יותר מהשלמה מאוחרת.`]),
+        priority: Math.round((1 - proteinProgress) * 100) + (hour >= 16 ? 20 : 0),
       });
     if (fiber && fiber.percent < 70) items.push({ icon: "◇", title: "אפשר לחזק את הסיבים", text: `נרשמו כ־${Math.round(fiber.value)} מתוך ${Math.round(fiber.target)} גרם. קטניות, ירקות, פרי או דגן מלא יעזרו.`, priority: 100 - fiber.percent + 7 });
     if (produce && produce.percent < 70) items.push({ icon: "✦", title: "עוד צבע בארוחה הבאה", text: `נרשמו כ־${Math.round(produce.value)} מתוך ${Math.round(produce.target)} גרם ירקות ופירות.`, priority: 100 - produce.percent + 5 });
@@ -1122,13 +1129,22 @@ export default function Home() {
         text: now.getHours() < 14 ? "מבט קצר על הפערים עכשיו יעזור לבחור את הארוחה הבאה בלי לנחש." : "עדיף לפזר את האכילה ולא להגיע לארוחה הבאה רעב מאוד.",
         priority: 25,
       });
-    const rotating = [
-      { icon: "◇", title: "שדרוג קטן לארוחה הבאה", text: "נסה להוסיף מרכיב טרי וצבעוני. שינוי קטן ועקבי משפיע יותר מיום מושלם.", priority: 20 },
-      { icon: "◎", title: "בדוק רעב לפני הבחירה", text: "בחר כמות שמתאימה לרעב שלך, ואז עדכן. לא צריך לנחש מנה מושלמת.", priority: 20 },
-      { icon: "✦", title: "גיוון עוזר להתמיד", text: "אפשר לבחור היום מקור חלבון או ירק שלא אכלת אתמול.", priority: 20 },
-      { icon: "◷", title: "ארוחת ביניים מתוכננת", text: "אם צפוי פער ארוך, פרי עם יוגורט או אגוזים יכול למנוע רעב חד.", priority: 20 },
-    ];
-    items.push(rotating[(Number(String(state?.today?.date || "").replaceAll("-", "")) + Math.floor(now.getHours() / 3)) % rotating.length]);
+    const journeyStage = profile.journey?.stage || "starting";
+    const goal = profile.goal || "maintain";
+    if (latestWeightDelta !== null) {
+      const movingWithGoal = goal === "lose" ? latestWeightDelta < 0 : goal === "gain" ? latestWeightDelta > 0 : Math.abs(latestWeightDelta) <= .3;
+      items.push({ icon: movingWithGoal ? "↗" : "◎", title: movingWithGoal ? "המגמה מתקדמת בכיוון היעד" : "מדידה אחת אינה סיבה לשנות מסלול", text: movingWithGoal ? `השינוי האחרון הוא ${Math.abs(latestWeightDelta).toFixed(1)} ק״ג בכיוון המתאים. שמור על עקביות לפני התאמה נוספת.` : `השינוי האחרון הוא ${latestWeightDelta > 0 ? "+" : ""}${latestWeightDelta.toFixed(1)} ק״ג. נבחן כמה מדידות ולא נגיב לתנודה בודדת.`, priority: 34 });
+    } else if (journeyStage !== "starting") {
+      items.push({ icon: "◎", title: "חסר מדד כדי להבין את התהליך", text: "מדידת משקל נוספת תאפשר להבדיל בין תחושה למגמה בלי לשנות את היעד מוקדם מדי.", priority: 32 });
+    }
+    const contextual = hour < 11
+      ? [{ icon: "✦", title: "פתיחה שמתאימה להמשך היום", text: `ב${nextMeal} העדף שילוב שישאיר אותך שבע: חלבון, מקור סיבים ונוזלים.`, priority: 26 }]
+      : hour < 16
+        ? [{ icon: "◇", title: "בדיקת אמצע יום", text: `עד עכשיו נצרכו ${consumed.toLocaleString()} קלוריות. ${remaining > profile.calories * .55 ? "נשאר מרווח גדול — אין צורך לצמצם את ארוחת הצהריים." : "המשך לפי רעב ופזר את היתרה להמשך היום."}`, priority: 26 }]
+        : hour < 21
+          ? [{ icon: "◷", title: "תכנון הערב לפי מה שחסר", text: proteinRemaining >= 20 ? `בארוחה הקרובה עדיף לתת עדיפות לחלבון; נשארו כ־${proteinRemaining} גרם.` : "רוב יעדי היום מתקדמים. בחר ארוחה שמתאימה לרעב במקום להשלים מספרים בכוח.", priority: 26 }]
+          : [{ icon: "✓", title: "סיכום רגוע לפני סיום היום", text: `תועדו ${state?.today?.meals?.length || 0} ארוחות ו־${Number(state?.today?.waterMl || 0).toLocaleString()} מ״ל מים. מחר נשתמש בדפוס הזה כדי לדייק את ההמלצה.`, priority: 26 }];
+    items.push(...contextual);
     if (!items.length)
       items.push({
         icon: "✓",
@@ -1137,7 +1153,7 @@ export default function Home() {
         priority: 10,
       });
     return items.sort((a, b) => b.priority - a.priority);
-  }, [profile, waterRemaining, proteinRemaining, consumed, remaining, now, state?.today?.meals?.length, state?.today?.date, state?.dailyScore?.parameters]);
+  }, [profile, waterRemaining, proteinRemaining, consumed, remaining, now, state?.today?.meals?.length, state?.today?.date, state?.today?.waterMl, state?.dailyScore?.parameters, macros.protein, latestWeightDelta]);
   async function login(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -4950,7 +4966,7 @@ export default function Home() {
                 <div className="weight-history-chart">
                   <svg viewBox="0 0 600 160" role="img" aria-label="גרף היסטוריית משקל">
                     <polyline points={weightChartPoints.map((point: any) => `${point.x},${point.y}`).join(" ")} />
-                    {weightChartPoints.map((point: any) => <g key={point.id || point.date}><circle cx={point.x} cy={point.y} r="5" /><text x={point.x} y={point.y - 10}>{Number(point.weight).toFixed(1)}</text></g>)}
+                    {weightChartPoints.map((point: any) => <g className="weight-chart-point" key={point.id || point.date}><circle cx={point.x} cy={point.y} r="6" /><rect x={point.x - 24} y={point.y - 36} width="48" height="25" rx="9" /><text x={point.x} y={point.y - 18}>{Number(point.weight).toFixed(1)}</text></g>)}
                   </svg>
                   <div className="weight-chart-dates"><span>{new Date(`${visibleWeightEntries[0].date}T12:00:00`).toLocaleDateString("he-IL")}</span><strong>{weightChange === 0 ? "ללא שינוי" : `${weightChange > 0 ? "+" : ""}${weightChange} ק״ג`}</strong><span>{new Date(`${visibleWeightEntries.at(-1).date}T12:00:00`).toLocaleDateString("he-IL")}</span></div>
                 </div>
