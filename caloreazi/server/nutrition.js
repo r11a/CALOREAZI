@@ -72,6 +72,7 @@ const producePortions = [
   { pattern: /(?:^|\s)(?:עגבני(?:י)?ה|עגבניות|מלפפון|מלפפונים|גזר|גזרים|פלפל|פלפלים|ברוקולי|קישוא|קישואים|חציל|חצילים|כרובית|חסה|בטטה|בטטות|vegetable|vegetables)(?:\s|$)/i, grams: 100 },
 ];
 const genericProducePattern = /(?:ירק|ירקות|סלט)/i;
+const compositeMealPattern = /(?:כרי(?:ך|כים)|סנדוויץ|טוסט|פיתה|לאפה|המבורגר|pizza|sandwich|wrap)/i;
 
 function inferredProducePortion(name) {
   const normalized = String(name || "").replace(/[׳'״".,()·:;-]/g, " ").replace(/\s+/g, " ").trim();
@@ -86,13 +87,18 @@ function produceAmountForMeal(meal) {
   for (const item of items) {
     const sourceId = item.nutritionSource?.sourceId;
     const inferred = inferredProducePortion(item.confirmedName || item.name);
-    const explicitlyProduce = item.foodGroup === "produce" || produceIds.has(sourceId);
+    const trustedProduceSource = produceIds.has(sourceId);
+    const explicitlyProduce = item.foodGroup === "produce" || trustedProduceSource;
     if (!explicitlyProduce && !inferred) continue;
     const grams = Math.max(0, Number(item.grams) || 0);
     const quantity = Math.max(.1, Number(item.quantity) || 1);
-    amount += explicitlyProduce && grams ? grams * quantity : inferred * quantity;
+    const itemName = String(item.confirmedName || item.name || "");
+    if (compositeMealPattern.test(itemName)) amount += Math.min(80, inferred || 60) * quantity;
+    else if (trustedProduceSource && grams) amount += Math.min(300, grams) * quantity;
+    else if (explicitlyProduce && grams) amount += Math.min(grams, inferred ? inferred * 1.5 : 180) * quantity;
+    else amount += inferred * quantity;
   }
-  return Math.min(600, amount || inferredProducePortion(meal?.name));
+  return Math.min(400, amount || inferredProducePortion(meal?.name));
 }
 
 export function calculateDayScore(day, profile, activity = []) {
