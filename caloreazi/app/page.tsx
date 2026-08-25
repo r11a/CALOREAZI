@@ -689,6 +689,7 @@ export default function Home() {
   const [macroDetail, setMacroDetail] = useState<"protein" | "carbs" | "fat" | "">("");
   const [mealPreview, setMealPreview] = useState<any>(null);
   const [mealPreviewReturnToHistory, setMealPreviewReturnToHistory] = useState(false);
+  const [mealPreviewReturnToInsights, setMealPreviewReturnToInsights] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historySelectedDate, setHistorySelectedDate] = useState("");
@@ -2290,13 +2291,16 @@ export default function Home() {
   }
   function openMealPreview(meal: any, fromHistory = false) {
     setMealPreviewReturnToHistory(fromHistory);
+    setMealPreviewReturnToInsights(false);
     if (fromHistory) setHistoryOpen(false);
     setMealPreview(meal);
   }
   function closeMealPreview() {
     setMealPreview(null);
     if (mealPreviewReturnToHistory) setHistoryOpen(true);
+    if (mealPreviewReturnToInsights) setInsightsOpen(true);
     setMealPreviewReturnToHistory(false);
+    setMealPreviewReturnToInsights(false);
   }
   function updateMealItem(
     index: number,
@@ -2679,7 +2683,12 @@ export default function Home() {
     const id = insightsData?.summary?.topMealDetails?.id;
     if (!id) return;
     const meal = [state.today, ...(state.history || [])].flatMap((day: any) => day.meals || []).find((item: any) => item.id === id);
-    if (meal) { setMealPreviewReturnToHistory(false); setMealPreview(meal); }
+    if (meal) {
+      setMealPreviewReturnToHistory(false);
+      setMealPreviewReturnToInsights(true);
+      setInsightsOpen(false);
+      setMealPreview(meal);
+    }
   }
   function unlockCoachAudio() {
     if (typeof window === "undefined") return;
@@ -3235,7 +3244,7 @@ export default function Home() {
             {mealPreview.image ? <img className="meal-preview-image" src={mealPreview.image} alt={mealPreview.name} /> : <div className="meal-preview-placeholder">🍽</div>}
             <div className="meal-preview-values"><span className="calories"><small>קלוריות</small><strong>{mealPreview.kcal}</strong></span><span className="protein"><small>חלבון</small><strong>{mealPreview.protein} גרם</strong></span><span className="carbs"><small>פחמימות</small><strong>{mealPreview.carbs} גרם</strong></span><span className="fat"><small>שומן</small><strong>{mealPreview.fat} גרם</strong></span></div>
             {Array.isArray(mealPreview.items) && mealPreview.items.length > 0 && <div className="meal-preview-items"><strong>מרכיבי הארוחה</strong>{mealPreview.items.map((item: any, index: number) => <span key={`${item.name}-${index}`}><b>{item.name}</b><small>{item.grams ? `${item.grams} גרם` : item.quantity ? `כמות ${item.quantity}` : ""}</small></span>)}</div>}
-            <footer><button type="button" onClick={() => addMealToFavorites(mealPreview.id)} disabled={state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name)}>{state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name) ? "כבר במועדפים" : "הוסף למועדפים"}</button><button className="primary" type="button" onClick={closeMealPreview}>{mealPreviewReturnToHistory ? "חזרה להיסטוריה" : "חזרה למה אכלתי היום"}</button></footer>
+            <footer><button type="button" onClick={() => addMealToFavorites(mealPreview.id)} disabled={state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name)}>{state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name) ? "כבר במועדפים" : "הוסף למועדפים"}</button><button className="primary" type="button" onClick={closeMealPreview}>{mealPreviewReturnToHistory ? "חזרה להיסטוריה" : mealPreviewReturnToInsights ? "חזרה למגמות" : "חזרה למה אכלתי היום"}</button></footer>
           </section>
         </div>
       )}

@@ -504,6 +504,9 @@ test("insights waits for stable data before revealing animated charts", () => {
 test("balanced meal opens its full preview and mobile navigation is icon-led", () => {
   assert.match(page, /topMealDetails/);
   assert.match(page, /openTopMealPreview/);
+  assert.match(page, /setMealPreviewReturnToInsights\(true\)/);
+  assert.match(page, /setInsightsOpen\(false\)/);
+  assert.match(page, /חזרה למגמות/);
   assert.match(page, /length > 42/);
   assert.match(page, /className="nav-label"/);
   assert.match(page, /aria-label="מגמות"/);
