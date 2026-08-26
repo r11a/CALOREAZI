@@ -16,7 +16,7 @@ const foods = [
   ["lentils-cooked", "עדשים", ["עדשים מבושלות", "lentils"], 116, 9, 20.1, 0.4, 1.8],
   ["chickpeas-cooked", "חומוס גרגירים", ["גרגרי חומוס", "chickpeas"], 164, 8.9, 27.4, 2.6, 4.8],
   ["tahini-raw", "טחינה גולמית", ["טחינה", "tahini"], 595, 17, 21.2, 53.8, 0.5],
-  ["tomato", "עגבנייה", ["עגבניה", "tomato"], 18, 0.9, 3.9, 0.2, 2.6],
+  ["tomato", "עגבנייה", ["עגבניה", "עגבניות", "עגבניות שרי", "עגבניות שרי חצויות", "tomato", "tomatoes", "cherry tomato", "cherry tomatoes"], 18, 0.9, 3.9, 0.2, 2.6],
   ["cucumber", "מלפפון", ["cucumber"], 15, 0.7, 3.6, 0.1, 1.7],
   ["lettuce", "חסה", ["lettuce"], 15, 1.4, 2.9, 0.2, 0.8],
   ["avocado", "אבוקדו", ["avocado"], 160, 2, 8.5, 14.7, 0.7],
@@ -44,6 +44,18 @@ const foods = [
 ].map(([sourceId, name, aliases, kcalPer100, proteinPer100, carbsPer100, fatPer100, sugarPer100]) => ({ source: "CALOREAZI_CURATED", sourceId, sourceVersion: "2026-08-21", name, aliases, kcalPer100, proteinPer100, carbsPer100, fatPer100, sugarPer100 }));
 
 function normalize(value) { return String(value || "").toLocaleLowerCase("he").replace(/[׳'״".,()]/g, "").replace(/\s+/g, " ").trim(); }
+const freshProducePattern = /(עגבני|מלפפון|חסה|גזר|פלפל|ברוקולי|קישוא|כרובית|תפוח(?:\s|$)|בננה|תפוז|מנגו|שזיף|מלון|אשכולית|אבטיח|קיווי|אפרסק|tomato|cucumber|lettuce|carrot|pepper|broccoli|zucchini|apple|banana|orange|mango|plum|melon|grapefruit|watermelon|kiwi|peach)/i;
+const processedProducePattern = /(מיובש|מטוגן|צ.?יפס|ריבה|מסוכר|רוטב|ממרח|dried|sun.?dried|fried|chips|jam|candied|sauce|paste|powder)/i;
+
+export function plausibleNutritionMatch(query, food) {
+  if (!food || !(Number(food.kcalPer100) > 0) || Number(food.kcalPer100) > 950) return false;
+  const requested = String(query || ""); const matched = String(food.name || "");
+  if (freshProducePattern.test(requested) && !processedProducePattern.test(requested)) {
+    if (processedProducePattern.test(matched) || Number(food.kcalPer100) > 200) return false;
+  }
+  const macroEnergy = Number(food.proteinPer100 || 0) * 4 + Number(food.carbsPer100 || 0) * 4 + Number(food.fatPer100 || 0) * 9;
+  return !(macroEnergy > 0 && Math.abs(Number(food.kcalPer100) - macroEnergy) / Math.max(Number(food.kcalPer100), macroEnergy) > .45);
+}
 
 export function findNutritionFood(name) {
   const target = normalize(name);
@@ -111,8 +123,8 @@ export async function enrichVisionItemsAuthoritative(items) {
   let unmatched = 0; const enriched = [];
   for (const item of items) {
     let food = findNutritionFood(item.name);
-    if (!food) { try { food = await findMohNutritionFood(item.name); } catch { food = null; } }
-    if (!food) { try { food = await findUsdaFood(item.searchNameEn || item.name); } catch { food = null; } }
+    if (!food) { try { const candidate = await findMohNutritionFood(item.name); food = plausibleNutritionMatch(item.name, candidate) ? candidate : null; } catch { food = null; } }
+    if (!food) { try { const query = item.searchNameEn || item.name; const candidate = await findUsdaFood(query); food = plausibleNutritionMatch(query, candidate) ? candidate : null; } catch { food = null; } }
     if (!food || !(food.kcalPer100 > 0)) { unmatched += 1; enriched.push({ ...item, kcalPer100: 0, proteinPer100: 0, carbsPer100: 0, fatPer100: 0, sugarPer100: null, nutritionSource: null, nutritionStatus: "needs_confirmation" }); continue; }
     enriched.push({ ...item, kcalPer100: food.kcalPer100, proteinPer100: food.proteinPer100, carbsPer100: food.carbsPer100, fatPer100: food.fatPer100, sugarPer100: food.sugarPer100, fiberPer100: food.fiberPer100 ?? null, sodiumMgPer100: food.sodiumMgPer100 ?? null, saturatedFatPer100: food.saturatedFatPer100 ?? null, addedSugarPer100: food.addedSugarPer100 ?? null, nutritionSource: { source: food.source, sourceId: food.sourceId, sourceVersion: food.sourceVersion }, nutritionStatus: "matched" });
   }

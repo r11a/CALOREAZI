@@ -42,6 +42,12 @@ test("nutrition confidence distinguishes government and community sources", () =
   assert.equal(nutritionConfidence({ source: "Open Food Facts", barcode: "7290000000000", kcal: 100, protein: 1, carbs: 20, fat: 1 }).level, "medium");
 });
 
+test("fresh tomatoes cannot be saved with dried-tomato energy density", () => {
+  const result = validateMealNutrition({ kcal: 302, protein: 14, carbs: 56, fat: 3, items: [{ name: "עגבניות שרי חצויות", grams: 100, quantity: 1, kcalPer100: 302 }] });
+  assert.equal(result.valid, false);
+  assert.ok(result.issues.some((issue) => issue.code === "implausible_fresh_produce"));
+});
+
 test("food search cache is bounded by TTL and returns a clone", async () => {
   clearFoodSearchCache();
   const original = { products: [{ name: "קוטג׳" }] };

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { energyKcal, enrichVisionItems, estimateMealSugar, findMohNutritionFood, findNutritionFood } from "../server/nutrition-catalog.js";
+import { energyKcal, enrichVisionItems, estimateMealSugar, findMohNutritionFood, findNutritionFood, plausibleNutritionMatch } from "../server/nutrition-catalog.js";
 import { checkRateLimit, requireSameOrigin } from "../server/security.js";
 import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "../server/domains/meals/repository.js";
 import { normalizePhotoPortions, parseVisionResult } from "../server/meal-analysis.js";
@@ -23,6 +23,13 @@ test("coffee uses curated realistic values instead of vision estimates", () => {
   assert.equal(findNutritionFood("קפה שחור").kcalPer100, 2);
   assert.equal(findNutritionFood("קפה עם חלב בספל").sourceId, "coffee-with-milk");
   assert.equal(findNutritionFood("cappuccino").sourceId, "coffee-with-milk");
+});
+
+test("fresh cherry tomatoes resolve to fresh tomato values and reject dried-food matches", () => {
+  assert.equal(findNutritionFood("עגבניות שרי חצויות").sourceId, "tomato");
+  assert.equal(findNutritionFood("cherry tomatoes").kcalPer100, 18);
+  assert.equal(plausibleNutritionMatch("halved cherry tomatoes", { name: "Tomatoes, sun-dried", kcalPer100: 302, proteinPer100: 14, carbsPer100: 56, fatPer100: 3 }), false);
+  assert.equal(plausibleNutritionMatch("עגבניות שרי", { name: "עגבניות טריות", kcalPer100: 18, proteinPer100: .9, carbsPer100: 3.9, fatPer100: .2 }), true);
 });
 
 test("authoritative catalog exposes total dietary sugar separately from carbohydrates", () => {

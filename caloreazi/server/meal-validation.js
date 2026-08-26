@@ -1,5 +1,7 @@
 const beveragePattern = /(קפה|אספרסו|לאטה|קפוצ.?ינו|תה|שוקו|coffee|espresso|latte|cappuccino|tea|cocoa)/i;
 const energyDensePattern = /(עוגה|עוגת|ביסקוויט|עוגייה|עוגיות|שוקולד|קרמל|cake|cookie|biscuit|chocolate|caramel)/i;
+const freshProducePattern = /(עגבני|מלפפון|חסה|גזר|פלפל|ברוקולי|קישוא|כרובית|תפוח(?:\s|$)|בננה|תפוז|מנגו|שזיף|מלון|אשכולית|אבטיח|קיווי|אפרסק|tomato|cucumber|lettuce|carrot|pepper|broccoli|zucchini|apple|banana|orange|mango|plum|melon|grapefruit|watermelon|kiwi|peach)/i;
+const processedProducePattern = /(מיובש|מטוגן|צ.?יפס|ריבה|מסוכר|רוטב|ממרח|dried|sun.?dried|fried|chips|jam|candied|sauce|paste)/i;
 
 export function validateMealNutrition(input = {}) {
   const items = Array.isArray(input.items) ? input.items : [];
@@ -20,6 +22,8 @@ export function validateMealNutrition(input = {}) {
       issues.push({ code: "implausible_beverage", item: name, message: "זוהה חישוב לא סביר למשקה. בדוק את הסוג, הכמות והתוספות." });
     if (item.explicitCalories !== true && !Number(item.kcalPerUnit) && energyDensePattern.test(name) && grams >= 80 && grams <= 150 && per100 > 0 && per100 < 120)
       issues.push({ code: "implausible_energy_density", item: name, message: `הערך הקלורי של ${name || "הפריט"} נמוך באופן חריג. יש לבדוק אם הערך הוא ליחידה או ל־100 גרם.` });
+    if (item.explicitCalories !== true && freshProducePattern.test(name) && !processedProducePattern.test(name) && per100 > 200)
+      issues.push({ code: "implausible_fresh_produce", item: name, message: `הערך הקלורי של ${name || "הפריט"} אינו מתאים לפרי או ירק טרי. נדרש חישוב מחדש ממקור תזונתי מתאים.` });
     if (item.explicitCalories !== true && Number(item.kcalPerUnit) > 0 && per100 > 0 && grams > 0) {
       const perUnit = Number(item.kcalPerUnit) * Math.max(.1, Number(item.quantity) || 1);
       const fromWeight = grams * per100 / 100;
