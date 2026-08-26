@@ -531,7 +531,7 @@ test("desktop destinations use a full system-screen shell without visible scroll
 
 test("meal review keeps final actions in document flow and uses a toggle star", () => {
   assert.match(page, /meal-favorite-star/);
-  assert.match(page, /aria-pressed=\{saveAsFavorite\}/);
+  assert.match(page, /aria-pressed=\{draftAlreadyFavorite\}/);
   assert.match(page, /name="star"/);
   assert.match(page, /estimatedCalorieRange/);
   assert.match(expansionCss, /meal-modal>footer\{position:static!important/);
@@ -543,4 +543,8 @@ test("favorite selection persists across historic days and offline sync", () => 
   assert.match(favoritesRoute, /body\.meal && typeof body\.meal === "object"/);
   assert.match(page, /queueMutation\("\/api\/favorites"/);
   assert.match(page, /נשמרה גם במועדפים ★/);
+  assert.match(page, /async function toggleDraftFavorite/);
+  assert.match(page, /שמירה מיידית במועדפים/);
+  assert.match(page, /נשמר במועדפים ✓/);
+  assert.match(favoritesRoute, /item\.meal\?\.name !== String\(name \|\| ""\)\.trim\(\)/);
 });

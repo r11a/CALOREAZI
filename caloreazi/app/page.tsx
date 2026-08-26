@@ -562,6 +562,7 @@ export default function Home() {
   const [analysisJobId, setAnalysisJobId] = useState("");
   const [saveToLibrary, setSaveToLibrary] = useState(false);
   const [saveAsFavorite, setSaveAsFavorite] = useState(false);
+  const [favoriteStatus, setFavoriteStatus] = useState("");
   const [foodVisibility, setFoodVisibility] = useState<"private" | "shared">(
     "private",
   );
@@ -780,6 +781,8 @@ export default function Home() {
   useEffect(() => () => {
     mealCameraStream.current?.getTracks().forEach((track) => track.stop());
   }, []);
+
+  useEffect(() => { if (!mealOpen) setFavoriteStatus(""); }, [mealOpen]);
 
   useEffect(() => {
     api("/api/state")
@@ -1838,6 +1841,26 @@ export default function Home() {
     try {
       setState(await api("/api/favorites", { method: "DELETE", body: JSON.stringify({ id }) }));
     } catch (e) { setError((e as Error).message); }
+  }
+  async function toggleDraftFavorite() {
+    if (busy) return;
+    const calculated = calculateMealDraft(mealItems, mealForm); const name = String(mealForm.name || mealItems.map((item) => item.name).filter(Boolean).slice(0, 3).join(" · ")).trim();
+    if (!name || !(Number(calculated.kcal) > 0)) { setFavoriteStatus("כדי לשמור במועדפים נדרש שם וערך קלורי."); return; }
+    const existing = (state.favorites || []).find((item: any) => item.meal?.name === name);
+    try {
+      setFavoriteStatus(saveAsFavorite || existing ? "מסיר מהמועדפים…" : "שומר במועדפים…");
+      if (saveAsFavorite || existing) {
+        const payload = { id: existing?.id, name };
+        if (navigator.onLine) setState(await api("/api/favorites", { method: "DELETE", body: JSON.stringify(payload) }));
+        else { await queueMutation("/api/favorites", "DELETE", JSON.stringify(payload)); setState((current: any) => ({ ...current, favorites: (current.favorites || []).filter((item: any) => item.meal?.name !== name) })); setOfflineQueueCount(await offlinePendingCount()); }
+        setSaveAsFavorite(false); setFavoriteStatus("הארוחה הוסרה מהמועדפים.");
+      } else {
+        const meal = { name, kcal: Math.round(calculated.kcal), protein: Math.round(calculated.protein), carbs: Math.round(calculated.carbs), fat: Math.round(calculated.fat) };
+        if (navigator.onLine) setState(await api("/api/favorites", { method: "POST", body: JSON.stringify({ meal }) }));
+        else { await queueMutation("/api/favorites", "POST", JSON.stringify({ meal })); setState((current: any) => ({ ...current, favorites: [...(current.favorites || []), { id: `offline-favorite-${crypto.randomUUID()}`, createdAt: new Date().toISOString(), meal, pendingSync: true }] })); setOfflineQueueCount(await offlinePendingCount()); }
+        setSaveAsFavorite(true); setFavoriteStatus(navigator.onLine ? "נשמר במועדפים ✓" : "נשמר במכשיר ויסונכרן למועדפים ✓");
+      }
+    } catch (e) { setFavoriteStatus(`השמירה במועדפים נכשלה: ${(e as Error).message}`); }
   }
   async function saveFavorite(favorite: any) {
     try { setState(await api("/api/favorites", { method: "PUT", body: JSON.stringify({ id: favorite.id, ...favorite.meal }) })); setPendingFavorite(null); }
@@ -3013,6 +3036,8 @@ export default function Home() {
 
   const mealDraftPreview = calculateMealDraft(mealItems, mealForm);
   const mealReliabilityPreview = assessMealReliability({ ...mealForm, items: mealItems, source: mealSource, explicitCalories: mealItems.length === 0 && mealSource === "manual" && Number(mealForm.kcal) > 0 });
+  const draftFavoriteName = String(mealForm.name || mealItems.map((item) => item.name).filter(Boolean).slice(0, 3).join(" · ")).trim();
+  const draftAlreadyFavorite = saveAsFavorite || (state.favorites || []).some((item: any) => item.meal?.name === draftFavoriteName);
   const hasPhotoScaleReference = ["plate", "card"].includes(String(profile?.cameraCalibration?.reference || ""));
   const mealRecognitionScore = mealConfidence === "high" ? (mealSource === "photo" && !hasPhotoScaleReference ? 72 : 90) : mealConfidence === "medium" ? 70 : 45;
   const estimatedCalorieRange = mealSource === "photo" && !hasPhotoScaleReference ? { low: Math.round(Number(mealDraftPreview.kcal || 0) * .82 / 5) * 5, high: Math.round(Number(mealDraftPreview.kcal || 0) * 1.18 / 5) * 5 } : null;
@@ -5557,7 +5582,7 @@ export default function Home() {
             </section>}
             {mealReviewReady && photoQuality?.level !== "warning" && (mealForm.name || mealItems.length > 0) && <section className="unified-meal-result">
               {photoPreview && <img className="unified-meal-image" src={photoPreview} alt={mealForm.name || "הארוחה שזוהתה"} />}
-              <header><div><small>הארוחה שלך</small><h3>{mealForm.name || "ארוחה חדשה"}</h3></div><strong>{Math.round(Number(mealDraftPreview.kcal || 0)).toLocaleString()}<small> קלוריות</small></strong><button type="button" className={`meal-favorite-star ${saveAsFavorite ? "selected" : ""}`} onClick={() => setSaveAsFavorite((value) => !value)} aria-pressed={saveAsFavorite} aria-label={saveAsFavorite ? "הסרה מהמועדפים" : "שמירה במועדפים"} title={saveAsFavorite ? "יישמר במועדפים" : "שמירה במועדפים"}><AppIcon name="star" /></button></header>
+              <header><div><small>הארוחה שלך</small><h3>{mealForm.name || "ארוחה חדשה"}</h3></div><strong>{Math.round(Number(mealDraftPreview.kcal || 0)).toLocaleString()}<small> קלוריות</small></strong><button type="button" className={`meal-favorite-star ${draftAlreadyFavorite ? "selected" : ""}`} onClick={toggleDraftFavorite} aria-pressed={draftAlreadyFavorite} aria-label={draftAlreadyFavorite ? "הסרה מהמועדפים" : "שמירה מיידית במועדפים"} title={draftAlreadyFavorite ? "נשמר במועדפים" : "שמירה מיידית במועדפים"}><AppIcon name="star" /></button>{favoriteStatus && <small className="meal-favorite-status" role="status">{favoriteStatus}</small>}</header>
               <div className="meal-result-rings">
                 {[
                   { key: "recognition", label: ["photo", "voice"].includes(mealSource) ? "ציון זיהוי" : "אמינות חישוב", value: ["photo", "voice"].includes(mealSource) ? mealRecognitionScore : mealReliabilityPreview.score, amount: `${["photo", "voice"].includes(mealSource) ? mealRecognitionScore : mealReliabilityPreview.score}/100` },
