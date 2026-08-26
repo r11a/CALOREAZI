@@ -3,6 +3,7 @@
 
 import {
   ChangeEvent,
+  type CSSProperties,
   FormEvent,
   useEffect,
   useMemo,
@@ -5472,10 +5473,17 @@ export default function Home() {
             {(!manualAiMode || mealItems.length > 0) && <>
             {mealSource === "photo" ? <section className={`photo-review-hero ${photoQuality?.level === "warning" ? "retry" : ""} ${busy && !mealReviewReady ? "analyzing" : ""}`}>
               {photoPreview ? <img src={photoPreview} alt="התמונה שצולמה" /> : <div className="photo-placeholder"><AppIcon name="camera" /></div>}
-              {photoQuality?.level === "warning" ? <div className="photo-retry-message"><strong>צריך צילום ברור יותר</strong><p>{photoStatus}</p><button type="button" onClick={() => directCameraInput.current?.click()}><AppIcon name="camera" /> צלם שוב</button></div> : busy && !mealReviewReady ? <div className="photo-analyzing" role="status"><span className="scan-spark"><AppIcon name="sparkles" /></span><strong>מזהה מה יש בתמונה</strong><p>{photoStatus}</p><i><b /></i></div> : <div className="photo-detection"><small>זוהה בתמונה</small><h3>{mealForm.name || "הארוחה שלך"}</h3>{mealReviewReady && <><div className={`recognition-score ${mealConfidence}`} aria-label={`ציון זיהוי ${mealRecognitionScore} מתוך 100`}><span><small>ציון זיהוי</small><strong>{mealRecognitionScore}<i>/100</i></strong></span><b>{mealConfidence === "high" ? "זיהוי ברור" : mealConfidence === "medium" ? "מומלץ לבדוק כמויות" : "נדרשת בדיקה"}</b></div><strong className="detected-calories">{Math.round(Number(mealDraftPreview.kcal || 0))} <small>קלוריות</small></strong></>}</div>}
+              {photoQuality?.level === "warning" ? <div className="photo-retry-message"><strong>צריך צילום ברור יותר</strong><p>{photoStatus}</p><button type="button" onClick={() => directCameraInput.current?.click()}><AppIcon name="camera" /> צלם שוב</button></div> : busy && !mealReviewReady ? <div className="photo-analyzing" role="status"><span className="scan-spark"><AppIcon name="sparkles" /></span><strong>מזהה מה יש בתמונה</strong><p>{photoStatus}</p><i><b /></i></div> : <div className="photo-detection"><small>זוהה בתמונה</small><h3>{mealForm.name || "הארוחה שלך"}</h3>{mealReviewReady && <strong className="detected-calories">{Math.round(Number(mealDraftPreview.kcal || 0))} <small>קלוריות</small></strong>}</div>}
             </section> : <section className="meal-review-intro">
               <span className={`meal-source-icon ${mealSource}`}><AppIcon name={mealSource === "voice" ? "mic" : "plus"} /></span>
               <div><small>{mealSource === "voice" ? "זוהה מהכתבה" : "הוספה ידנית"}</small><strong>{busy ? "מכין את התוצאה…" : mealReviewReady ? "מוכן לבדיקה ולאישור" : "ממתין לפרטים"}</strong>{photoStatus && <p className="photo-status">{photoStatus}</p>}</div>
+            </section>}
+            {mealSource === "photo" && mealReviewReady && photoQuality?.level !== "warning" && <section className={`recognition-result-card ${mealConfidence}`} aria-label={`ציון זיהוי ${mealRecognitionScore} מתוך 100`}>
+              <span className="recognition-gauge" style={{ "--recognition-offset": 100 - mealRecognitionScore } as CSSProperties}>
+                <svg viewBox="0 0 44 44" role="img" aria-hidden="true"><circle className="recognition-track" cx="22" cy="22" r="18" pathLength="100" /><circle className="recognition-progress" cx="22" cy="22" r="18" pathLength="100" /></svg>
+                <strong>{mealRecognitionScore}<small>/100</small></strong>
+              </span>
+              <div><small>ציון הזיהוי</small><strong>{mealConfidence === "high" ? "זיהוי ברור" : mealConfidence === "medium" ? "מומלץ לבדוק כמויות" : "נדרשת בדיקה"}</strong><p>{mealConfidence === "high" ? "הארוחה והרכיבים זוהו בביטחון גבוה." : mealConfidence === "medium" ? "הרכיבים זוהו, אך כדאי לוודא את הכמויות." : "כדאי לבדוק את הרכיבים לפני האישור."}</p></div>
             </section>}
             {!busy && photoQuality?.level !== "warning" && <details className="meal-details" open={mealDetailsOpen || !mealItems.length} onToggle={(event) => setMealDetailsOpen(event.currentTarget.open)}>
               <summary><span><strong>יש טעות? ערוך</strong><small>שם, כמות, משקל או ערכים</small></span><b>⌄</b></summary>

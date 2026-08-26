@@ -206,12 +206,16 @@ test("photo capture skips manual entry and shows a focused animated recognition 
   assert.match(page, /setManualAiMode\(false\)/);
   assert.match(page, /photo-analyzing/);
   assert.match(page, /מזהה מה יש בתמונה/);
-  assert.match(page, /recognition-score/);
+  assert.match(page, /recognition-result-card/);
+  assert.match(page, /recognition-gauge/);
   assert.match(page, /ציון זיהוי/);
   assert.match(page, /meal-preview-recognition/);
   assert.match(page, /צריך צילום ברור יותר/);
   assert.match(css, /scan-progress/);
   assert.match(css, /photo-review-hero/);
+  assert.match(expansionCss, /\.modal-layer>\.meal-modal\{display:block!important/);
+  assert.match(expansionCss, /touch-action:pan-y/);
+  assert.match(expansionCss, /recognition-ring-draw/);
 });
 
 test("photo preparation reuses the decoded image and voice does not auto-favorite meals", () => {
