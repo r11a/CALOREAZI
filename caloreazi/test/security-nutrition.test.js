@@ -3,7 +3,7 @@ import test from "node:test";
 import { energyKcal, enrichVisionItems, estimateMealSugar, findMohNutritionFood, findNutritionFood } from "../server/nutrition-catalog.js";
 import { checkRateLimit, requireSameOrigin } from "../server/security.js";
 import { findOwnedMeal, removeOwnedMeal, restoreOwnedMeal } from "../server/domains/meals/repository.js";
-import { parseVisionResult } from "../server/meal-analysis.js";
+import { normalizePhotoPortions, parseVisionResult } from "../server/meal-analysis.js";
 
 test("nutrition values come from a traceable catalog rather than vision output", () => {
   const result = enrichVisionItems([{ name: "חזה עוף צלוי", grams: 150, quantity: 1, kcalPer100: 999 }]);
@@ -52,6 +52,17 @@ test("Israeli nutrition adapter accepts only a close Hebrew match with traceable
 test("vision parser accepts identification fields without nutrition estimates", () => {
   const result = parseVisionResult('{"name":"ארוחה","items":[{"name":"אורז","grams":150,"quantity":1,"unit":"מנה"}],"confidence":"medium"}');
   assert.deepEqual(Object.keys(result.items[0]).sort(), ["grams", "name", "quantity", "unit"]);
+});
+
+test("photo produce cannot inherit the entire plate weight for every ingredient", () => {
+  const items = normalizePhotoPortions([
+    { name: "עגבניות", grams: 900, quantity: 1, nutritionSource: { sourceId: "tomato" } },
+    { name: "מלפפון", grams: 800, quantity: 1, nutritionSource: { sourceId: "cucumber" } },
+    { name: "חזה עוף", grams: 110, quantity: 4, nutritionSource: { sourceId: "chicken-breast-cooked" } },
+  ]);
+  assert.equal(items.slice(0, 2).reduce((sum, item) => sum + item.grams * item.quantity, 0), 700);
+  assert.equal(items[2].grams * items[2].quantity, 440);
+  assert.ok(items[0].portionAdjusted && items[1].portionAdjusted);
 });
 
 test("meal repository enforces ownership across current and historic days", () => {

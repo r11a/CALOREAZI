@@ -527,3 +527,12 @@ test("desktop destinations use a full system-screen shell without visible scroll
   assert.match(expansionCss, /scrollbar-width:none/);
   assert.match(expansionCss, /coach-sheet\{position:relative/);
 });
+
+test("meal review keeps final actions in document flow and uses a toggle star", () => {
+  assert.match(page, /meal-favorite-star/);
+  assert.match(page, /aria-pressed=\{saveAsFavorite\}/);
+  assert.match(page, /name="star"/);
+  assert.match(page, /estimatedCalorieRange/);
+  assert.match(expansionCss, /meal-modal>footer\{position:static!important/);
+  assert.match(expansionCss, /meal-favorite-star\.selected \.app-icon\{fill:currentColor/);
+});

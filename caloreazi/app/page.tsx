@@ -3006,7 +3006,9 @@ export default function Home() {
 
   const mealDraftPreview = calculateMealDraft(mealItems, mealForm);
   const mealReliabilityPreview = assessMealReliability({ ...mealForm, items: mealItems, source: mealSource, explicitCalories: mealItems.length === 0 && mealSource === "manual" && Number(mealForm.kcal) > 0 });
-  const mealRecognitionScore = mealConfidence === "high" ? 90 : mealConfidence === "medium" ? 70 : 45;
+  const hasPhotoScaleReference = ["plate", "card"].includes(String(profile?.cameraCalibration?.reference || ""));
+  const mealRecognitionScore = mealConfidence === "high" ? (mealSource === "photo" && !hasPhotoScaleReference ? 72 : 90) : mealConfidence === "medium" ? 70 : 45;
+  const estimatedCalorieRange = mealSource === "photo" && !hasPhotoScaleReference ? { low: Math.round(Number(mealDraftPreview.kcal || 0) * .82 / 5) * 5, high: Math.round(Number(mealDraftPreview.kcal || 0) * 1.18 / 5) * 5 } : null;
 
   return (
     <main className={dark ? "app-shell theme-dark" : "app-shell"} dir={profile?.language === "en" ? "ltr" : "rtl"} lang={profile?.language || "he"}>
@@ -5548,7 +5550,7 @@ export default function Home() {
             </section>}
             {mealReviewReady && photoQuality?.level !== "warning" && (mealForm.name || mealItems.length > 0) && <section className="unified-meal-result">
               {photoPreview && <img className="unified-meal-image" src={photoPreview} alt={mealForm.name || "הארוחה שזוהתה"} />}
-              <header><div><small>הארוחה שלך</small><h3>{mealForm.name || "ארוחה חדשה"}</h3></div><strong>{Math.round(Number(mealDraftPreview.kcal || 0)).toLocaleString()}<small> קלוריות</small></strong></header>
+              <header><div><small>הארוחה שלך</small><h3>{mealForm.name || "ארוחה חדשה"}</h3></div><strong>{Math.round(Number(mealDraftPreview.kcal || 0)).toLocaleString()}<small> קלוריות</small></strong><button type="button" className={`meal-favorite-star ${saveAsFavorite ? "selected" : ""}`} onClick={() => setSaveAsFavorite((value) => !value)} aria-pressed={saveAsFavorite} aria-label={saveAsFavorite ? "הסרה מהמועדפים" : "שמירה במועדפים"} title={saveAsFavorite ? "יישמר במועדפים" : "שמירה במועדפים"}><AppIcon name="star" /></button></header>
               <div className="meal-result-rings">
                 {[
                   { key: "recognition", label: ["photo", "voice"].includes(mealSource) ? "ציון זיהוי" : "אמינות חישוב", value: ["photo", "voice"].includes(mealSource) ? mealRecognitionScore : mealReliabilityPreview.score, amount: `${["photo", "voice"].includes(mealSource) ? mealRecognitionScore : mealReliabilityPreview.score}/100` },
@@ -5557,8 +5559,8 @@ export default function Home() {
                   { key: "fat", label: "שומן", value: Math.min(100, Math.round(Number(mealDraftPreview.fat || 0) / Math.max(1, Number(profile.fat || 0) - macros.fat) * 100)), amount: `${Math.round(Number(mealDraftPreview.fat || 0))} מתוך ${Math.max(0, Math.round(Number(profile.fat || 0) - macros.fat))} גרם` },
                 ].map((ring) => <span className={`meal-result-ring ${ring.key}`} key={ring.key} style={{ "--ring-value": ring.value } as CSSProperties}><i><svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="18" pathLength="100" /><circle cx="22" cy="22" r="18" pathLength="100" /></svg><b>{ring.value}%</b></i><strong>{ring.label}</strong><small>{ring.amount}</small></span>)}
               </div>
-              <p className="meal-calculation-note">התוצאה חושבה מחיבור {Math.max(1, mealItems.length)} {mealItems.length === 1 ? "רכיב" : "רכיבים"} לפי הכמות והמשקל. כיסוי המקורות התזונתיים הוא {mealReliabilityPreview.coverage}% — מומלץ לבדוק רק פריטים שסומנו באמינות נמוכה.</p>
-              <div className="meal-result-actions"><button type="button" onClick={() => { setMealDetailsOpen(true); window.requestAnimationFrame(() => document.querySelector(".meal-details")?.scrollIntoView({ behavior: "smooth", block: "start" })); }}><AppIcon name="edit" /> עריכה</button><button type="button" onClick={recalculateMealWithAi} disabled={busy}><AppIcon name="sparkles" /> {busy ? "מחשב…" : "חשב מחדש"}</button><button type="button" className={saveAsFavorite ? "selected" : ""} onClick={() => setSaveAsFavorite((value) => !value)}><AppIcon name="heart" /> {saveAsFavorite ? "יישמר במועדפים" : "שמירה במועדפים"}</button></div>
+              <p className="meal-calculation-note">התוצאה חושבה מחיבור {Math.max(1, mealItems.length)} {mealItems.length === 1 ? "רכיב" : "רכיבים"} לפי הכמות והמשקל. כיסוי המקורות התזונתיים הוא {mealReliabilityPreview.coverage}%. {estimatedCalorieRange ? `בלי קנה מידה בתמונה, המשקל משוער והטווח הסביר הוא ${estimatedCalorieRange.low.toLocaleString()}–${estimatedCalorieRange.high.toLocaleString()} קלוריות.` : "הצילום כולל קנה מידה שהוגדר בכיול."}</p>
+              <div className="meal-result-actions"><button type="button" onClick={() => { setMealDetailsOpen(true); window.requestAnimationFrame(() => document.querySelector(".meal-details")?.scrollIntoView({ behavior: "smooth", block: "start" })); }}><AppIcon name="edit" /> עריכה</button><button type="button" onClick={recalculateMealWithAi} disabled={busy}><AppIcon name="sparkles" /> {busy ? "מחשב…" : "חשב מחדש"}</button></div>
             </section>}
             {!busy && photoQuality?.level !== "warning" && <details className="meal-details" open={mealDetailsOpen || !mealItems.length} onToggle={(event) => setMealDetailsOpen(event.currentTarget.open)}>
               <summary><span><strong>יש טעות? ערוך</strong><small>שם, כמות, משקל או ערכים</small></span><b>⌄</b></summary>
