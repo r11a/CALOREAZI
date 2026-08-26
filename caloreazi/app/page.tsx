@@ -1695,11 +1695,18 @@ export default function Home() {
         });
         latest = await api("/api/state");
       }
-      if (!catalogOnly && saveAsFavorite && savedMealId && navigator.onLine) {
-        latest = await api("/api/favorites", { method: "POST", body: JSON.stringify({ mealId: savedMealId }) });
+      if (!catalogOnly && saveAsFavorite && savedMealId) {
+        const favoritePayload = { mealId: savedMealId, meal: { name: finalMeal.name, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat } };
+        if (navigator.onLine) latest = await api("/api/favorites", { method: "POST", body: JSON.stringify(favoritePayload) });
+        else {
+          await queueMutation("/api/favorites", "POST", JSON.stringify(favoritePayload));
+          latest.favorites = latest.favorites || [];
+          if (!latest.favorites.some((item: any) => item.meal?.name === finalMeal.name)) latest.favorites.push({ id: `offline-favorite-${savedMealId}`, createdAt: new Date().toISOString(), meal: favoritePayload.meal, pendingSync: true });
+          setOfflineQueueCount(await offlinePendingCount());
+        }
       }
       setState(latest);
-      if (!catalogOnly) setMealResult({ name: navigator.onLine ? finalMeal.name : `${finalMeal.name} · ממתין לסנכרון`, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId) });
+      if (!catalogOnly) setMealResult({ name: navigator.onLine ? finalMeal.name : `${finalMeal.name} · ממתין לסנכרון`, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId), favoriteSaved: saveAsFavorite });
       if (!catalogOnly && !editingMealId && savedLocalDate === latest.today?.date && consumed + Number(finalMeal.kcal) > dailyCalorieTarget) {
         setCalorieOverage({ id: savedMealId, meal: finalMeal, overBy: consumed + Number(finalMeal.kcal) - dailyCalorieTarget });
         if (notificationPermission === "granted") new Notification("CALOREAZI", { body: `חריגה של ${Math.round(consumed + Number(finalMeal.kcal) - dailyCalorieTarget)} קלוריות. אפשר לערוך או לבטל את ההוספה.` });
@@ -3148,7 +3155,7 @@ export default function Home() {
       )}
       {offlineQueueCount > 0 && !syncCenterOpen && <button className="offline-queue-status" type="button" onClick={async () => { setOfflineQueueItems(await listOfflineQueue()); setSyncCenterOpen(true); }}>{offlineQueueCount} {offlineQueueCount === 1 ? "פעולה ממתינה" : "פעולות ממתינות"} לסנכרון · לפרטים</button>}
       {syncCenterOpen && <div className="modal-layer sync-center-layer"><button className="backdrop" onClick={() => setSyncCenterOpen(false)} /><section className="settings-modal sync-center"><header><div><h2>מרכז הסנכרון</h2><p>{!online ? "אין חיבור כרגע. אפשר להמשיך לעבוד כרגיל." : syncStatus === "syncing" ? "הנתונים נשלחים כעת לפי סדר ההזנה." : offlineQueueItems.length ? "הנתונים שמורים במכשיר ולא ייעלמו." : "כל הנתונים מעודכנים בשרת."}</p></div><button type="button" onClick={() => setSyncCenterOpen(false)} aria-label="סגור">×</button></header><div className="sync-summary"><span className={online ? "connected" : "disconnected"}><i />{online ? "מחובר" : "Offline"}</span><strong>{offlineQueueItems.length}</strong><small>פעולות ממתינות</small></div><div className="sync-items">{offlineQueueItems.map((item) => <article className={item.attempts >= 3 ? "failed" : ""} key={`${item.kind}-${item.id}`}><div><strong>{item.label}</strong><small>נשמר {new Date(item.createdAt).toLocaleString("he-IL")}</small>{item.attempts >= 3 && <><em>לא הצלחנו לסנכרן אחרי {item.attempts} ניסיונות</em>{item.lastError && <small>{item.lastError}</small>}</>}</div>{item.attempts >= 3 ? <button type="button" disabled={!online} onClick={async () => { await retryOfflineItem(item); setOfflineQueueItems(await listOfflineQueue()); setSyncRequested((value) => value + 1); }}>נסה שוב</button> : <span>{syncStatus === "syncing" ? "מסנכרן" : "ממתין"}</span>}</article>)}{!offlineQueueItems.length && <div className="sync-empty"><b>✓</b><strong>הכול מסונכרן</strong><span>אין פעולות שממתינות לשליחה.</span></div>}</div><footer><button type="button" onClick={() => setSyncCenterOpen(false)}>סגור</button><button className="primary" type="button" disabled={!online || !offlineQueueItems.length || syncStatus === "syncing"} onClick={() => setSyncRequested((value) => value + 1)}>סנכרן עכשיו</button></footer></section></div>}
-      {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הארוחה עודכנה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name} · {mealResult.kcal} קלוריות</span><small>{mealResult.protein} גרם חלבון · {mealResult.carbs} גרם פחמימות · {mealResult.fat} גרם שומן{mealResult.imageCompleted ? " · תמונה הושלמה" : ""}</small></div><button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
+      {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הארוחה עודכנה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name} · {mealResult.kcal} קלוריות</span><small>{mealResult.protein} גרם חלבון · {mealResult.carbs} גרם פחמימות · {mealResult.fat} גרם שומן{mealResult.favoriteSaved ? " · נשמרה גם במועדפים ★" : ""}{mealResult.imageCompleted ? " · תמונה הושלמה" : ""}</small></div><button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
       {undoMeal && (
         <aside className="undo-toast" role="status">
           <span>“{undoMeal.name}” נמחקה</span>

@@ -19,6 +19,7 @@ const waterRoute = await readFile(new URL("../app/api/water/route.ts", import.me
 const activityRoute = await readFile(new URL("../app/api/activity/route.ts", import.meta.url), "utf8");
 const mealsRoute = await readFile(new URL("../app/api/meals/route.ts", import.meta.url), "utf8");
 const dayRoute = await readFile(new URL("../app/api/day/route.ts", import.meta.url), "utf8");
+const favoritesRoute = await readFile(new URL("../app/api/favorites/route.ts", import.meta.url), "utf8");
 
 test("shift workers can keep an active day open and complete it explicitly", () => {
   assert.match(page, /רק כשאני לוחץ „סיים יום”/);
@@ -535,4 +536,11 @@ test("meal review keeps final actions in document flow and uses a toggle star", 
   assert.match(page, /estimatedCalorieRange/);
   assert.match(expansionCss, /meal-modal>footer\{position:static!important/);
   assert.match(expansionCss, /meal-favorite-star\.selected \.app-icon\{fill:currentColor/);
+});
+
+test("favorite selection persists across historic days and offline sync", () => {
+  assert.match(favoritesRoute, /\[data\.today, \.\.\.\(data\.history \|\| \[\]\)\]/);
+  assert.match(favoritesRoute, /body\.meal && typeof body\.meal === "object"/);
+  assert.match(page, /queueMutation\("\/api\/favorites"/);
+  assert.match(page, /נשמרה גם במועדפים ★/);
 });
