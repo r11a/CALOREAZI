@@ -1,10 +1,11 @@
-export type AppIconName = "camera" | "image" | "plus" | "coach" | "sparkles" | "edit" | "calculator" | "list" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic" | "speaker" | "user" | "heart" | "target" | "bell" | "info";
+export type AppIconName = "camera" | "image" | "plus" | "mealAdd" | "coach" | "sparkles" | "edit" | "calculator" | "list" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic" | "speaker" | "user" | "heart" | "target" | "bell" | "info";
 
 export function AppIcon({ name }: { name: AppIconName }) {
   const paths = {
     camera: <><path d="M14.5 5 13 3h-2L9.5 5H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Z"/><circle cx="12" cy="11.5" r="3.5"/></>,
     image: <><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 15-4-4L7 20"/></>,
     plus: <><path d="M12 5v14M5 12h14"/></>,
+    mealAdd: <><circle cx="10" cy="12" r="7"/><circle cx="10" cy="12" r="3.5"/><path d="M19 5v7M15.5 8.5h7"/></>,
     coach: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4Z"/><path d="m18.5 15 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z"/></>,
     sparkles: <><path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4Z"/><path d="m18.5 15 .7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7Z"/></>,
     edit: <><path d="M4 20h4l11-11-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></>,

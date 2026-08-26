@@ -49,7 +49,7 @@ test("editing a meal exposes an explicit save changes and close action", () => {
 
 test("photo meals automatically complete calories and remain recalculable after edits", () => {
   assert.match(page, /completeMissingNutrition/);
-  assert.match(page, /חשב מחדש לפי השינויים/);
+  assert.match(page, /חשב מחדש/);
   assert.match(page, /קלוריות לכמות שנבחרה/);
   assert.match(analyzeTextRoute, /proteinPer100 \* 4/);
 });
@@ -206,8 +206,8 @@ test("photo capture skips manual entry and shows a focused animated recognition 
   assert.match(page, /setManualAiMode\(false\)/);
   assert.match(page, /photo-analyzing/);
   assert.match(page, /מזהה מה יש בתמונה/);
-  assert.match(page, /recognition-result-card/);
-  assert.match(page, /recognition-gauge/);
+  assert.match(page, /unified-meal-result/);
+  assert.match(page, /meal-result-rings/);
   assert.match(page, /ציון זיהוי/);
   assert.match(page, /meal-preview-recognition/);
   assert.match(page, /צריך צילום ברור יותר/);
@@ -215,7 +215,7 @@ test("photo capture skips manual entry and shows a focused animated recognition 
   assert.match(css, /photo-review-hero/);
   assert.match(expansionCss, /\.modal-layer>\.meal-modal\{display:block!important/);
   assert.match(expansionCss, /touch-action:pan-y/);
-  assert.match(expansionCss, /recognition-ring-draw/);
+  assert.match(expansionCss, /meal-ring-fill/);
 });
 
 test("photo preparation reuses the decoded image and voice does not auto-favorite meals", () => {

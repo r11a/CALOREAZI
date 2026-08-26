@@ -20,7 +20,7 @@ type AppState = {
   owner: null | { name: string; email: string; role: string; avatar?: string };
   currentUser: { id: string; name: string; role: "admin" | "user" };
   profile: any;
-  today: { date: string; waterMl: number; meals: any[] };
+  today: { date: string; waterMl: number; waterEvents?: any[]; meals: any[] };
   ai: any;
   aiUsage: any[];
   history: any[];
@@ -561,6 +561,7 @@ export default function Home() {
   const [mealTranscript, setMealTranscript] = useState("");
   const [analysisJobId, setAnalysisJobId] = useState("");
   const [saveToLibrary, setSaveToLibrary] = useState(false);
+  const [saveAsFavorite, setSaveAsFavorite] = useState(false);
   const [foodVisibility, setFoodVisibility] = useState<"private" | "shared">(
     "private",
   );
@@ -651,6 +652,9 @@ export default function Home() {
   const [barcodeValue, setBarcodeValue] = useState("");
   const [barcodeStatus, setBarcodeStatus] = useState("");
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
+  const [cameraCaptureOpen, setCameraCaptureOpen] = useState(false);
+  const [cameraHint, setCameraHint] = useState("");
+  const [cameraStatus, setCameraStatus] = useState("");
   const [adminHealth, setAdminHealth] = useState<any>(null);
   const [adminTab, setAdminTab] = useState("ai");
   const [adminBackups, setAdminBackups] = useState<any[]>([]);
@@ -751,6 +755,8 @@ export default function Home() {
   const uploadInput = useRef<HTMLInputElement>(null);
   const directCameraInput = useRef<HTMLInputElement>(null);
   const barcodeVideo = useRef<HTMLVideoElement>(null);
+  const mealCameraVideo = useRef<HTMLVideoElement>(null);
+  const mealCameraStream = useRef<MediaStream | null>(null);
   const barcodeScanLocked = useRef(false);
   const avatarInput = useRef<HTMLInputElement>(null);
   const foodImageInput = useRef<HTMLInputElement>(null);
@@ -770,6 +776,10 @@ export default function Home() {
   const voiceProcessingTimer = useRef<ReturnType<typeof setInterval> | null>(
     null,
   );
+
+  useEffect(() => () => {
+    mealCameraStream.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
   useEffect(() => {
     api("/api/state")
@@ -1390,7 +1400,12 @@ export default function Home() {
       const mutationKey = crypto.randomUUID();
       if (!navigator.onLine) {
         await queueMutation("/api/water", "POST", JSON.stringify({ amount, recordedAt, localDate }));
-        setState((current: any) => ({ ...current, today: { ...current.today, date: localDate, waterMl: Math.max(0, Number(current.today.waterMl || 0) + amount) } }));
+        setState((current: any) => {
+          const waterEvents = [...(current.today.waterEvents || [])];
+          if (amount > 0) waterEvents.push({ id: `offline-${mutationKey}`, amount, time: recordedAt, pendingSync: true });
+          else { let remainingRemoval = Math.abs(amount); for (let index = waterEvents.length - 1; index >= 0 && remainingRemoval > 0; index -= 1) { const eventAmount = Number(waterEvents[index].amount || 0); if (eventAmount <= remainingRemoval) { remainingRemoval -= eventAmount; waterEvents.splice(index, 1); } else { waterEvents[index] = { ...waterEvents[index], amount: eventAmount - remainingRemoval }; remainingRemoval = 0; } } }
+          return { ...current, today: { ...current.today, date: localDate, waterMl: Math.max(0, Number(current.today.waterMl || 0) + amount), waterEvents } };
+        });
         setOfflineQueueCount(await offlinePendingCount()); setMealResult({ name: "המים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
       }
       setState(
@@ -1680,6 +1695,9 @@ export default function Home() {
         });
         latest = await api("/api/state");
       }
+      if (!catalogOnly && saveAsFavorite && savedMealId && navigator.onLine) {
+        latest = await api("/api/favorites", { method: "POST", body: JSON.stringify({ mealId: savedMealId }) });
+      }
       setState(latest);
       if (!catalogOnly) setMealResult({ name: navigator.onLine ? finalMeal.name : `${finalMeal.name} · ממתין לסנכרון`, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId) });
       if (!catalogOnly && !editingMealId && savedLocalDate === latest.today?.date && consumed + Number(finalMeal.kcal) > dailyCalorieTarget) {
@@ -1706,6 +1724,7 @@ export default function Home() {
       setPhotoQuality(null);
       setMealConfidence("low");
       setSaveToLibrary(false);
+      setSaveAsFavorite(false);
       setFoodVisibility("private");
       setGenerateFoodArtwork(false);
       setMealPeriod("snack");
@@ -1785,8 +1804,10 @@ export default function Home() {
     setMealSource(meal.source || "manual");
     setPhotoPreview(meal.image || "");
     setSaveToLibrary(false);
+    setSaveAsFavorite(false);
     setManualAiMode(false);
     setCatalogOnly(false);
+    setMealReviewReady(true);
     setMealOpen(true);
   }
   async function repeatFavorite(id: string) {
@@ -2044,6 +2065,7 @@ export default function Home() {
     setFoodCategory(category);
     setCatalogOnly(false);
     setSaveToLibrary(false);
+    setSaveAsFavorite(false);
     setGenerateFoodArtwork(false);
     setPhotoPreview("");
     setMealDateTime(localDateTimeInput());
@@ -2413,10 +2435,7 @@ export default function Home() {
     if (url) URL.revokeObjectURL(url);
     return canvas.toDataURL("image/jpeg", quality);
   }
-  async function analyzePhoto(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
+  async function analyzePhotoFile(file: File, recognitionHint = "") {
     setManualAiMode(false);
     setMealSource("photo");
     setMealItems([]);
@@ -2429,6 +2448,7 @@ export default function Home() {
     setMealPeriod(mealPeriodFor());
     setMealReviewReady(false);
     setMealSaveFeedback("");
+    setSaveAsFavorite(false);
     setMealValidationErrors({});
     setBusy(true);
     setPhotoStatus("מנתח את הארוחה בעזרת AI…");
@@ -2456,7 +2476,7 @@ export default function Home() {
       let result = await api("/api/ai/analyze-meal", {
         method: "POST",
         headers: { "Idempotency-Key": clientId },
-        body: JSON.stringify({ imageDataUrl, clientId }),
+        body: JSON.stringify({ imageDataUrl, clientId, recognitionHint: recognitionHint.trim() }),
       });
       const jobId = result.jobId;
       setAnalysisJobId(jobId || "");
@@ -2810,6 +2830,48 @@ export default function Home() {
       setBusy(false);
     }
   }
+  async function analyzePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) await analyzePhotoFile(file);
+  }
+  function closeInAppCamera() {
+    mealCameraStream.current?.getTracks().forEach((track) => track.stop());
+    mealCameraStream.current = null;
+    if (mealCameraVideo.current) mealCameraVideo.current.srcObject = null;
+    setCameraCaptureOpen(false);
+    setCameraStatus("");
+  }
+  async function openInAppCamera() {
+    setQuickAddOpen(false);
+    setCameraHint("");
+    setCameraStatus("פותח מצלמה…");
+    setCameraCaptureOpen(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false });
+      mealCameraStream.current = stream;
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+      if (!mealCameraVideo.current) throw new Error("תצוגת המצלמה אינה זמינה");
+      mealCameraVideo.current.srcObject = stream;
+      await mealCameraVideo.current.play();
+      setCameraStatus("מקם את כל הארוחה במרכז ובתאורה טובה");
+    } catch {
+      closeInAppCamera();
+      directCameraInput.current?.click();
+    }
+  }
+  async function captureInAppMeal() {
+    const video = mealCameraVideo.current;
+    if (!video?.videoWidth || !video.videoHeight) { setCameraStatus("המצלמה עדיין נטענת…"); return; }
+    const maxSize = 1600; const scale = Math.min(1, maxSize / Math.max(video.videoWidth, video.videoHeight));
+    const canvas = document.createElement("canvas"); canvas.width = Math.round(video.videoWidth * scale); canvas.height = Math.round(video.videoHeight * scale);
+    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", .86));
+    if (!blob) { setCameraStatus("לא הצלחנו לצלם. נסה שוב."); return; }
+    const hint = cameraHint;
+    closeInAppCamera();
+    await analyzePhotoFile(new File([blob], `meal-${Date.now()}.jpg`, { type: "image/jpeg" }), hint);
+  }
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
     await sendCoachText(message);
@@ -2984,7 +3046,7 @@ export default function Home() {
       </button>
       <section className="welcome">
         <div><h1>{greeting}, {state.owner.name}</h1><p>{scoreHeadline}</p></div>
-        <button className="welcome-add-button" type="button" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }} aria-label="פתיחת תפריט הוספת ארוחה" title="הוספת ארוחה"><AppIcon name="plus" /></button>
+        <button className="welcome-add-button" type="button" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }} aria-label="פתיחת תפריט הוספת ארוחה" title="הוספת ארוחה"><AppIcon name="mealAdd" /></button>
       </section>
       {(state.partnerships || []).filter((link) => link.direction === "incoming" && link.status === "pending").map((link) => <aside className="partnership-invite-card" key={link.id}><span>♡</span><div><strong>{link.other?.username || link.other?.name} בחר לשתף איתך את התהליך</strong><small>ההזמנה תישאר כאן עד שתבחר</small></div><button onClick={() => updatePartnership(link.id, "accept")}>אשר</button><button className="reject" onClick={() => updatePartnership(link.id, "reject")}>דחה</button></aside>)}
       {consistencyBadges.length > 0 && (
@@ -2992,7 +3054,7 @@ export default function Home() {
           {consistencyBadges.map((badge) => <span key={badge.label}><b>{badge.icon}</b>{badge.label}</span>)}
         </div>
       )}
-      <details className="calm-challenges" open><summary><span>◇</span><div><strong>יעדים רגועים להיום</strong><small>מותאמים לשעה, לפערים ולשלב שלך בתהליך</small></div></summary><div>{calmChallenges.map((challenge) => <span className={`challenge-${challenge.tone}`} key={challenge.label}><small>{challenge.label}</small><i><b style={{ width: `${Math.min(100, challenge.value / Math.max(1, challenge.target) * 100)}%` }} /></i><em>{Math.round(challenge.value).toLocaleString()} מתוך {challenge.target.toLocaleString()} {challenge.unit}</em></span>)}</div></details>
+      <details className="calm-challenges expandable-surface"><summary><span>◇</span><div><strong>יעדים רגועים להיום</strong><small>מותאמים לשעה, לפערים ולשלב שלך בתהליך</small></div></summary><div>{calmChallenges.map((challenge) => <span className={`challenge-${challenge.tone}`} key={challenge.label}><small>{challenge.label}</small><i><b style={{ width: `${Math.min(100, challenge.value / Math.max(1, challenge.target) * 100)}%` }} /></i><em>{Math.round(challenge.value).toLocaleString()} מתוך {challenge.target.toLocaleString()} {challenge.unit}</em></span>)}</div></details>
       <details className={`daily-score-details score-${scoreTone}`}>
         <summary aria-label="פתיחת הסבר על הציון היומי">
           <div className="daily-score-bar" role="progressbar" aria-label="ציון יומי" aria-valuemin={0} aria-valuemax={100} aria-valuenow={dailyScore}>
@@ -3109,21 +3171,26 @@ export default function Home() {
               <h2>מה אכלת היום</h2>
             </div>
             <div className="meal-header-actions">
-              <button type="button" title="צילום ארוחה" aria-label="צילום ארוחה" onClick={() => directCameraInput.current?.click()}><AppIcon name="camera" /></button>
-              <button type="button" title="הוספה ידנית" aria-label="הוספה ידנית" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }}><AppIcon name="plus" /></button>
+              <button type="button" title="הוספת ארוחה" aria-label="פתיחת תפריט הוספת ארוחה" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }}><AppIcon name="mealAdd" /></button>
             </div>
           </header>
-          {state.today.meals.length === 0 ? (
+          {state.today.meals.length === 0 && !(state.today.waterEvents || []).length ? (
             <div className="empty-state">
               עדיין אין ארוחות היום.
               <small>הוסף את הארוחה הראשונה כדי להתחיל לעקוב.</small>
             </div>
           ) : (
             <div className="meal-list">
-              {[...state.today.meals]
+              {[...state.today.meals.map((meal: any) => ({ ...meal, kind: "meal" })), ...(state.today.waterEvents || []).map((water: any) => ({ ...water, kind: "water" }))]
                 .sort((a, b) => String(a.time).localeCompare(String(b.time)))
-                .map((meal) => (
-                  <article key={meal.id}>
+                .map((meal: any) => meal.kind === "water" ? (
+                  <article className="water-timeline-entry" key={`water-${meal.id}`}>
+                    <span className="meal-icon water"><AppIcon name="water" /></span>
+                    <div><span className="meal-meta"><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><em>שתייה</em>{meal.pendingSync && <em className="pending-sync">ממתין לסנכרון</em>}</span><strong>כוס מים</strong><small>{Number(meal.amount || 250).toLocaleString()} מ״ל</small></div>
+                    <b>{Math.max(1, Math.round(Number(meal.amount || 250) / 250))}<small> כוסות</small></b>
+                  </article>
+                ) : (
+                  <article key={`meal-${meal.id}`}>
                     <button type="button" className="meal-visual-button" onClick={() => setMealPreview(meal)} aria-label={`הצגת פרטי ${meal.name}`}>
                       {meal.image ? (
                         <img className="meal-thumb" src={meal.image} alt="" loading="lazy" decoding="async" />
@@ -3226,10 +3293,10 @@ export default function Home() {
         </button>
         <button
           className="nav-camera"
-          onClick={() => uploadInput.current?.click()}
-          aria-label="בחירת צילום, גלריה או קובץ"
+          onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }}
+          aria-label="פתיחת תפריט הוספת ארוחה"
         >
-          <AppIcon name="camera" />
+          <AppIcon name="mealAdd" />
         </button>
         <button aria-label="מגמות" title="מגמות" className={insightsOpen ? "active" : ""} onClick={() => openNavigationScreen("insights")}>
           <span><AppIcon name="activity" /></span>
@@ -3241,6 +3308,7 @@ export default function Home() {
       </nav>
       {calorieOverage && <div className="modal-layer overage-layer"><button className="backdrop" onClick={() => setCalorieOverage(null)} /><section className="settings-modal overage-modal"><header><div><h2>חריגה מהיעד היומי</h2><small>הארוחה נשמרה, אבל אפשר עדיין לתקן את הבחירה</small></div></header><div className="overage-ring"><strong>+{Math.round(calorieOverage.overBy)}</strong><small>קלוריות מעל היעד</small></div><p>אין צורך להילחץ מיום אחד. אפשר להשאיר את הארוחה, לערוך כמויות או לבטל את ההוספה.</p><footer><button type="button" onClick={() => setCalorieOverage(null)}>השאר ביומן</button><button type="button" onClick={() => { const meal = calorieOverage.meal; setCalorieOverage(null); editMeal({ ...meal, id: calorieOverage.id, time: meal.occurredAt }); }}>ערוך ארוחה</button><button className="danger" type="button" onClick={async () => { await deleteMeal(calorieOverage.id); setCalorieOverage(null); }}>בטל את ההוספה</button></footer></section></div>}
       {dayCloseConfirm && <div className="modal-layer"><button className="backdrop" onClick={() => setDayCloseConfirm(false)} /><section className="settings-modal compact-modal finish-day-modal"><header><div><h2>לסיים את היום הפעיל?</h2><small>היום יישמר בהיסטוריה והמדדים יתחילו מחדש</small></div></header><div className="finish-day-summary"><span><small>קלוריות</small><strong>{consumed.toLocaleString()}</strong></span><span><small>ארוחות</small><strong>{state.today.meals.length}</strong></span><span><small>מים</small><strong>{Number(state.today.waterMl || 0).toLocaleString()} מ״ל</strong></span></div><p>הפעולה אינה מוחקת דבר. אפשר יהיה לפתוח את היום הזה מההיסטוריה.</p><footer><button type="button" onClick={() => setDayCloseConfirm(false)}>חזור</button><button className="primary" type="button" disabled={busy} onClick={finishActiveDay}>{busy ? "שומר…" : "סיים והתחל יום חדש"}</button></footer></section></div>}
+      {cameraCaptureOpen && <div className="modal-layer meal-camera-layer"><button className="backdrop" type="button" onClick={closeInAppCamera} aria-label="סגירת המצלמה" /><section className="settings-modal meal-camera-modal"><header><div><h2>צילום ארוחה</h2><p>מקם את כל הצלחת בפריים ובתאורה טובה</p></div><button type="button" onClick={closeInAppCamera} aria-label="סגור">×</button></header><div className="live-meal-camera"><video ref={mealCameraVideo} playsInline muted /><span><AppIcon name="target" /></span></div><p className="camera-status" role="status">{cameraStatus}</p><label>פרט שיעזור בזיהוי <input value={cameraHint} onChange={(event) => setCameraHint(event.target.value)} maxLength={300} placeholder="לא חובה — למשל: חזה עוף עם מעט שמן" /></label><footer><button type="button" onClick={() => { closeInAppCamera(); uploadInput.current?.click(); }}>בחר מהגלריה</button><button className="primary camera-shutter" type="button" onClick={captureInAppMeal} aria-label="צלם ונתח"><AppIcon name="camera" /> צלם ונתח</button></footer></section></div>}
       {historyDeleteRequest && <div className="modal-layer modal-nested"><button className="backdrop" type="button" onClick={() => setHistoryDeleteRequest(null)} /><form className="settings-modal compact-modal history-password-modal" onSubmit={async (event) => { event.preventDefault(); if (!historyDeleteRequest.password) return; await performHistoryDelete("meal", historyDeleteRequest.id, historyDeleteRequest.date, historyDeleteRequest.password); }}><header><div><h2>מחיקת ארוחה מההיסטוריה</h2><p>המחיקה תעדכן מיד את הקלוריות, אבות המזון והציון.</p></div></header><label>הסיסמה הנוכחית<input type="password" autoComplete="current-password" value={historyDeleteRequest.password} onChange={(event) => setHistoryDeleteRequest({ ...historyDeleteRequest, password: event.target.value })} /></label><footer><button type="button" onClick={() => setHistoryDeleteRequest(null)}>ביטול</button><button className="danger" type="submit" disabled={!historyDeleteRequest.password}>המשך למחיקה</button></footer></form></div>}
       {mealPreview && (
         <div className="modal-layer meal-preview-layer">
@@ -4131,7 +4199,7 @@ export default function Home() {
               </div>
             ) : !quickCategory ? (
               <div className="category-grid">
-                <button className="capture-meal-entry add-source-entry" onClick={() => { setQuickAddOpen(false); uploadInput.current?.click(); }}>
+                <button className="capture-meal-entry add-source-entry" onClick={openInAppCamera}>
                   <span className="manual-meal-art"><AppIcon name="camera" /></span>
                   <strong>צלם ארוחה</strong>
                   <small>צילום חדש, גלריה או קובץ</small>
@@ -5471,19 +5539,26 @@ export default function Home() {
               </section>
             )}
             {(!manualAiMode || mealItems.length > 0) && <>
-            {mealSource === "photo" ? <section className={`photo-review-hero ${photoQuality?.level === "warning" ? "retry" : ""} ${busy && !mealReviewReady ? "analyzing" : ""}`}>
+            {mealSource === "photo" ? <section className={`photo-review-hero ${photoQuality?.level === "warning" ? "retry" : ""} ${busy && !mealReviewReady ? "analyzing" : ""} ${mealReviewReady && photoQuality?.level !== "warning" ? "ready" : ""}`}>
               {photoPreview ? <img src={photoPreview} alt="התמונה שצולמה" /> : <div className="photo-placeholder"><AppIcon name="camera" /></div>}
-              {photoQuality?.level === "warning" ? <div className="photo-retry-message"><strong>צריך צילום ברור יותר</strong><p>{photoStatus}</p><button type="button" onClick={() => directCameraInput.current?.click()}><AppIcon name="camera" /> צלם שוב</button></div> : busy && !mealReviewReady ? <div className="photo-analyzing" role="status"><span className="scan-spark"><AppIcon name="sparkles" /></span><strong>מזהה מה יש בתמונה</strong><p>{photoStatus}</p><i><b /></i></div> : <div className="photo-detection"><small>זוהה בתמונה</small><h3>{mealForm.name || "הארוחה שלך"}</h3>{mealReviewReady && <strong className="detected-calories">{Math.round(Number(mealDraftPreview.kcal || 0))} <small>קלוריות</small></strong>}</div>}
+              {photoQuality?.level === "warning" ? <div className="photo-retry-message"><strong>צריך צילום ברור יותר</strong><p>{photoStatus}</p><button type="button" onClick={openInAppCamera}><AppIcon name="camera" /> צלם שוב</button></div> : busy && !mealReviewReady ? <div className="photo-analyzing" role="status"><span className="scan-spark"><AppIcon name="sparkles" /></span><strong>מזהה מה יש בתמונה</strong><p>{photoStatus}</p><i><b /></i></div> : <div className="photo-detection"><small>זוהה בתמונה</small><h3>{mealForm.name || "הארוחה שלך"}</h3>{mealReviewReady && <strong className="detected-calories">{Math.round(Number(mealDraftPreview.kcal || 0))} <small>קלוריות</small></strong>}</div>}
             </section> : <section className="meal-review-intro">
               <span className={`meal-source-icon ${mealSource}`}><AppIcon name={mealSource === "voice" ? "mic" : "plus"} /></span>
               <div><small>{mealSource === "voice" ? "זוהה מהכתבה" : "הוספה ידנית"}</small><strong>{busy ? "מכין את התוצאה…" : mealReviewReady ? "מוכן לבדיקה ולאישור" : "ממתין לפרטים"}</strong>{photoStatus && <p className="photo-status">{photoStatus}</p>}</div>
             </section>}
-            {mealSource === "photo" && mealReviewReady && photoQuality?.level !== "warning" && <section className={`recognition-result-card ${mealConfidence}`} aria-label={`ציון זיהוי ${mealRecognitionScore} מתוך 100`}>
-              <span className="recognition-gauge" style={{ "--recognition-offset": 100 - mealRecognitionScore } as CSSProperties}>
-                <svg viewBox="0 0 44 44" role="img" aria-hidden="true"><circle className="recognition-track" cx="22" cy="22" r="18" pathLength="100" /><circle className="recognition-progress" cx="22" cy="22" r="18" pathLength="100" /></svg>
-                <strong>{mealRecognitionScore}<small>/100</small></strong>
-              </span>
-              <div><small>ציון הזיהוי</small><strong>{mealConfidence === "high" ? "זיהוי ברור" : mealConfidence === "medium" ? "מומלץ לבדוק כמויות" : "נדרשת בדיקה"}</strong><p>{mealConfidence === "high" ? "הארוחה והרכיבים זוהו בביטחון גבוה." : mealConfidence === "medium" ? "הרכיבים זוהו, אך כדאי לוודא את הכמויות." : "כדאי לבדוק את הרכיבים לפני האישור."}</p></div>
+            {mealReviewReady && photoQuality?.level !== "warning" && (mealForm.name || mealItems.length > 0) && <section className="unified-meal-result">
+              {photoPreview && <img className="unified-meal-image" src={photoPreview} alt={mealForm.name || "הארוחה שזוהתה"} />}
+              <header><div><small>הארוחה שלך</small><h3>{mealForm.name || "ארוחה חדשה"}</h3></div><strong>{Math.round(Number(mealDraftPreview.kcal || 0)).toLocaleString()}<small> קלוריות</small></strong></header>
+              <div className="meal-result-rings">
+                {[
+                  { key: "recognition", label: ["photo", "voice"].includes(mealSource) ? "ציון זיהוי" : "אמינות חישוב", value: ["photo", "voice"].includes(mealSource) ? mealRecognitionScore : mealReliabilityPreview.score, amount: `${["photo", "voice"].includes(mealSource) ? mealRecognitionScore : mealReliabilityPreview.score}/100` },
+                  { key: "protein", label: "חלבון", value: Math.min(100, Math.round(Number(mealDraftPreview.protein || 0) / Math.max(1, Number(profile.protein || 0) - macros.protein) * 100)), amount: `${Math.round(Number(mealDraftPreview.protein || 0))} מתוך ${Math.max(0, Math.round(Number(profile.protein || 0) - macros.protein))} גרם` },
+                  { key: "carbs", label: "פחמימות", value: Math.min(100, Math.round(Number(mealDraftPreview.carbs || 0) / Math.max(1, Number(profile.carbs || 0) - macros.carbs) * 100)), amount: `${Math.round(Number(mealDraftPreview.carbs || 0))} מתוך ${Math.max(0, Math.round(Number(profile.carbs || 0) - macros.carbs))} גרם` },
+                  { key: "fat", label: "שומן", value: Math.min(100, Math.round(Number(mealDraftPreview.fat || 0) / Math.max(1, Number(profile.fat || 0) - macros.fat) * 100)), amount: `${Math.round(Number(mealDraftPreview.fat || 0))} מתוך ${Math.max(0, Math.round(Number(profile.fat || 0) - macros.fat))} גרם` },
+                ].map((ring) => <span className={`meal-result-ring ${ring.key}`} key={ring.key} style={{ "--ring-value": ring.value } as CSSProperties}><i><svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="18" pathLength="100" /><circle cx="22" cy="22" r="18" pathLength="100" /></svg><b>{ring.value}%</b></i><strong>{ring.label}</strong><small>{ring.amount}</small></span>)}
+              </div>
+              <p className="meal-calculation-note">התוצאה חושבה מחיבור {Math.max(1, mealItems.length)} {mealItems.length === 1 ? "רכיב" : "רכיבים"} לפי הכמות והמשקל. כיסוי המקורות התזונתיים הוא {mealReliabilityPreview.coverage}% — מומלץ לבדוק רק פריטים שסומנו באמינות נמוכה.</p>
+              <div className="meal-result-actions"><button type="button" onClick={() => { setMealDetailsOpen(true); window.requestAnimationFrame(() => document.querySelector(".meal-details")?.scrollIntoView({ behavior: "smooth", block: "start" })); }}><AppIcon name="edit" /> עריכה</button><button type="button" onClick={recalculateMealWithAi} disabled={busy}><AppIcon name="sparkles" /> {busy ? "מחשב…" : "חשב מחדש"}</button><button type="button" className={saveAsFavorite ? "selected" : ""} onClick={() => setSaveAsFavorite((value) => !value)}><AppIcon name="heart" /> {saveAsFavorite ? "יישמר במועדפים" : "שמירה במועדפים"}</button></div>
             </section>}
             {!busy && photoQuality?.level !== "warning" && <details className="meal-details" open={mealDetailsOpen || !mealItems.length} onToggle={(event) => setMealDetailsOpen(event.currentTarget.open)}>
               <summary><span><strong>יש טעות? ערוך</strong><small>שם, כמות, משקל או ערכים</small></span><b>⌄</b></summary>
@@ -5701,7 +5776,6 @@ export default function Home() {
                 </>
               )}
             </div></details>}
-            {(mealForm.name || mealItems.length > 0) && <section className="meal-review-summary"><header><div><small>הארוחה שלך</small><strong>{mealForm.name || "ארוחה חדשה"}</strong></div><b>{Math.round(Number(mealDraftPreview.kcal || 0))}<small> קק״ל</small></b></header><div><span className="protein"><small>חלבון</small><strong>{Math.round(Number(mealDraftPreview.protein || 0))} גרם</strong></span><span className="carbs"><small>פחמימות</small><strong>{Math.round(Number(mealDraftPreview.carbs || 0))} גרם</strong></span><span className="fat"><small>שומן</small><strong>{Math.round(Number(mealDraftPreview.fat || 0))} גרם</strong></span></div><p>זה הסיכום שיתווסף ליומן. אפשר לאשר או לפתוח את העריכה המתקדמת.</p><button className="meal-recalculate-button" type="button" onClick={recalculateMealWithAi} disabled={busy}>{busy ? "מחשב מחדש…" : "חשב מחדש לפי השינויים"}</button></section>}
             {(mealForm.name || mealItems.length > 0) && <details className={`meal-reliability ${mealReliabilityPreview.level}`} open={mealReliabilityPreview.level === "low"}>
               <summary><span><AppIcon name={mealReliabilityPreview.level === "high" ? "target" : "info"} /><b>{mealReliabilityPreview.label}</b><small>{mealReliabilityPreview.score}/100 · כיסוי {mealReliabilityPreview.coverage}%</small></span><i aria-hidden="true" /></summary>
               {mealReliabilityPreview.items.length > 0 && <div>{mealReliabilityPreview.items.map((item: any, index: number) => <article key={`${item.name}-${index}`}><header><strong>{item.name}</strong><b>{item.score}/100</b></header><p>{item.source}</p><small>{item.formula}</small></article>)}</div>}
@@ -5788,7 +5862,7 @@ export default function Home() {
               <button type="button" onClick={() => setMealOpen(false)}>
                 ביטול
               </button>
-              {photoQuality?.level === "warning" ? <button type="button" className="primary" onClick={() => directCameraInput.current?.click()}><AppIcon name="camera" /> צילום חוזר</button> : <button
+              {photoQuality?.level === "warning" ? <button type="button" className="primary" onClick={openInAppCamera}><AppIcon name="camera" /> צילום חוזר</button> : <button
                 type="submit"
                 className="primary"
                 disabled={busy || (manualAiMode && mealItems.length === 0)}
