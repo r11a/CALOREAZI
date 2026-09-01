@@ -6,6 +6,7 @@ export const AI_MODELS = {
   ],
   gemini: [
     { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash", description: "המלצת עלות־תועלת של Gemini: מודל Flash יציב ועדכני עם ראייה.", inputCost: 0.75, outputCost: 3.75, vision: true, recommended: true },
+    { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite", description: "מצב חסכוני: מתאים לשיחה ולמשימות תזונה פשוטות בנפח גבוה.", inputCost: 0.25, outputCost: 1.5, vision: true },
     { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite", description: "האפשרות הזולה והמהירה ביותר למשימות פשוטות ובנפח גבוה.", inputCost: 0.3, outputCost: 2.5, vision: true },
     { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash", description: "דור Flash קודם, מולטימודלי ויציב; נשמר לתאימות.", inputCost: 0.75, outputCost: 3.75, vision: true },
   ],
@@ -17,6 +18,7 @@ export const IMAGE_MODELS = {
     { id: "gpt-image-1", label: "GPT Image 1", description: "איכות תמונה גבוהה יותר בעלות גבוהה יותר." },
   ],
   gemini: [
+    { id: "gemini-3.1-flash-lite-image", label: "Gemini 3.1 Flash-Lite Image", description: "יצירת תמונות חסכונית יותר; מופעלת רק בבקשה מפורשת." },
     { id: "gemini-3.1-flash-image", label: "Gemini 3.1 Flash Image", description: "מודל תמונה מהיר ליצירת תמונות מזון.", recommended: true },
   ],
 };

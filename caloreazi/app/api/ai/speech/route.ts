@@ -55,7 +55,7 @@ export async function POST(request: Request) {
   if (!text) return Response.json({ error: "אין טקסט להקראה" }, { status: 400 });
   const voice = selectedVoice(body.voice || state.userData[session.userId]?.profile?.coachVoice);
   const style: VoiceStyle = body.style === "clear" || state.userData[session.userId]?.profile?.coachVoiceStyle === "clear" ? "clear" : "warm";
-  if ((body.provider || state.userData[session.userId]?.profile?.coachVoiceProvider) === "device") return Response.json({ device: true }, { status: 409 });
+  if (state.ai.economyMode !== false || state.ai.cloudTtsEnabled !== true || (body.provider || state.userData[session.userId]?.profile?.coachVoiceProvider) === "device") return Response.json({ device: true, reason: "economy_mode" }, { status: 409 });
   const apiKey = await decryptSecret(state.ai.encryptedKey);
   const role = aiRole(state.ai, "coach");
   const direction = `${voice === "female" ? "בקול נשי ישראלי" : "בקול גברי ישראלי"}, ${style === "clear" ? "ברור, ישיר ובהיר" : "חם, רגוע ובטוח"}`;

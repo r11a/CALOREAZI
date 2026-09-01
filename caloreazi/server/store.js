@@ -14,7 +14,7 @@ const defaultState = {
   userData: {},
   profile: null,
   today: { date: "", waterMl: 0, meals: [] },
-  ai: { provider: "openai", model: "gpt-5.6-terra", roles: { coach: { provider: "openai", model: "gpt-5.6-terra" }, vision: { provider: "openai", model: "gpt-5.6-terra" }, image: { provider: "openai", model: "gpt-image-1-mini" } }, encryptedKey: "", inputCost: 2, outputCost: 12, monthlyBudget: 20, softLimit: 80, hardLimit: true },
+  ai: { provider: "openai", model: "gpt-5.6-terra", roles: { coach: { provider: "openai", model: "gpt-5.6-terra" }, vision: { provider: "openai", model: "gpt-5.6-terra" }, image: { provider: "openai", model: "gpt-image-1-mini" } }, encryptedKey: "", inputCost: 2, outputCost: 12, monthlyBudget: 2, softLimit: 70, hardLimit: true, economyMode: true, autoGenerateMealImages: false, cloudTtsEnabled: false },
   aiUsage: [],
   analysisJobs: [],
   foodCatalog: [],
@@ -41,7 +41,7 @@ async function readFileState() {
   try {
     const saved = JSON.parse(await readFile(files.state, "utf8"));
     const state = { ...structuredClone(defaultState), ...saved };
-    state.ai = { ...defaultState.ai, ...(saved.ai || {}) };
+    state.ai = hydrateAi(saved.ai);
     state.today = { ...defaultState.today, ...(saved.today || {}) };
     state.users = Array.isArray(saved.users) ? saved.users : [];
     state.sessions = Array.isArray(saved.sessions) ? saved.sessions : [];
@@ -65,9 +65,16 @@ async function readFileState() {
 export async function readState() {
   if (!databaseStateEnabled()) { if (process.env.CALOREAZI_ALLOW_FILE_STORE === "1" || process.env.NODE_ENV !== "production") return readFileState(); throw new Error("CALOREAZI_DATABASE_URL is required in production"); }
   const stored = await readDatabaseState();
-  if (stored) return { ...structuredClone(defaultState), ...stored };
+  if (stored) return { ...structuredClone(defaultState), ...stored, ai: hydrateAi(stored.ai) };
   await replaceDatabaseState(structuredClone(defaultState));
   return structuredClone(defaultState);
+}
+
+function hydrateAi(savedAi = {}) {
+  const legacy = savedAi.economyMode === undefined;
+  const ai = { ...structuredClone(defaultState.ai), ...savedAi };
+  if (legacy) return { ...ai, monthlyBudget: Math.min(2, Math.max(0.1, Number(savedAi.monthlyBudget) || 2)), softLimit: 70, hardLimit: true, economyMode: true, autoGenerateMealImages: false, cloudTtsEnabled: false };
+  return ai;
 }
 
 export function addAudit(state, { userId = null, action, target = "system", result = "success", details = "" }) {

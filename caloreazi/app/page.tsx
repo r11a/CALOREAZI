@@ -604,9 +604,12 @@ export default function Home() {
     apiKey: "",
     inputCost: 0.25,
     outputCost: 2,
-    monthlyBudget: 20,
-    softLimit: 80,
+    monthlyBudget: 2,
+    softLimit: 70,
     hardLimit: true,
+    economyMode: true,
+    autoGenerateMealImages: false,
+    cloudTtsEnabled: false,
   });
   const [aiStatus, setAiStatus] = useState("");
   const [modelCatalog, setModelCatalog] = useState<Record<string, any[]>>({
@@ -828,7 +831,7 @@ export default function Home() {
     const meal = state?.today?.meals?.find((item) => item.id && (!item.image || /(?:category-|food-sprite-|generic|placeholder)/i.test(String(item.image))) && !imageCompletionRequested.current.has(item.id));
     if (!meal) return;
     imageCompletionRequested.current.add(meal.id);
-    api("/api/meals/image", { method: "POST", body: JSON.stringify({ id: meal.id, allowGenerate: true }) }).then(setState).catch(() => undefined);
+    api("/api/meals/image", { method: "POST", body: JSON.stringify({ id: meal.id, allowGenerate: state?.ai?.autoGenerateMealImages === true && state?.ai?.economyMode === false }) }).then(setState).catch(() => undefined);
   }, [state]);
   useEffect(() => {
     let lastLocalDate = localDateTimeInput().slice(0, 10);
@@ -1714,7 +1717,7 @@ export default function Home() {
         setCalorieOverage({ id: savedMealId, meal: finalMeal, overBy: consumed + Number(finalMeal.kcal) - dailyCalorieTarget });
         if (notificationPermission === "granted") new Notification("CALOREAZI", { body: `חריגה של ${Math.round(consumed + Number(finalMeal.kcal) - dailyCalorieTarget)} קלוריות. אפשר לערוך או לבטל את ההוספה.` });
       }
-      if (!catalogOnly && savedMealId && !photoPreview) void api("/api/meals/image", { method: "POST", body: JSON.stringify({ id: savedMealId, allowGenerate: true }) }).then((imageState) => { setState(imageState); if (imageState.imageCompleted) setMealResult((current: any) => current ? { ...current, imageCompleted: true } : current); }).catch(() => undefined);
+      if (!catalogOnly && savedMealId && !photoPreview) void api("/api/meals/image", { method: "POST", body: JSON.stringify({ id: savedMealId, allowGenerate: state?.ai?.autoGenerateMealImages === true && state?.ai?.economyMode === false }) }).then((imageState) => { setState(imageState); if (imageState.imageCompleted) setMealResult((current: any) => current ? { ...current, imageCompleted: true } : current); }).catch(() => undefined);
       if (!catalogOnly && savedLocalDate && savedLocalDate !== latest.today?.date)
         setError(`הארוחה נשמרה בהיסטוריה בתאריך ${savedLocalDate}, בהתאם לשעה שנבחרה.`);
       setMealOpen(false);
@@ -2771,7 +2774,7 @@ export default function Home() {
     if (!text.trim()) return;
     stopCoachSpeech();
     const run = coachSpeechRun.current;
-    if (coachVoiceProvider === "device") { speakWithDevice(text, run); return; }
+    if (coachVoiceProvider === "device" || state?.ai?.economyMode !== false || state?.ai?.cloudTtsEnabled !== true) { speakWithDevice(text, run); return; }
     const controller = new AbortController();
     coachSpeechRequest.current = controller;
     setCoachSpeechPending(true);
@@ -3777,6 +3780,8 @@ export default function Home() {
                   }
                 />
               </label>
+              <label className="wide"><span>מצב חיסכון קשיח</span><select value={aiForm.economyMode ? "on" : "off"} onChange={(e) => setAiForm({ ...aiForm, economyMode: e.target.value === "on", monthlyBudget: e.target.value === "on" ? Math.min(2, Number(aiForm.monthlyBudget) || 2) : aiForm.monthlyBudget })}><option value="on">פעיל — עד $2, תמונות מהמאגר וקול מהמכשיר</option><option value="off">כבוי — מאפשר שירותי ענן יקרים</option></select><small>במצב חיסכון תמונות AI וקול ענן לא מופעלים אוטומטית.</small></label>
+              {!aiForm.economyMode && <><label><span>יצירת תמונות AI אוטומטית</span><select value={aiForm.autoGenerateMealImages ? "on" : "off"} onChange={(e) => setAiForm({ ...aiForm, autoGenerateMealImages: e.target.value === "on" })}><option value="off">כבוי</option><option value="on">פעיל</option></select></label><label><span>קול ענן</span><select value={aiForm.cloudTtsEnabled ? "on" : "off"} onChange={(e) => setAiForm({ ...aiForm, cloudTtsEnabled: e.target.value === "on" })}><option value="off">כבוי</option><option value="on">פעיל</option></select></label></>}
             </div>
             <section className="admin-users" id="admin-security">
               <div className="admin-section-title">
