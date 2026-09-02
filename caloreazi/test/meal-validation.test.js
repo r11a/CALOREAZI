@@ -48,6 +48,15 @@ test("fresh tomatoes cannot be saved with dried-tomato energy density", () => {
   assert.ok(result.issues.some((issue) => issue.code === "implausible_fresh_produce"));
 });
 
+test("meal validation flags duplicate ingredients and per-item calorie conflicts", () => {
+  const result = validateMealNutrition({ kcal: 400, protein: 20, carbs: 20, fat: 10, items: [
+    { name: "לחם", grams: 100, quantity: 1, kcalPer100: 500, proteinPer100: 5, carbsPer100: 20, fatPer100: 2 },
+    { name: "לחם", grams: 100, quantity: 1, kcalPer100: 250, proteinPer100: 8, carbsPer100: 45, fatPer100: 3 },
+  ] });
+  assert.ok(result.issues.some((issue) => issue.code === "duplicate_items"));
+  assert.ok(result.issues.some((issue) => issue.code === "item_macro_calorie_mismatch"));
+});
+
 test("food search cache is bounded by TTL and returns a clone", async () => {
   clearFoodSearchCache();
   const original = { products: [{ name: "קוטג׳" }] };

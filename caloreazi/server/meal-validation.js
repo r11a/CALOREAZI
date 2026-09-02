@@ -16,6 +16,7 @@ export function validateMealNutrition(input = {}) {
     const grams = Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1);
     const per100 = Math.max(0, Number(item.kcalPer100) || 0);
     const servingKcal = Number(item.kcalPerUnit) > 0 ? Number(item.kcalPerUnit) * Math.max(.1, Number(item.quantity) || 1) : grams * per100 / 100;
+    const itemMacroKcal = Math.max(0, Number(item.proteinPer100) || 0) * 4 + Math.max(0, Number(item.carbsPer100) || 0) * 4 + Math.max(0, Number(item.fatPer100) || 0) * 9;
     if (grams > 3000 || per100 > 950 || servingKcal > 2500)
       issues.push({ code: "implausible_portion", item: name, message: `הכמות או הערך של ${name || "הפריט"} אינם סבירים.` });
     if (beveragePattern.test(name) && (grams > 750 || servingKcal > 300))
@@ -24,6 +25,10 @@ export function validateMealNutrition(input = {}) {
       issues.push({ code: "implausible_energy_density", item: name, message: `הערך הקלורי של ${name || "הפריט"} נמוך באופן חריג. יש לבדוק אם הערך הוא ליחידה או ל־100 גרם.` });
     if (item.explicitCalories !== true && freshProducePattern.test(name) && !processedProducePattern.test(name) && per100 > 200)
       issues.push({ code: "implausible_fresh_produce", item: name, message: `הערך הקלורי של ${name || "הפריט"} אינו מתאים לפרי או ירק טרי. נדרש חישוב מחדש ממקור תזונתי מתאים.` });
+    if (item.explicitCalories !== true && per100 > 0 && itemMacroKcal > 0 && Math.abs(per100 - itemMacroKcal) / Math.max(per100, itemMacroKcal) > .45)
+      issues.push({ code: "item_macro_calorie_mismatch", item: name, message: `הקלוריות של ${name || "הפריט"} אינן תואמות למאקרו שלו. יש לבדוק את מקור הערכים.` });
+    if (Number(item.quantity) > 20 && !/יחיד|חתיכ|ביס|סוכר|כדור/i.test(String(item.unit || "")))
+      issues.push({ code: "implausible_quantity", item: name, message: `הכמות של ${name || "הפריט"} גבוהה מהרגיל. בדוק שלא הוכפלה בטעות.` });
     if (item.explicitCalories !== true && Number(item.kcalPerUnit) > 0 && per100 > 0 && grams > 0) {
       const perUnit = Number(item.kcalPerUnit) * Math.max(.1, Number(item.quantity) || 1);
       const fromWeight = grams * per100 / 100;
@@ -31,6 +36,8 @@ export function validateMealNutrition(input = {}) {
         issues.push({ code: "calorie_basis_conflict", item: name, message: `יש סתירה בין הקלוריות ליחידה לבין הערך ל־100 גרם עבור ${name || "הפריט"}. יש לבחור בסיס חישוב אחד.` });
     }
   }
+  const normalizedNames = items.map((item) => String(item.name || "").trim().toLocaleLowerCase()).filter(Boolean);
+  if (new Set(normalizedNames).size < normalizedNames.length) issues.push({ code: "duplicate_items", message: "אותו רכיב מופיע יותר מפעם אחת בארוחה. בדוק שלא נוצרה כפילות." });
   return { valid: issues.length === 0, issues };
 }
 
