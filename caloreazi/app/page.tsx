@@ -14,6 +14,7 @@ import { flushOfflineCaptures, flushOfflineMutations, listOfflineQueue, offlineP
 import { AppIcon } from "./components/AppIcon";
 import { assessMealReliability } from "../server/meal-reliability.js";
 import { HYDRATION_BEVERAGES, beverageNutrition, hydrationBeverage, hydrationContribution, hydrationTotal, normalizeCustomBeverage, removeLatestBeverageServing } from "../server/hydration.js";
+import { findPossibleDuplicate } from "../server/food-learning.js";
 
 type AppState = {
   authenticated?: boolean;
@@ -772,6 +773,7 @@ export default function Home() {
   const foodImageInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const mealSaveInFlight = useRef(false);
+  const duplicateMealApproval = useRef("");
   const waterMutationInFlight = useRef(false);
   const mealSaveRequestId = useRef("");
   const mealEditBaseUpdatedAt = useRef("");
@@ -1036,6 +1038,13 @@ export default function Home() {
     return [...ranked.slice(offset), ...ranked.slice(0, offset)].slice(0, 3);
   }, [profile, macros, suggestionPeriod, suggestionRefresh, state?.dailyScore?.parameters, state?.today?.date]);
   const historyDays = useMemo(() => [...(state?.history || []), ...(state?.today ? [{ ...state.today, dailyScore: state.dailyScore }] : [])], [state?.history, state?.today, state?.dailyScore]);
+  const currentMealPeriod = now.getHours() < 11 ? "breakfast" : now.getHours() < 15 ? "lunch" : now.getHours() < 19 ? "snack" : "dinner";
+  const quickRepeatMeals = useMemo(() => {
+    const recentMeals = [...(state?.history || [])].slice(-14).flatMap((day: any) => day.meals || []).filter((meal: any) => !meal.beverageEntry && Number(meal.kcal) > 0);
+    const groups = new Map<string, { meal: any; count: number; latest: number }>();
+    for (const meal of recentMeals) { const key = String(meal.name || "").toLocaleLowerCase("he").trim(); if (!key) continue; const existing = groups.get(key); const time = new Date(meal.time || 0).getTime(); if (!existing) groups.set(key, { meal, count: 1, latest: time }); else { existing.count += 1; if (time > existing.latest) { existing.meal = meal; existing.latest = time; } } }
+    return [...groups.values()].sort((a, b) => (b.count + (b.meal.period === currentMealPeriod ? 2 : 0)) - (a.count + (a.meal.period === currentMealPeriod ? 2 : 0)) || b.latest - a.latest).slice(0, 4);
+  }, [state?.history, currentMealPeriod]);
   const activeHistoryDate = historySelectedDate || state?.today?.date || "";
   const activeHistoryDay = historyDays.find((day) => day.date === activeHistoryDate) || historyDays[0];
   const activeCalendarMonth = historyCalendarMonth || activeHistoryDate.slice(0, 7);
@@ -1677,6 +1686,13 @@ export default function Home() {
       window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-meal-field="${Object.keys(validationErrors)[0]}"]`)?.focus());
       return;
     }
+    const duplicateKey = `${String(normalizedForm.name).trim().toLocaleLowerCase("he")}|${normalizedDateTime.slice(0, 16)}`;
+    const possibleDuplicate = !editingMealId && findPossibleDuplicate(state.today.meals || [], { name: normalizedForm.name, time: normalizedDateTime });
+    if (possibleDuplicate && duplicateMealApproval.current !== duplicateKey) {
+      duplicateMealApproval.current = duplicateKey;
+      setMealSaveFeedback(`כבר הוספת “${possibleDuplicate.name}” לפני זמן קצר. אם זו מנה נוספת, לחץ שוב על אישור והוספה.`);
+      return;
+    }
     const reviewCalculation = calculateMealDraft(normalizedItems, normalizedForm);
     setMealForm({ ...normalizedForm, kcal: Math.round(reviewCalculation.kcal), protein: Math.round(reviewCalculation.protein), carbs: Math.round(reviewCalculation.carbs), fat: Math.round(reviewCalculation.fat) });
     setMealReviewReady(true);
@@ -1710,7 +1726,7 @@ export default function Home() {
       if (!catalogOnly) {
         if (!editingMealId && !mealSaveRequestId.current) mealSaveRequestId.current = crypto.randomUUID();
         const requestId = mealSaveRequestId.current || crypto.randomUUID();
-        const payload = editingMealId ? { ...finalMeal, id: editingMealId, baseUpdatedAt: mealEditBaseUpdatedAt.current } : { ...finalMeal, clientRequestId: requestId };
+        const payload = editingMealId ? { ...finalMeal, id: editingMealId, baseUpdatedAt: mealEditBaseUpdatedAt.current } : { ...finalMeal, clientRequestId: requestId, allowDuplicate: duplicateMealApproval.current === duplicateKey };
         if (!navigator.onLine) {
           await queueMutation("/api/meals", editingMealId ? "PATCH" : "POST", JSON.stringify(payload), requestId);
           savedMealId = editingMealId || `offline-${requestId}`; savedLocalDate = profile.dayBoundaryMode === "manual" ? state.today.date : normalizedDateTime.slice(0, 10);
@@ -1786,6 +1802,7 @@ export default function Home() {
       setCatalogOnly(false);
       setMealValidationErrors({});
       setMealSaveFeedback("");
+      duplicateMealApproval.current = "";
     } catch (e) {
       const message = (e as Error).message;
       setMealSaveFeedback(`השמירה לא הושלמה: ${message}`);
@@ -1795,6 +1812,23 @@ export default function Home() {
       setBusy(false);
     }
   }
+  async function repeatRecentMeal(meal: any) {
+    if (busy) return;
+    setBusy(true); setError("");
+    try {
+      const clientRequestId = crypto.randomUUID(); const occurredAt = new Date().toISOString();
+      const payload = { name: meal.name, period: currentMealPeriod, kcal: meal.kcal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat, sugar: meal.sugar, items: meal.items || [], source: "manual", confidence: .95, occurredAt, clientRequestId, allowDuplicate: true };
+      if (!navigator.onLine) {
+        await queueMutation("/api/meals", "POST", JSON.stringify(payload), clientRequestId);
+        const optimistic = { ...payload, id: `offline-${clientRequestId}`, time: occurredAt, pendingSync: true };
+        setState((current: any) => ({ ...current, today: { ...current.today, meals: [...current.today.meals, optimistic] } }));
+        setOfflineQueueCount(await offlinePendingCount());
+      } else setState(await api("/api/meals", { method: "POST", headers: { "Idempotency-Key": clientRequestId }, body: JSON.stringify(payload) }));
+      setMealResult({ name: meal.name, kcal: meal.kcal, protein: meal.protein, carbs: meal.carbs, fat: meal.fat });
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
   async function deleteMeal(id: string) {
     try {
       const mealName =
@@ -3249,6 +3283,7 @@ export default function Home() {
               <button type="button" title="הוספת ארוחה" aria-label="פתיחת תפריט הוספת ארוחה" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }}><AppIcon name="mealAdd" /></button>
             </div>
           </header>
+          {quickRepeatMeals.length > 0 && <div className="quick-repeat-meals" aria-label="ארוחות קבועות להוספה מהירה"><small>הרגילות שלך עכשיו</small><div>{quickRepeatMeals.map(({ meal, count }) => <button type="button" key={meal.id || meal.name} disabled={busy} onClick={() => repeatRecentMeal(meal)}><span>＋</span><strong>{meal.name}</strong><small>{Math.round(Number(meal.kcal))} קלוריות{count > 1 ? ` · נאכלה ${count} פעמים` : ""}</small></button>)}</div></div>}
           {state.today.meals.length === 0 && !(state.today.waterEvents || []).length ? (
             <div className="empty-state">
               עדיין אין ארוחות היום.

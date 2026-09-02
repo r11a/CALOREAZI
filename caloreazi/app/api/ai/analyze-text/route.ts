@@ -6,6 +6,7 @@ import { estimateCost, evaluateBudget } from "@/server/ai/usage.js";
 import { decryptSecret, readState, updateState } from "@/server/store.js";
 import { aiRole, findModel } from "@/server/ai/models.js";
 import { applyExplicitCalorieFacts } from "@/server/explicit-nutrition.js";
+import { applyFoodCorrections } from "@/server/food-learning.js";
 export const runtime = "nodejs";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
       ? `טיוטה קיימת: ${JSON.stringify({ name: String(draft?.name || "").slice(0, 120), items: draftItems })}\nתיקון המשתמש: ${correctionText}\nעדכן רק את מה שנדרש מהתיקון. שמור פריטים וערכים שלא הושפעו ממנו.`
       : `תיאור המשתמש: ${text}`;
     const result = await call({ apiKey: await decryptSecret(state.ai.encryptedKey), model: role.model, instructions: `אתה מנוע רישום תזונה מדויק. פרק כל מזון לפריט נפרד. quantity הוא מספר היחידות ו-grams הוא משקל יחידה אחת. מספר קלוריות מפורש שהמשתמש מסר הוא עובדה מחייבת: שמור אותו ב-kcalPerUnit ואל תשנה אותו, אלא אם המשתמש ביקש במפורש לבדוק או לאשר. kcalPer100 מיועד רק לערך ל-100 גרם. אם הכמות לא נמסרה, השתמש במנה ישראלית טיפוסית אך סמן ביטחון נמוך והסבר את ההנחה. אל תמציא מרכיבים. בתיקון טיוטה בצע שינוי ממוקד ואל תנתח מחדש רכיבים שלא השתנו. תיקוני עבר: ${calibration || "אין"}. החזר JSON בלבד.`, input: `${correctionInput}\nהחזר בדיוק: {"name":"שם הארוחה","items":[{"name":"פריט","grams":100,"quantity":1,"unit":"מנה","kcalPerUnit":0,"kcalPer100":100,"proteinPer100":10,"carbsPer100":10,"fatPer100":3}],"confidence":"low|medium|high","explanation":"מה תוקן והנחות קצרות בעברית"}` });
-    const parsed = parseItems(result.text); const explicit = applyExplicitCalorieFacts(correctionText || text, parsed.items); const analysis = { ...parsed, items: explicit.items, explicitCaloriesEnforced: explicit.enforced }; const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: selectedModel?.inputCost || state.ai.inputCost, outputCostPerMillion: selectedModel?.outputCost || state.ai.outputCost });
+    const parsed = parseItems(result.text); const learned = applyFoodCorrections(parsed.items, userData?.foodCalibration || []); const explicit = applyExplicitCalorieFacts(correctionText || text, learned); const analysis = { ...parsed, items: explicit.items, explicitCaloriesEnforced: explicit.enforced, learnedCorrectionsApplied: learned.filter((item: any) => item.learnedCorrection).length }; const cost = estimateCost({ inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, inputCostPerMillion: selectedModel?.inputCost || state.ai.inputCost, outputCostPerMillion: selectedModel?.outputCost || state.ai.outputCost });
     await updateState((latest) => { latest.aiUsage.push({ id: crypto.randomUUID(), month, at: new Date().toISOString(), userId: session.userId, feature: correctionText ? "meal_ai_correction" : "meal_manual_ai", provider: role.provider, model: role.model, ...result.usage, cost }); return latest; });
     return Response.json({ ...analysis, usage: { ...result.usage, estimatedCost: cost } });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "חישוב הארוחה נכשל" }, { status: aiErrorStatus(error) }); }

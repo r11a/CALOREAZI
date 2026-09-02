@@ -7,6 +7,7 @@ import { entryDateFor, localDateAt, userTimeZone } from "@/server/local-date.js"
 import { validateMealNutrition } from "@/server/meal-validation.js";
 import { databaseStateEnabled, insertDatabaseMeal } from "@/server/state-database.js";
 import { assessMealReliability } from "@/server/meal-reliability.js";
+import { buildFoodCorrections, findPossibleDuplicate } from "@/server/food-learning.js";
 export const runtime = "nodejs";
 type MealRecord = { id: string; clientRequestId?: string; logicalDate?: string; name: string; period: string; kcal: number; protein: number; carbs: number; fat: number; sugar: number; sugarTrackedItems: number; fiber?: number; fiberTrackedItems?: number; sodiumMg?: number; sodiumMgTrackedItems?: number; saturatedFat?: number; saturatedFatTrackedItems?: number; addedSugar?: number; addedSugarTrackedItems?: number; items: unknown[]; source: string; image: string; media: unknown; confidence: number; recognitionScore?: number; nutritionReliability?: unknown; transcript: string; time: string; score?: number; updatedAt?: string };
 
@@ -15,6 +16,7 @@ export async function POST(request: Request) {
   const initial = await readState(); const session = requireUser(initial, request);
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
   const body = await request.json(); const name = String(body.name || "").trim();
+  const clientRequestId = String(body.clientRequestId || request.headers.get("idempotency-key") || "").trim().slice(0, 120);
   const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
   const calculated = items.length ? calculateMealFromItems(items) : body;
   const kcal = roundCalories(calculated.kcal);
@@ -25,7 +27,8 @@ export async function POST(request: Request) {
   const hasBlockingNutritionIssue = nutritionValidation.issues.some((issue: { code?: string }) => ["photo", "voice"].includes(body.source) || issue.code === "implausible_energy_density");
   if (hasBlockingNutritionIssue)
     return Response.json({ error: nutritionValidation.issues[0].message, issues: nutritionValidation.issues, requiresConfirmation: true }, { status: 422 });
-  const clientRequestId = String(body.clientRequestId || request.headers.get("idempotency-key") || "").trim().slice(0, 120);
+  const duplicateData = ensureUserData(initial, session.userId); const requestedDuplicateTime = new Date(body.occurredAt || Date.now()); const duplicateDate = entryDateFor(duplicateData, requestedDuplicateTime); const duplicateDay = duplicateData.today.date === duplicateDate ? duplicateData.today : duplicateData.history.find((day) => day.date === duplicateDate); const duplicate = findPossibleDuplicate((duplicateDay?.meals || []).filter((meal) => !clientRequestId || meal.clientRequestId !== clientRequestId), { name, time: requestedDuplicateTime });
+  if (duplicate && body.allowDuplicate !== true) return Response.json({ error: `הארוחה “${name}” כבר נוספה לפני זמן קצר. אם זו ארוחה נוספת, אשר שוב.`, duplicate: { id: duplicate.id, name: duplicate.name, time: duplicate.time }, requiresDuplicateConfirmation: true }, { status: 409 });
   let savedMealId = ""; let savedLocalDate = ""; let idempotent = false;
   if (databaseStateEnabled()) {
     const data = ensureUserData(initial, session.userId);
@@ -39,7 +42,7 @@ export async function POST(request: Request) {
     const confidence = Math.max(0, Math.min(1, Number(body.confidence) || .75));
     const meal: MealRecord = { id, ...(clientRequestId ? { clientRequestId } : {}), name, period: ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : "snack", kcal, protein: Math.max(0, Number(calculated.protein) || 0), carbs: Math.max(0, Number(calculated.carbs) || 0), fat: Math.max(0, Number(calculated.fat) || 0), sugar: Math.max(0, Number(calculated.sugar) || 0), sugarTrackedItems: Math.max(0, Number(calculated.sugarTrackedItems) || 0), items, source, image: media ? `api/media/${id}` : "", media, confidence, ...(["photo", "voice"].includes(source) ? { recognitionScore: Math.round(confidence * 100) } : {}), nutritionReliability, transcript: source === "voice" ? String(body.transcript || "").slice(0, 1000) : "", time };
     meal.score = calculateMealScore(meal);
-    const calibrations = ["photo", "voice"].includes(source) && items.length ? items.flatMap((item: Record<string, unknown>, index) => { const before = Array.isArray(body.aiOriginalItems) ? body.aiOriginalItems[index] : null; return !before || String(before.name) !== String(item.name) || Number(before.grams) !== Number(item.grams) || Number(before.quantity) !== Number(item.quantity) ? [{ originalName: before?.name || null, name: String(item.name).slice(0, 80), grams: Math.max(1, Number(item.grams) || 1), quantity: Math.max(.1, Number(item.quantity) || 1), previousGrams: before ? Number(before.grams) : null, at: new Date().toISOString() }] : []; }) : [];
+    const calibrations = ["photo", "voice"].includes(source) && items.length ? buildFoodCorrections(Array.isArray(body.aiOriginalItems) ? body.aiOriginalItems : [], items, source) : [];
     const localDate = body.calendarDate ? localDateAt(new Date(time), userTimeZone(data)) : entryDateFor(data, new Date(time));
     meal.logicalDate = localDate;
     const state = await insertDatabaseMeal({ userId: session.userId, localDate, timeZone: userTimeZone(data), meal, analysisJobId: String(body.analysisJobId || ""), calibrations });
@@ -65,11 +68,7 @@ export async function POST(request: Request) {
     const targetDay = localDate === data.today.date ? data.today : (data.history.find((day) => day.date === localDate) || (() => { const day = { date: localDate, waterMl: 0, meals: [] }; data.history.push(day); return day; })());
     targetDay.meals.push(meal); targetDay.meals.sort((a, b) => String(a.time).localeCompare(String(b.time))); data.history.sort((a, b) => a.date.localeCompare(b.date));
     if (["photo", "voice"].includes(source) && items.length) {
-      const original = Array.isArray(body.aiOriginalItems) ? body.aiOriginalItems : [];
-      items.forEach((item, index) => {
-        const before = original[index];
-        if (!before || String(before.name) !== String(item.name) || Number(before.grams) !== Number(item.grams) || Number(before.quantity) !== Number(item.quantity)) data.foodCalibration.push({ originalName: before?.name || null, name: String(item.name).slice(0, 80), grams: Math.max(1, Number(item.grams) || 1), quantity: Math.max(.1, Number(item.quantity) || 1), previousGrams: before ? Number(before.grams) : null, at: new Date().toISOString() });
-      });
+      data.foodCalibration.push(...buildFoodCorrections(Array.isArray(body.aiOriginalItems) ? body.aiOriginalItems : [], items, source));
       data.foodCalibration = data.foodCalibration.slice(-100);
     }
     return latest;
@@ -100,7 +99,7 @@ export async function PATCH(request: Request) {
   const state = await updateState((latest) => {
     const found = findOwnedMeal(latest, session.userId, id); if (!found) return latest;
     foundMeal = true;
-    const meal = found.meal;
+    const meal = found.meal; const previousItems = structuredClone(meal.items || []);
     if (body.baseUpdatedAt !== undefined && String(meal.updatedAt || "") !== String(body.baseUpdatedAt || "")) { editConflict = true; return latest; }
     if (body.scale !== undefined) {
       const scale = Math.max(.25, Math.min(4, Number(body.scale) || 1));
@@ -116,6 +115,7 @@ export async function PATCH(request: Request) {
       meal.nutritionReliability = assessMealReliability({ ...body, ...calculated, items });
       const requested = new Date(body.occurredAt || meal.time); if (Number.isFinite(requested.getTime()) && requested.getTime() <= Date.now()) meal.time = requested.toISOString();
     }
+    if (body.scale === undefined && editedItems.length) { const data = ensureUserData(latest, session.userId); data.foodCalibration.push(...buildFoodCorrections(previousItems, editedItems, "meal_edit")); data.foodCalibration = data.foodCalibration.slice(-100); }
     meal.score = calculateMealScore(meal); meal.updatedAt = new Date().toISOString();
     const previousDay = found.day; previousDay.meals = previousDay.meals.filter((item) => item.id !== id); restoreOwnedMeal(latest, session.userId, meal);
     savedLocalDate = localDateAt(meal.time, userTimeZone(ensureUserData(latest, session.userId)));
