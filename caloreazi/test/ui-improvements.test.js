@@ -566,10 +566,17 @@ test("meal launcher is a compact eight-action hub with recent meals", () => {
 });
 
 test("meal and barcode cameras expose an explicit back action", () => {
-  assert.match(page, /aria-label="חזרה מהמצלמה"/);
-  assert.match(page, /aria-label="חזרה מסריקת ברקוד"/);
-  assert.match(page, /className="capture-exit"/);
-  assert.match(css, /\.meal-camera-modal \.capture-exit,.barcode-scanner \.capture-exit\{position:fixed!important/);
+  assert.match(page, /aria-label="יציאה ממצב צילום"/);
+  assert.match(page, /aria-label="יציאה מסריקת ברקוד"/);
+  assert.match(page, /className="camera-floating-exit"/);
+  assert.match(css, /\.camera-floating-exit\{position:fixed/);
+});
+
+test("mobile camera modes keep a top-level floating exit above the live preview", () => {
+  assert.equal((page.match(/className="camera-floating-exit"/g) || []).length, 2);
+  assert.match(page, /aria-label="יציאה ממצב צילום"/);
+  assert.match(page, /aria-label="יציאה מסריקת ברקוד"/);
+  assert.match(css, /\.camera-floating-exit\{position:fixed;[^}]*z-index:10000/);
 });
 
 test("every food category exposes a persistent return to the meal launcher", () => {
