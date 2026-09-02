@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { backfillDayHydration, beverageNutrition, hydrationBeverage, hydrationContribution, hydrationTotal, inferHydrationBeverage, normalizeCustomBeverage } from "../server/hydration.js";
+import { backfillDayHydration, beverageNutrition, hydrationBeverage, hydrationContribution, hydrationTotal, inferHydrationBeverage, normalizeCustomBeverage, removeLatestBeverageServing } from "../server/hydration.js";
 
 test("water and selected drinks contribute their configured hydration amount", () => {
   assert.equal(hydrationContribution(250, "water"), 250);
@@ -30,4 +30,13 @@ test("historical drinks are inferred in Hebrew and migrated exactly once", () =>
   assert.equal(day.waterMl, 430);
   assert.equal(backfillDayHydration(day), 0);
   assert.equal(day.waterEvents.length, 2);
+});
+
+test("minus removes only the latest selected drink serving and its linked meal", () => {
+  const day = { waterMl: 430, waterEvents: [{ id: "historic", beverageId: "milk_coffee", amount: 200, hydrationMl: 180, sourceMealId: "historic-meal", inferredFromHistory: true }, { id: "added", beverageId: "milk_coffee", amount: 200, hydrationMl: 180, mealId: "drink-meal", source: "hydration-control" }, { id: "water", beverageId: "water", amount: 250 }], meals: [{ id: "historic-meal", name: "קפה עם חלב" }, { id: "drink-meal", name: "קפה עם חלב", kcal: 60 }] };
+  assert.equal(removeLatestBeverageServing(day, "milk_coffee", 200), 200);
+  assert.deepEqual(day.waterEvents.map((event) => event.id), ["historic", "water"]);
+  assert.deepEqual(day.meals.map((meal) => meal.id), ["historic-meal"]);
+  assert.equal(day.waterMl, 430);
+  assert.equal(removeLatestBeverageServing(day, "milk_coffee", 200), 0);
 });

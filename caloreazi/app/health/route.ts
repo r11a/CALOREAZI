@@ -1,3 +1,3 @@
 export function GET() {
-  return Response.json({ status: "ok", service: "caloreazi", version: "1.20.9", build: process.env.CALOREAZI_BUILD_COMMIT || "development" });
+  return Response.json({ status: "ok", service: "caloreazi", version: "1.20.10", build: process.env.CALOREAZI_BUILD_COMMIT || "development" });
 }
