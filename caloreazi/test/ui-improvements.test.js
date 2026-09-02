@@ -562,10 +562,26 @@ test("meal launcher is a compact eight-action hub with recent meals", () => {
   assert.match(page, /ארוחות אחרונות ונפוצות/);
   assert.match(page, /quickRepeatMeals\.slice\(0, 8\)/);
   assert.match(css, /single-screen meal source launcher/);
+  assert.match(css, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\);grid-template-rows:repeat\(4/);
 });
 
 test("meal and barcode cameras expose an explicit back action", () => {
   assert.match(page, /aria-label="חזרה מהמצלמה"/);
   assert.match(page, /aria-label="חזרה מסריקת ברקוד"/);
   assert.match(page, /className="capture-exit"/);
+  assert.match(css, /\.meal-camera-modal \.capture-exit,.barcode-scanner \.capture-exit\{position:fixed!important/);
+});
+
+test("every food category exposes a persistent return to the meal launcher", () => {
+  assert.match(page, /aria-label="חזרה למסך הוספת ארוחה"/);
+  assert.match(page, /← חזרה להוספת ארוחה/);
+  assert.match(css, /\.quick-add-modal \.category-back\{position:sticky/);
+});
+
+test("produce category separates vegetables from fruits", () => {
+  assert.match(page, /const \[produceFilter, setProduceFilter\]/);
+  assert.match(page, /role="tablist" aria-label="בחירת ירקות או פירות"/);
+  assert.match(page, /quickFoods\[produceFilter\]/);
+  assert.match(page, /food\.category === produceFilter/);
+  assert.match(css, /\.produce-filter\{[^}]*grid-template-columns:repeat\(2/);
 });

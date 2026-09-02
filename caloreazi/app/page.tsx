@@ -657,6 +657,7 @@ export default function Home() {
   const [forgottenMeals, setForgottenMeals] = useState<any[]>([]);
   const [forgottenStatus, setForgottenStatus] = useState("");
   const [quickCategory, setQuickCategory] = useState("");
+  const [produceFilter, setProduceFilter] = useState<"vegetables" | "fruits">("vegetables");
   const [quickSearch, setQuickSearch] = useState("");
   const [onlineFoodResults, setOnlineFoodResults] = useState<any[]>([]);
   const [onlineFoodStatus, setOnlineFoodStatus] = useState("");
@@ -4351,7 +4352,7 @@ export default function Home() {
                   { label: "הקלט ארוחה", icon: "mic", action: () => { setQuickAddOpen(false); setVoiceOpen(true); } },
                   { label: "מועדפים", icon: "star", action: () => { setQuickAddOpen(false); setFoodLibraryOpen(true); } },
                   { label: "משקאות", icon: "drink", action: () => setQuickCategory("drinks") },
-                  { label: "ירקות ופירות", icon: "produce", action: () => setQuickCategory("produce") },
+                  { label: "ירקות ופירות", icon: "produce", action: () => { setProduceFilter("vegetables"); setQuickCategory("produce"); } },
                 ].map((entry: any, index) => <button type="button" className={`quick-source source-${index + 1}`} onClick={entry.action} key={entry.label}><span><AppIcon name={entry.icon} /></span><strong>{entry.label}</strong></button>)}
               </div>{quickRepeatMeals.length > 0 && <section className="quick-add-recents"><header><strong>ארוחות אחרונות ונפוצות</strong><small>להוספה חוזרת בלחיצה</small></header><div>{quickRepeatMeals.slice(0, 8).map(({ meal, count }) => <button type="button" key={meal.id || meal.name} disabled={busy} onClick={() => { setQuickAddOpen(false); repeatRecentMeal(meal); }}><span>＋</span><strong>{meal.name}</strong><small>{Math.round(Number(meal.kcal))} קלוריות{count > 1 ? ` · ${count} פעמים` : ""}</small></button>)}</div></section>}</>
             ) : (
@@ -4359,18 +4360,25 @@ export default function Home() {
                 <button
                   className="category-back"
                   onClick={() => { setQuickCategory(""); setQuickSearch(""); }}
+                  aria-label="חזרה למסך הוספת ארוחה"
                 >
-                  → חזרה לקטגוריות
+                  ← חזרה להוספת ארוחה
                 </button>
+                {quickCategory === "produce" && (
+                  <div className="produce-filter" role="tablist" aria-label="בחירת ירקות או פירות">
+                    <button type="button" role="tab" aria-selected={produceFilter === "vegetables"} className={produceFilter === "vegetables" ? "active" : ""} onClick={() => setProduceFilter("vegetables")}>ירקות</button>
+                    <button type="button" role="tab" aria-selected={produceFilter === "fruits"} className={produceFilter === "fruits" ? "active" : ""} onClick={() => setProduceFilter("fruits")}>פירות</button>
+                  </div>
+                )}
                 <div className={`quick-food-grid ${quickCategory}`}>
-                  {(quickCategory === "produce" ? [...quickFoods.vegetables.map((item: any) => ({ ...item, spriteCategory: "vegetables" })), ...quickFoods.fruits.map((item: any) => ({ ...item, spriteCategory: "fruits" }))] : quickFoods[quickCategory]).filter((item) => !quickSearch.trim() || `${item.name} ${item.portion}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((item: any, index: number) => (
+                  {(quickCategory === "produce" ? quickFoods[produceFilter].map((item: any) => ({ ...item, spriteCategory: produceFilter })) : quickFoods[quickCategory]).filter((item) => !quickSearch.trim() || `${item.name} ${item.portion}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((item: any, index: number) => (
                     <button
                       key={`${item.name}-${item.portion}`}
                       onClick={() => selectQuickFood(item)}
                     >
                       <span
                         className="food-sprite"
-                        style={foodSpriteStyle(item.spriteCategory || quickCategory, item.spriteCategory === "fruits" ? index - quickFoods.vegetables.length : index)}
+                        style={foodSpriteStyle(item.spriteCategory || quickCategory, index)}
                       />
                       <strong>{item.name}</strong>
                       <small>{item.portion}</small>
@@ -4378,7 +4386,7 @@ export default function Home() {
                     </button>
                   ))}
                   {(state.foods || [])
-                    .filter((food) => (quickCategory === "produce" ? ["vegetables", "fruits"].includes(food.category) : food.category === quickCategory) && (!quickSearch.trim() || `${food.name} ${food.category || ""}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))))
+                    .filter((food) => (quickCategory === "produce" ? food.category === produceFilter : food.category === quickCategory) && (!quickSearch.trim() || `${food.name} ${food.category || ""}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))))
                     .map((food) => (
                       <button
                         key={food.id}
@@ -4405,7 +4413,7 @@ export default function Home() {
                     onClick={() => {
                       setSaveToLibrary(true);
                       setGenerateFoodArtwork(true);
-                      openManualMeal(quickCategory === "produce" ? "vegetables" : quickCategory);
+                      openManualMeal(quickCategory === "produce" ? produceFilter : quickCategory);
                     }}
                   >
                     <span>＋</span>
