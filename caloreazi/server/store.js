@@ -4,7 +4,7 @@ import path from "node:path";
 import { calculateDayScore } from "./nutrition.js";
 import { databaseStateEnabled, readDatabaseState, replaceDatabaseState, updateDatabaseState } from "./state-database.js";
 import { localDateAt, userTimeZone } from "./local-date.js";
-import { hydrationTotal } from "./hydration.js";
+import { backfillDayHydration, hydrationTotal } from "./hydration.js";
 
 const defaultState = {
   version: 1,
@@ -112,6 +112,8 @@ export function ensureUserData(state, userId) {
   } else if (!data.today.date) data.today.date = todayDate;
   if (manualDay && !data.profile.activeDayStartedAt) data.profile.activeDayStartedAt = new Date().toISOString();
   if (manualDay) data.profile.activeDayDate = data.today.date;
+  const customHydrationBeverages = data.profile?.customHydrationBeverages || [];
+  for (const day of [...data.history, data.today]) backfillDayHydration(day, customHydrationBeverages);
   state.userData[userId] = data;
   return data;
 }

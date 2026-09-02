@@ -710,6 +710,7 @@ export default function Home() {
   const [historySelectedDate, setHistorySelectedDate] = useState("");
   const [historyCalendarMonth, setHistoryCalendarMonth] = useState("");
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [hydrationTrendPeriod, setHydrationTrendPeriod] = useState<"day" | "week" | "month">("month");
   const [insightsData, setInsightsData] = useState<any>(null);
   useEffect(() => {
     if (!insightsOpen || !insightsData?.recommendationRefreshAt) return;
@@ -1083,9 +1084,12 @@ export default function Home() {
     return { ...item, x, y };
   });
   const hydrationCatalog = [...HYDRATION_BEVERAGES, ...(profile?.customHydrationBeverages || []).map(normalizeCustomBeverage)];
-  const waterByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, amount: historyDays.slice(-30).flatMap((day: any) => day.waterEvents || []).filter((event: any) => new Date(event.time).getHours() === hour).reduce((sum: number, event: any) => sum + Number(event.amount || 0), 0) }));
+  const hydrationTrendDayCount = hydrationTrendPeriod === "day" ? 1 : hydrationTrendPeriod === "week" ? 7 : 30;
+  const hydrationTrendLabel = hydrationTrendPeriod === "day" ? "היום" : hydrationTrendPeriod === "week" ? "7 הימים האחרונים" : "30 הימים האחרונים";
+  const hydrationTrendDays = [...historyDays].sort((a: any, b: any) => String(a.date).localeCompare(String(b.date))).slice(-hydrationTrendDayCount);
+  const waterByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, amount: hydrationTrendDays.flatMap((day: any) => day.waterEvents || []).filter((event: any) => new Date(event.time).getHours() === hour).reduce((sum: number, event: any) => sum + Number(event.amount || 0), 0) }));
   const maximumWaterHour = Math.max(1, ...waterByHour.map((item) => item.amount));
-  const hydrationTrendEvents = historyDays.slice(-30).flatMap((day: any) => day.waterEvents || []);
+  const hydrationTrendEvents = hydrationTrendDays.flatMap((day: any) => day.waterEvents || []);
   const hydrationTrendLayers = hydrationCatalog.map((beverage) => ({ ...beverage, amount: hydrationTrendEvents.filter((event: any) => (event.beverageId || "water") === beverage.id).reduce((sum: number, event: any) => sum + Number(event.hydrationMl ?? event.amount ?? 0), 0) })).filter((item) => item.amount > 0).sort((a, b) => b.amount - a.amount);
   const hydrationTrendTotal = hydrationTrendLayers.reduce((sum, item) => sum + item.amount, 0);
   const trend30Days = insightsData?.daily?.slice(-30) || [];
@@ -1478,14 +1482,14 @@ export default function Home() {
     setBusy(true);
     try {
       if (!navigator.onLine) {
-        await queueMutation("/api/water", "PUT", JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue, beverages: selectedHydrationBeverages, customBeverages: customHydrationBeverages, localDate: state.today.date }));
-        setState((current: any) => ({ ...current, profile: { ...current.profile, waterMl: waterTargetValue, hydrationBeverages: selectedHydrationBeverages, customHydrationBeverages }, today: { ...current.today, waterMl: waterValue } }));
+        await queueMutation("/api/water", "PUT", JSON.stringify({ targetWaterMl: waterTargetValue, beverages: selectedHydrationBeverages, customBeverages: customHydrationBeverages, localDate: state.today.date }));
+        setState((current: any) => ({ ...current, profile: { ...current.profile, waterMl: waterTargetValue, hydrationBeverages: selectedHydrationBeverages, customHydrationBeverages } }));
         setOfflineQueueCount(await offlinePendingCount()); setWaterOpen(false); return;
       }
       setState(
         await api("/api/water", {
           method: "PUT",
-          body: JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue, beverages: selectedHydrationBeverages, customBeverages: customHydrationBeverages }),
+          body: JSON.stringify({ targetWaterMl: waterTargetValue, beverages: selectedHydrationBeverages, customBeverages: customHydrationBeverages }),
         }),
       );
       setWaterOpen(false);
@@ -5148,8 +5152,9 @@ export default function Home() {
               <div className="insights-loading" role="status" aria-live="polite"><span /><strong>מכין את תמונת המגמות שלך</strong><small>מחשב נתונים ומסדר את הגרפים…</small><i><b /></i></div>
             ) : (
               <>
-                <section className="hydration-mix-insight"><header><strong>הרכב השתייה שלך</strong><small>תרומת המשקאות למיכל הנוזלים ב־30 הימים האחרונים</small></header>{hydrationTrendTotal > 0 ? <div className="hydration-pitcher-layout"><div className="hydration-pitcher" aria-label="התפלגות משקאות"><div className="hydration-liquid">{hydrationTrendLayers.slice().reverse().map((item, index) => <i key={item.id} style={{ height: `${item.amount / hydrationTrendTotal * 100}%`, "--layer-color": item.color, "--layer-delay": `${index * 110}ms` } as CSSProperties} />)}</div></div><div className="hydration-legend">{hydrationTrendLayers.map((item) => <span key={item.id}><i style={{ background: item.color }} /><b>{item.icon} {item.name}</b><strong>{item.amount.toLocaleString()} מ״ל</strong><small>{Math.round(item.amount / hydrationTrendTotal * 100)}%</small></span>)}</div></div> : <p>המיכל יתחיל להתמלא לאחר הוספת משקאות.</p>}</section>
-                <section className="water-hours-insight"><header><strong>מתי שותים הכי הרבה?</strong><small>התפלגות השתייה לפי שעות ב־30 הימים האחרונים · כוס מחושבת כ־250 מ״ל</small></header><div>{waterByHour.map((item) => { const cups = Math.round(Number(item.amount || 0) / 250); return <span key={item.hour} title={`${String(item.hour).padStart(2,"0")}:00 · ${item.amount} מ״ל · ${cups} כוסות`}><i style={{ height: `${item.amount ? Math.max(6, item.amount / maximumWaterHour * 100) : 2}%` }}>{cups > 1 && <b>{cups}</b>}</i><small>{item.hour % 3 === 0 ? String(item.hour).padStart(2,"0") : ""}</small></span>; })}</div>{!waterByHour.some((item) => item.amount > 0) && <p>הגרף יתחיל להיבנות מהוספות השתייה הבאות.</p>}</section>
+                <div className="hydration-period-switch" role="tablist" aria-label="טווח מגמות השתייה">{([['day','יומי'],['week','שבועי'],['month','חודשי']] as const).map(([period,label]) => <button key={period} type="button" role="tab" aria-selected={hydrationTrendPeriod === period} className={hydrationTrendPeriod === period ? "active" : ""} onClick={() => setHydrationTrendPeriod(period)}>{label}</button>)}</div>
+                <section className="hydration-mix-insight"><header><strong>הרכב השתייה שלך</strong><small>תרומת המשקאות למיכל הנוזלים · {hydrationTrendLabel}</small></header>{hydrationTrendTotal > 0 ? <div className="hydration-pitcher-layout"><div className="hydration-pitcher" aria-label="התפלגות משקאות"><div className="hydration-liquid">{hydrationTrendLayers.slice().reverse().map((item, index) => <i key={item.id} style={{ height: `${item.amount / hydrationTrendTotal * 100}%`, "--layer-color": item.color, "--layer-delay": `${index * 110}ms` } as CSSProperties} />)}</div></div><div className="hydration-legend">{hydrationTrendLayers.map((item) => <span key={item.id}><i style={{ background: item.color }} /><b>{item.icon} {item.name}</b><strong>{item.amount.toLocaleString()} מ״ל</strong><small>{Math.round(item.amount / hydrationTrendTotal * 100)}%</small></span>)}</div></div> : <p>לא נמצאו משקאות בטווח שנבחר.</p>}</section>
+                <section className="water-hours-insight"><header><strong>מתי שותים הכי הרבה?</strong><small>התפלגות השתייה לפי שעות · {hydrationTrendLabel} · כוס מחושבת כ־250 מ״ל</small></header><div>{waterByHour.map((item) => { const cups = Math.round(Number(item.amount || 0) / 250); return <span key={item.hour} title={`${String(item.hour).padStart(2,"0")}:00 · ${item.amount} מ״ל · ${cups} כוסות`}><i style={{ height: `${item.amount ? Math.max(6, item.amount / maximumWaterHour * 100) : 2}%` }}>{cups > 1 && <b>{cups}</b>}</i><small>{item.hour % 3 === 0 ? String(item.hour).padStart(2,"0") : ""}</small></span>; })}</div>{!waterByHour.some((item) => item.amount > 0) && <p>אין עדיין נתוני שתייה בטווח שנבחר.</p>}</section>
                 {insightsData.sugar?.enabled && (
                   <section className="sugar-insights">
                     <header><div><strong>סוכרים תזונתיים משוערים</strong><small>מוצג בגלל מצב הסוכר שסומן בכרטיס האישי</small></div><b>לא גלוקוז בדם</b></header>

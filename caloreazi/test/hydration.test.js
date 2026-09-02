@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { beverageNutrition, hydrationBeverage, hydrationContribution, hydrationTotal, normalizeCustomBeverage } from "../server/hydration.js";
+import { backfillDayHydration, beverageNutrition, hydrationBeverage, hydrationContribution, hydrationTotal, inferHydrationBeverage, normalizeCustomBeverage } from "../server/hydration.js";
 
 test("water and selected drinks contribute their configured hydration amount", () => {
   assert.equal(hydrationContribution(250, "water"), 250);
@@ -18,4 +18,16 @@ test("a custom drink keeps its own serving, nutrition and hydration settings", (
   assert.equal(hydrationBeverage(custom.id, [custom]).name, "לימונדה");
   assert.equal(hydrationContribution(300, custom.id, [custom]), 255);
   assert.deepEqual(beverageNutrition(300, custom.id, [custom]), { kcal: 72, protein: 0, carbs: 18, fat: 0 });
+});
+
+test("historical drinks are inferred in Hebrew and migrated exactly once", () => {
+  assert.equal(inferHydrationBeverage("קפה עם חלב").id, "milk_coffee");
+  assert.equal(inferHydrationBeverage("תה").id, "tea");
+  const day = { date: "2026-08-20", waterMl: 250, waterEvents: [{ id: "water-1", beverageId: "water", amount: 250, time: "2026-08-20T07:00:00.000Z" }], meals: [{ id: "meal-1", name: "קפה עם חלב", time: "2026-08-20T09:00:00.000Z", items: [{ name: "קפה עם חלב", grams: 200, quantity: 1 }] }] };
+  assert.equal(backfillDayHydration(day), 1);
+  assert.equal(day.waterEvents.length, 2);
+  assert.equal(day.waterEvents[1].beverageId, "milk_coffee");
+  assert.equal(day.waterMl, 430);
+  assert.equal(backfillDayHydration(day), 0);
+  assert.equal(day.waterEvents.length, 2);
 });
