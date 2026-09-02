@@ -3447,7 +3447,7 @@ export default function Home() {
       </nav>
       {calorieOverage && <div className="modal-layer overage-layer"><button className="backdrop" onClick={() => setCalorieOverage(null)} /><section className="settings-modal overage-modal"><header><div><h2>חריגה מהיעד היומי</h2><small>הארוחה נשמרה, אבל אפשר עדיין לתקן את הבחירה</small></div></header><div className="overage-ring"><strong>+{Math.round(calorieOverage.overBy)}</strong><small>קלוריות מעל היעד</small></div><p>אין צורך להילחץ מיום אחד. אפשר להשאיר את הארוחה, לערוך כמויות או לבטל את ההוספה.</p><footer><button type="button" onClick={() => setCalorieOverage(null)}>השאר ביומן</button><button type="button" onClick={() => { const meal = calorieOverage.meal; setCalorieOverage(null); editMeal({ ...meal, id: calorieOverage.id, time: meal.occurredAt }); }}>ערוך ארוחה</button><button className="danger" type="button" onClick={async () => { await deleteMeal(calorieOverage.id); setCalorieOverage(null); }}>בטל את ההוספה</button></footer></section></div>}
       {dayCloseConfirm && <div className="modal-layer"><button className="backdrop" onClick={() => setDayCloseConfirm(false)} /><section className="settings-modal compact-modal finish-day-modal"><header><div><h2>לסיים את היום הפעיל?</h2><small>היום יישמר בהיסטוריה והמדדים יתחילו מחדש</small></div></header><div className="finish-day-summary"><span><small>קלוריות</small><strong>{consumed.toLocaleString()}</strong></span><span><small>ארוחות</small><strong>{state.today.meals.filter((meal: any) => !meal.beverageEntry).length}</strong></span><span><small>שתייה</small><strong>{Number(state.today.waterMl || 0).toLocaleString()} מ״ל</strong></span></div><p>הפעולה אינה מוחקת דבר. אפשר יהיה לפתוח את היום הזה מההיסטוריה.</p><footer><button type="button" onClick={() => setDayCloseConfirm(false)}>חזור</button><button className="primary" type="button" disabled={busy} onClick={finishActiveDay}>{busy ? "שומר…" : "סיים והתחל יום חדש"}</button></footer></section></div>}
-      {cameraCaptureOpen && <div className="modal-layer meal-camera-layer"><button className="backdrop" type="button" onClick={closeInAppCamera} aria-label="סגירת המצלמה" /><section className="settings-modal meal-camera-modal"><header><div><h2>צילום ארוחה</h2><p>מקם את כל הצלחת בפריים ובתאורה טובה</p></div><button type="button" onClick={closeInAppCamera} aria-label="סגור">×</button></header><div className="live-meal-camera"><video ref={mealCameraVideo} playsInline muted /><span><AppIcon name="target" /></span></div><p className="camera-status" role="status">{cameraStatus}</p><label>פרט שיעזור בזיהוי <input value={cameraHint} onChange={(event) => setCameraHint(event.target.value)} maxLength={300} placeholder="לא חובה — למשל: חזה עוף עם מעט שמן" /></label><footer><button type="button" onClick={() => { closeInAppCamera(); uploadInput.current?.click(); }}>בחר מהגלריה</button><button className="primary camera-shutter" type="button" onClick={captureInAppMeal} aria-label="צלם ונתח"><AppIcon name="camera" /> צלם ונתח</button></footer></section></div>}
+      {cameraCaptureOpen && <div className="modal-layer meal-camera-layer"><button className="backdrop" type="button" onClick={closeInAppCamera} aria-label="סגירת המצלמה" /><section className="settings-modal meal-camera-modal"><header><div><h2>צילום ארוחה</h2><p>מקם את כל הצלחת בפריים ובתאורה טובה</p></div><button className="capture-exit" type="button" onClick={closeInAppCamera} aria-label="חזרה מהמצלמה">← <span>חזרה</span></button></header><div className="live-meal-camera"><video ref={mealCameraVideo} playsInline muted /><span><AppIcon name="target" /></span></div><p className="camera-status" role="status">{cameraStatus}</p><label>פרט שיעזור בזיהוי <input value={cameraHint} onChange={(event) => setCameraHint(event.target.value)} maxLength={300} placeholder="לא חובה — למשל: חזה עוף עם מעט שמן" /></label><footer><button type="button" onClick={() => { closeInAppCamera(); uploadInput.current?.click(); }}>בחר מהגלריה</button><button className="primary camera-shutter" type="button" onClick={captureInAppMeal} aria-label="צלם ונתח"><AppIcon name="camera" /> צלם ונתח</button></footer></section></div>}
       {historyDeleteRequest && <div className="modal-layer modal-nested"><button className="backdrop" type="button" onClick={() => setHistoryDeleteRequest(null)} /><form className="settings-modal compact-modal history-password-modal" onSubmit={async (event) => { event.preventDefault(); if (!historyDeleteRequest.password) return; await performHistoryDelete("meal", historyDeleteRequest.id, historyDeleteRequest.date, historyDeleteRequest.password); }}><header><div><h2>מחיקת ארוחה מההיסטוריה</h2><p>המחיקה תעדכן מיד את הקלוריות, אבות המזון והציון.</p></div></header><label>הסיסמה הנוכחית<input type="password" autoComplete="current-password" value={historyDeleteRequest.password} onChange={(event) => setHistoryDeleteRequest({ ...historyDeleteRequest, password: event.target.value })} /></label><footer><button type="button" onClick={() => setHistoryDeleteRequest(null)}>ביטול</button><button className="danger" type="submit" disabled={!historyDeleteRequest.password}>המשך למחיקה</button></footer></form></div>}
       {mealPreview && (
         <div className="modal-layer meal-preview-layer">
@@ -4326,19 +4326,13 @@ export default function Home() {
       {quickAddOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setQuickAddOpen(false)} />
-          <section className="settings-modal quick-add-modal">
+          <section className={`settings-modal quick-add-modal ${!quickCategory && !quickSearch.trim() ? "quick-add-launcher" : ""}`}>
             <header>
               <div>
-                <p className="eyebrow">הוספה מהירה</p>
-                <h2>{quickCategory ? "מה להוסיף?" : "בחר קטגוריה"}</h2>
+                <h2>{quickCategory ? "מה להוסיף?" : "הוספת ארוחה"}</h2>
               </div>
               <button onClick={() => setQuickAddOpen(false)}>×</button>
             </header>
-            <section className="barcode-search">
-              <button type="button" onClick={() => setBarcodeScannerOpen(true)}><AppIcon name="camera" /><span><strong>סריקת ברקוד חיה</strong><small>הזיהוי מתבצע אוטומטית ולא נשמר צילום</small></span></button>
-              <div className="barcode-manual-field"><input inputMode="numeric" value={barcodeValue} onChange={(event) => setBarcodeValue(event.target.value.replace(/\D/g, "").slice(0, 14))} placeholder="או הזן מספר ברקוד" aria-label="מספר ברקוד" />{barcodeValue && <button className="barcode-clear" type="button" onClick={() => { setBarcodeValue(""); setBarcodeStatus(""); }} aria-label="ניקוי ברקוד">×</button>}<button type="button" onClick={() => lookupBarcode()}>חפש</button></div>
-              {barcodeStatus && <p>{barcodeStatus}</p>}
-            </section>
             <div className="quick-catalog-search"><AppIcon name="search" /><input type="search" value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="חיפוש בארוחות, פירות, ירקות ומשקאות…" aria-label="חיפוש בהוספת אוכל" />{quickSearch && <button type="button" onClick={() => setQuickSearch("")} aria-label="ניקוי החיפוש">×</button>}</div>
             {quickSearch.trim() ? (
               <div className="quick-food-grid quick-search-results">
@@ -4348,43 +4342,18 @@ export default function Home() {
                 <p className="online-food-status">{onlineFoodStatus}</p>
               </div>
             ) : !quickCategory ? (
-              <div className="category-grid">
-                <button className="capture-meal-entry add-source-entry" onClick={openInAppCamera}>
-                  <span className="manual-meal-art"><AppIcon name="camera" /></span>
-                  <strong>צלם ארוחה</strong>
-                  <small>צילום חדש, גלריה או קובץ</small>
-                </button>
-                <button className="add-source-entry" onClick={() => openManualMeal()}>
-                  <span className="manual-meal-art"><AppIcon name="edit" /></span>
-                  <strong>ארוחה ידנית</strong>
-                  <small>AI יחשב לפי התיאור שלך</small>
-                </button>
-                <button className="forgotten-meal-entry add-source-entry" onClick={openForgottenMeals}>
-                  <span className="manual-meal-art"><AppIcon name="history" /></span>
-                  <strong>שכחתי לעדכן</strong>
-                  <small>הוסף כמה ארוחות להיום או לימים קודמים</small>
-                </button>
-                <button className="add-source-entry" onClick={() => setVoiceOpen(true)}>
-                  <span className="manual-meal-art"><AppIcon name="mic" /></span>
-                  <strong>הקלט ארוחה</strong>
-                  <small>AI יתמלל ויציג לאישור</small>
-                </button>
-                <button onClick={() => setQuickCategory("vegetables")}>
-                  <img src="category-vegetables-v1.png" alt="מבחר ירקות" />
-                  <strong>ירקות</strong>
-                  <small>טריים, מבושלים וסלט</small>
-                </button>
-                <button onClick={() => setQuickCategory("fruits")}>
-                  <img src="category-fruits-v1.png" alt="מבחר פירות" />
-                  <strong>פירות</strong>
-                  <small>מנה נפוצה בלחיצה</small>
-                </button>
-                <button onClick={() => setQuickCategory("drinks")}>
-                  <img src="category-drinks-v1.png" alt="מבחר משקאות" />
-                  <strong>משקאות</strong>
-                  <small>חמים, קלים, יין ובירה</small>
-                </button>
-              </div>
+              <><div className="quick-source-grid">
+                {[
+                  { label: "ארוחה ידנית", icon: "edit", action: () => openManualMeal() },
+                  { label: "צלם ארוחה", icon: "camera", action: openInAppCamera },
+                  { label: "שכחתי לעדכן", icon: "history", action: openForgottenMeals },
+                  { label: "סריקת ברקוד", icon: "barcode", action: () => setBarcodeScannerOpen(true) },
+                  { label: "הקלט ארוחה", icon: "mic", action: () => { setQuickAddOpen(false); setVoiceOpen(true); } },
+                  { label: "מועדפים", icon: "star", action: () => { setQuickAddOpen(false); setFoodLibraryOpen(true); } },
+                  { label: "משקאות", icon: "drink", action: () => setQuickCategory("drinks") },
+                  { label: "ירקות ופירות", icon: "produce", action: () => setQuickCategory("produce") },
+                ].map((entry: any, index) => <button type="button" className={`quick-source source-${index + 1}`} onClick={entry.action} key={entry.label}><span><AppIcon name={entry.icon} /></span><strong>{entry.label}</strong></button>)}
+              </div>{quickRepeatMeals.length > 0 && <section className="quick-add-recents"><header><strong>ארוחות אחרונות ונפוצות</strong><small>להוספה חוזרת בלחיצה</small></header><div>{quickRepeatMeals.slice(0, 8).map(({ meal, count }) => <button type="button" key={meal.id || meal.name} disabled={busy} onClick={() => { setQuickAddOpen(false); repeatRecentMeal(meal); }}><span>＋</span><strong>{meal.name}</strong><small>{Math.round(Number(meal.kcal))} קלוריות{count > 1 ? ` · ${count} פעמים` : ""}</small></button>)}</div></section>}</>
             ) : (
               <>
                 <button
@@ -4394,14 +4363,14 @@ export default function Home() {
                   → חזרה לקטגוריות
                 </button>
                 <div className={`quick-food-grid ${quickCategory}`}>
-                  {quickFoods[quickCategory].filter((item) => !quickSearch.trim() || `${item.name} ${item.portion}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((item, index) => (
+                  {(quickCategory === "produce" ? [...quickFoods.vegetables.map((item: any) => ({ ...item, spriteCategory: "vegetables" })), ...quickFoods.fruits.map((item: any) => ({ ...item, spriteCategory: "fruits" }))] : quickFoods[quickCategory]).filter((item) => !quickSearch.trim() || `${item.name} ${item.portion}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))).map((item: any, index: number) => (
                     <button
                       key={`${item.name}-${item.portion}`}
                       onClick={() => selectQuickFood(item)}
                     >
                       <span
                         className="food-sprite"
-                        style={foodSpriteStyle(quickCategory, index)}
+                        style={foodSpriteStyle(item.spriteCategory || quickCategory, item.spriteCategory === "fruits" ? index - quickFoods.vegetables.length : index)}
                       />
                       <strong>{item.name}</strong>
                       <small>{item.portion}</small>
@@ -4409,7 +4378,7 @@ export default function Home() {
                     </button>
                   ))}
                   {(state.foods || [])
-                    .filter((food) => food.category === quickCategory && (!quickSearch.trim() || `${food.name} ${food.category || ""}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))))
+                    .filter((food) => (quickCategory === "produce" ? ["vegetables", "fruits"].includes(food.category) : food.category === quickCategory) && (!quickSearch.trim() || `${food.name} ${food.category || ""}`.toLocaleLowerCase("he").includes(quickSearch.trim().toLocaleLowerCase("he"))))
                     .map((food) => (
                       <button
                         key={food.id}
@@ -4436,7 +4405,7 @@ export default function Home() {
                     onClick={() => {
                       setSaveToLibrary(true);
                       setGenerateFoodArtwork(true);
-                      openManualMeal(quickCategory);
+                      openManualMeal(quickCategory === "produce" ? "vegetables" : quickCategory);
                     }}
                   >
                     <span>＋</span>
@@ -5493,7 +5462,7 @@ export default function Home() {
           </section>
         </div>
       )}
-      {barcodeScannerOpen && <div className="modal-layer barcode-scanner-layer"><button className="backdrop" onClick={() => setBarcodeScannerOpen(false)} /><section className="barcode-scanner"><header><div><strong>סריקת ברקוד</strong><small>המצלמה מנתחת וידאו מקומית בלבד</small></div><button type="button" onClick={() => setBarcodeScannerOpen(false)} aria-label="סגירה">×</button></header><div className="barcode-video-frame"><video ref={barcodeVideo} playsInline muted /><i /><span>מקם את הברקוד בתוך המסגרת</span></div><p>{barcodeStatus}</p><button type="button" onClick={() => setBarcodeScannerOpen(false)}>ביטול וחזרה להזנה ידנית</button></section></div>}
+      {barcodeScannerOpen && <div className="modal-layer barcode-scanner-layer"><button className="backdrop" onClick={() => setBarcodeScannerOpen(false)} /><section className="barcode-scanner"><header><div><strong>סריקת ברקוד</strong><small>המצלמה מנתחת וידאו מקומית בלבד</small></div><button className="capture-exit" type="button" onClick={() => setBarcodeScannerOpen(false)} aria-label="חזרה מסריקת ברקוד">← <span>חזרה</span></button></header><div className="barcode-video-frame"><video ref={barcodeVideo} playsInline muted /><i /><span>מקם את הברקוד בתוך המסגרת</span></div><p>{barcodeStatus}</p><button type="button" onClick={() => setBarcodeScannerOpen(false)}>ביטול וחזרה להוספת ארוחה</button></section></div>}
       {customFoodOpen && (
         <div className="modal-layer">
           <button

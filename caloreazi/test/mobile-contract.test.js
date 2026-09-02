@@ -15,7 +15,7 @@ test("live barcode scanning is local, automatic and releases the camera", () => 
   assert.match(page, /decodeFromConstraints/);
   assert.match(page, /facingMode: \{ ideal: "environment" \}/);
   assert.match(page, /getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/);
-  assert.match(page, /לא נשמר צילום/);
+  assert.match(page, /המצלמה מנתחת וידאו מקומית בלבד/);
 });
 
 test("voice offers speech recognition and media-recorder fallback", () => {
