@@ -1523,11 +1523,17 @@ export default function Home() {
     setCoachOpen(false); setSettingsOpen(false); setAdminLoginOpen(false); setMealOpen(false); setQuickAddOpen(false);
     setWaterOpen(false); setProfileOpen(false); setHistoryOpen(false); setInsightsOpen(false); setActivityOpen(false);
     setVoiceOpen(false); setPartnerOpen(false); setCustomFoodOpen(false); setFoodLibraryOpen(false); setTasteWizardOpen(false);
-    setForgottenOpen(false);
-    setNewCycleOpen(false);
-    setDayCloseConfirm(false);
-    setSyncCenterOpen(false);
-    setMacroDetail(""); setMealPreview(null); setPendingQuickFood(null); setEditingFood(null);
+    setForgottenOpen(false); setCustomBeverageOpen(false); setAcquaintanceOpen(false); setNewCycleOpen(false);
+    setDayCloseConfirm(false); setSyncCenterOpen(false); setBarcodeScannerOpen(false); closeInAppCamera();
+    setCoachHelpOpen(false); setMealDetailsOpen(false); setCalorieOverage(null); setHistoryDeleteRequest(null);
+    setMacroDetail(""); setMealPreview(null); setPendingQuickFood(null); setPendingFavorite(null); setEditingFood(null);
+  }
+  function openMealLauncher() {
+    closeOpenScreens();
+    setQuickCategory("");
+    setQuickSearch("");
+    setOnlineFoodResults([]);
+    setQuickAddOpen(true);
   }
   function openNavigationScreen(screen: "home" | "history" | "admin" | "insights" | "coach") {
     closeOpenScreens();
@@ -3183,7 +3189,7 @@ export default function Home() {
       </button>
       <section className="welcome">
         <div><h1>{greeting}, {state.owner.name}</h1><p>{scoreHeadline}</p></div>
-        <button className="welcome-add-button" type="button" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }} aria-label="פתיחת תפריט הוספת ארוחה" title="הוספת ארוחה"><AppIcon name="mealAdd" /></button>
+        <button className="welcome-add-button" type="button" onClick={openMealLauncher} aria-label="פתיחת תפריט הוספת ארוחה" title="הוספת ארוחה"><AppIcon name="mealAdd" /></button>
       </section>
       {(state.partnerships || []).filter((link) => link.direction === "incoming" && link.status === "pending").map((link) => <aside className="partnership-invite-card" key={link.id}><span>♡</span><div><strong>{link.other?.username || link.other?.name} בחר לשתף איתך את התהליך</strong><small>ההזמנה תישאר כאן עד שתבחר</small></div><button onClick={() => updatePartnership(link.id, "accept")}>אשר</button><button className="reject" onClick={() => updatePartnership(link.id, "reject")}>דחה</button></aside>)}
       {consistencyBadges.length > 0 && (
@@ -3312,7 +3318,7 @@ export default function Home() {
               <h2>מה אכלת היום</h2>
             </div>
             <div className="meal-header-actions">
-              <button type="button" title="הוספת ארוחה" aria-label="פתיחת תפריט הוספת ארוחה" onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }}><AppIcon name="mealAdd" /></button>
+              <button type="button" title="הוספת ארוחה" aria-label="פתיחת תפריט הוספת ארוחה" onClick={openMealLauncher}><AppIcon name="mealAdd" /></button>
             </div>
           </header>
           {quickRepeatMeals.length > 0 && <div className="quick-repeat-meals" aria-label="ארוחות קבועות להוספה מהירה"><small>הרגילות שלך עכשיו</small><div>{quickRepeatMeals.map(({ meal, count }) => <button type="button" key={meal.id || meal.name} disabled={busy} onClick={() => repeatRecentMeal(meal)}><span>＋</span><strong>{meal.name}</strong><small>{Math.round(Number(meal.kcal))} קלוריות{count > 1 ? ` · נאכלה ${count} פעמים` : ""}</small></button>)}</div></div>}
@@ -3433,7 +3439,7 @@ export default function Home() {
         </button>
         <button
           className="nav-camera"
-          onClick={() => { setQuickCategory(""); setQuickAddOpen(true); }}
+          onClick={openMealLauncher}
           aria-label="פתיחת תפריט הוספת ארוחה"
         >
           <AppIcon name="mealAdd" />
