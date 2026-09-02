@@ -4,6 +4,7 @@ import path from "node:path";
 import { calculateDayScore } from "./nutrition.js";
 import { databaseStateEnabled, readDatabaseState, replaceDatabaseState, updateDatabaseState } from "./state-database.js";
 import { localDateAt, userTimeZone } from "./local-date.js";
+import { hydrationTotal } from "./hydration.js";
 
 const defaultState = {
   version: 1,
@@ -100,7 +101,7 @@ export function ensureUserData(state, userId) {
       if (archived) {
         archived.meals = [...(archived.meals || []), ...data.today.meals.filter((meal) => !(archived.meals || []).some((item) => item.id === meal.id))];
         archived.waterEvents = [...(archived.waterEvents || []), ...(data.today.waterEvents || []).filter((event) => !(archived.waterEvents || []).some((item) => item.id === event.id))];
-        archived.waterMl = archived.waterEvents.length ? archived.waterEvents.reduce((sum, event) => sum + Number(event.amount || 0), 0) : Math.max(Number(archived.waterMl || 0), Number(data.today.waterMl || 0));
+        archived.waterMl = archived.waterEvents.length ? hydrationTotal(archived.waterEvents) : Math.max(Number(archived.waterMl || 0), Number(data.today.waterMl || 0));
       } else data.history.push(structuredClone(data.today));
     }
     const existingToday = data.history.find((day) => day.date === todayDate);
