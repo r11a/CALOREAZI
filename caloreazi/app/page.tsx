@@ -13,7 +13,7 @@ import {
 import { flushOfflineCaptures, flushOfflineMutations, listOfflineQueue, offlinePendingCount, queueOfflineCapture, queueOfflineMutation, retryOfflineItem, type OfflineQueueItem } from "./offline-queue";
 import { AppIcon } from "./components/AppIcon";
 import { assessMealReliability } from "../server/meal-reliability.js";
-import { HYDRATION_BEVERAGES, beverageNutrition, hydrationBeverage, hydrationContribution, hydrationTotal } from "../server/hydration.js";
+import { HYDRATION_BEVERAGES, beverageNutrition, hydrationBeverage, hydrationContribution, hydrationTotal, normalizeCustomBeverage } from "../server/hydration.js";
 
 type AppState = {
   authenticated?: boolean;
@@ -687,6 +687,9 @@ export default function Home() {
   const [waterValue, setWaterValue] = useState(0);
   const [waterTargetValue, setWaterTargetValue] = useState(2000);
   const [selectedHydrationBeverages, setSelectedHydrationBeverages] = useState<string[]>([]);
+  const [customHydrationBeverages, setCustomHydrationBeverages] = useState<any[]>([]);
+  const [customBeverageOpen, setCustomBeverageOpen] = useState(false);
+  const [customBeverageDraft, setCustomBeverageDraft] = useState({ name: "", defaultAmount: 250, kcalPer100: 0, proteinPer100: 0, carbsPer100: 0, fatPer100: 0, factor: .9 });
   const [profileOpen, setProfileOpen] = useState(false);
   const [acquaintanceOpen, setAcquaintanceOpen] = useState(false);
   const [profileTab, setProfileTab] = useState<"basic" | "health" | "goals" | "notifications" | "account">("basic");
@@ -1079,10 +1082,11 @@ export default function Home() {
     const y = 136 - ((Number(item.weight) - weightRange.min) / spread) * 104;
     return { ...item, x, y };
   });
+  const hydrationCatalog = [...HYDRATION_BEVERAGES, ...(profile?.customHydrationBeverages || []).map(normalizeCustomBeverage)];
   const waterByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, amount: historyDays.slice(-30).flatMap((day: any) => day.waterEvents || []).filter((event: any) => new Date(event.time).getHours() === hour).reduce((sum: number, event: any) => sum + Number(event.amount || 0), 0) }));
   const maximumWaterHour = Math.max(1, ...waterByHour.map((item) => item.amount));
   const hydrationTrendEvents = historyDays.slice(-30).flatMap((day: any) => day.waterEvents || []);
-  const hydrationTrendLayers = HYDRATION_BEVERAGES.map((beverage) => ({ ...beverage, amount: hydrationTrendEvents.filter((event: any) => (event.beverageId || "water") === beverage.id).reduce((sum: number, event: any) => sum + Number(event.hydrationMl ?? event.amount ?? 0), 0) })).filter((item) => item.amount > 0).sort((a, b) => b.amount - a.amount);
+  const hydrationTrendLayers = hydrationCatalog.map((beverage) => ({ ...beverage, amount: hydrationTrendEvents.filter((event: any) => (event.beverageId || "water") === beverage.id).reduce((sum: number, event: any) => sum + Number(event.hydrationMl ?? event.amount ?? 0), 0) })).filter((item) => item.amount > 0).sort((a, b) => b.amount - a.amount);
   const hydrationTrendTotal = hydrationTrendLayers.reduce((sum, item) => sum + item.amount, 0);
   const trend30Days = insightsData?.daily?.slice(-30) || [];
   const trend30Points = trend30Days.map((day: any, index: number) => ({
@@ -1106,7 +1110,7 @@ export default function Home() {
     0,
     Number(profile?.waterMl || 0) - Number(state?.today?.waterMl || 0),
   );
-  const hydrationRows = [HYDRATION_BEVERAGES[0], ...HYDRATION_BEVERAGES.filter((item) => (profile?.hydrationBeverages || []).includes(item.id))].map((beverage) => {
+  const hydrationRows = [HYDRATION_BEVERAGES[0], ...hydrationCatalog.filter((item) => !item.fixed && (profile?.hydrationBeverages || []).includes(item.id))].map((beverage) => {
     const events = (state?.today?.waterEvents || []).filter((event: any) => (event.beverageId || "water") === beverage.id);
     const amount = events.length ? events.reduce((sum: number, event: any) => sum + Number(event.amount || 0), 0) : beverage.id === "water" && !(state?.today?.waterEvents || []).length ? Number(state?.today?.waterMl || 0) : 0;
     const contribution = events.length ? events.reduce((sum: number, event: any) => sum + Number(event.hydrationMl ?? event.amount ?? 0), 0) : amount;
@@ -1422,12 +1426,12 @@ export default function Home() {
         setState((current: any) => {
           const waterEvents = [...(current.today.waterEvents || [])];
           let meals = [...(current.today.meals || [])];
-          const beverage = hydrationBeverage(beverageId);
+          const custom = current.profile?.customHydrationBeverages || []; const beverage = hydrationBeverage(beverageId, custom);
           if (amount > 0) {
-            const eventId = `offline-${mutationKey}`; const nutrition = beverageNutrition(amount, beverage.id); const mealId = nutrition.kcal > 0 ? `${eventId}-meal` : null;
-            waterEvents.push({ id: eventId, amount, hydrationMl: hydrationContribution(amount, beverage.id), beverageId: beverage.id, beverageName: beverage.name, icon: beverage.icon, ...(mealId ? { mealId } : {}), time: recordedAt, pendingSync: true });
+            const eventId = `offline-${mutationKey}`; const nutrition = beverageNutrition(amount, beverage.id, custom); const mealId = nutrition.kcal > 0 ? `${eventId}-meal` : null;
+            waterEvents.push({ id: eventId, amount, hydrationMl: hydrationContribution(amount, beverage.id, custom), beverageId: beverage.id, beverageName: beverage.name, icon: beverage.icon, ...(mealId ? { mealId } : {}), time: recordedAt, pendingSync: true });
             if (mealId) meals.push({ id: mealId, hydrationEventId: eventId, beverageEntry: true, name: beverage.name, period: "snack", ...nutrition, sugar: 0, items: [{ name: beverage.name, grams: amount, quantity: 1, kcalPer100: beverage.kcalPer100, proteinPer100: beverage.proteinPer100, carbsPer100: beverage.carbsPer100, fatPer100: beverage.fatPer100 }], source: "manual", confidence: .9, time: recordedAt, logicalDate: localDate, pendingSync: true });
-          } else { let remainingRemoval = Math.abs(amount); for (let index = waterEvents.length - 1; index >= 0 && remainingRemoval > 0; index -= 1) { if ((waterEvents[index].beverageId || "water") !== beverage.id) continue; const eventAmount = Number(waterEvents[index].amount || 0); if (eventAmount <= remainingRemoval) { remainingRemoval -= eventAmount; const removed = waterEvents.splice(index, 1)[0]; if (removed.mealId) meals = meals.filter((meal: any) => meal.id !== removed.mealId); } else { const nextAmount = eventAmount - remainingRemoval; const event = waterEvents[index]; waterEvents[index] = { ...event, amount: nextAmount, hydrationMl: hydrationContribution(nextAmount, beverage.id) }; if (event.mealId) { const nutrition = beverageNutrition(nextAmount, beverage.id); meals = meals.map((meal: any) => meal.id === event.mealId ? { ...meal, ...nutrition, items: (meal.items || []).map((item: any) => ({ ...item, grams: nextAmount })) } : meal); } remainingRemoval = 0; } } }
+          } else { let remainingRemoval = Math.abs(amount); for (let index = waterEvents.length - 1; index >= 0 && remainingRemoval > 0; index -= 1) { if ((waterEvents[index].beverageId || "water") !== beverage.id) continue; const eventAmount = Number(waterEvents[index].amount || 0); if (eventAmount <= remainingRemoval) { remainingRemoval -= eventAmount; const removed = waterEvents.splice(index, 1)[0]; if (removed.mealId) meals = meals.filter((meal: any) => meal.id !== removed.mealId); } else { const nextAmount = eventAmount - remainingRemoval; const event = waterEvents[index]; waterEvents[index] = { ...event, amount: nextAmount, hydrationMl: hydrationContribution(nextAmount, beverage.id, custom) }; if (event.mealId) { const nutrition = beverageNutrition(nextAmount, beverage.id, custom); meals = meals.map((meal: any) => meal.id === event.mealId ? { ...meal, ...nutrition, items: (meal.items || []).map((item: any) => ({ ...item, grams: nextAmount })) } : meal); } remainingRemoval = 0; } } }
           return { ...current, today: { ...current.today, date: localDate, waterMl: hydrationTotal(waterEvents), waterEvents, meals } };
         });
         setOfflineQueueCount(await offlinePendingCount()); setMealResult({ name: "המים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
@@ -1458,20 +1462,30 @@ export default function Home() {
     setWaterValue(Number(state?.today?.waterMl || 0));
     setWaterTargetValue(Number(profile?.waterMl || 2000));
     setSelectedHydrationBeverages(Array.isArray(profile?.hydrationBeverages) ? profile.hydrationBeverages : []);
+    setCustomHydrationBeverages(Array.isArray(profile?.customHydrationBeverages) ? profile.customHydrationBeverages.map(normalizeCustomBeverage) : []);
+    setCustomBeverageOpen(false);
     setWaterOpen(true);
+  }
+  function addCustomBeverage() {
+    if (!customBeverageDraft.name.trim()) { setError("יש לתת שם למשקה המותאם"); return; }
+    const beverage = normalizeCustomBeverage({ ...customBeverageDraft, id: `custom_${crypto.randomUUID()}` });
+    setCustomHydrationBeverages((current) => [...current, beverage]);
+    setSelectedHydrationBeverages((current) => [...current, beverage.id]);
+    setCustomBeverageDraft({ name: "", defaultAmount: 250, kcalPer100: 0, proteinPer100: 0, carbsPer100: 0, fatPer100: 0, factor: .9 });
+    setCustomBeverageOpen(false);
   }
   async function saveWater() {
     setBusy(true);
     try {
       if (!navigator.onLine) {
-        await queueMutation("/api/water", "PUT", JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue, beverages: selectedHydrationBeverages, localDate: state.today.date }));
-        setState((current: any) => ({ ...current, profile: { ...current.profile, waterMl: waterTargetValue, hydrationBeverages: selectedHydrationBeverages }, today: { ...current.today, waterMl: waterValue } }));
+        await queueMutation("/api/water", "PUT", JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue, beverages: selectedHydrationBeverages, customBeverages: customHydrationBeverages, localDate: state.today.date }));
+        setState((current: any) => ({ ...current, profile: { ...current.profile, waterMl: waterTargetValue, hydrationBeverages: selectedHydrationBeverages, customHydrationBeverages }, today: { ...current.today, waterMl: waterValue } }));
         setOfflineQueueCount(await offlinePendingCount()); setWaterOpen(false); return;
       }
       setState(
         await api("/api/water", {
           method: "PUT",
-          body: JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue, beverages: selectedHydrationBeverages }),
+          body: JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue, beverages: selectedHydrationBeverages, customBeverages: customHydrationBeverages }),
         }),
       );
       setWaterOpen(false);
@@ -3299,14 +3313,14 @@ export default function Home() {
           <section className="panel water-panel hydration-panel">
             <header>
               <div><p className="eyebrow">מיכל שתייה יומי</p><h2>שתייה היום</h2></div>
-              <button className="water-edit" onClick={openWaterEditor} aria-label="עריכת כמות המים">
-                {state.today.waterMl.toLocaleString()}<small>מ״ל</small><span>ניהול</span>
+              <button className="water-edit" onClick={openWaterEditor} aria-label="הוספת משקה">
+                <b>＋</b><span>הוספת משקה</span>
               </button>
             </header>
             <div className="hydration-total"><div className="water-progress"><i style={{ width: `${Math.min(100, (state.today.waterMl / profile.waterMl) * 100)}%` }} /></div><strong>{Math.round((state.today.waterMl / Math.max(1, profile.waterMl)) * 100)}%</strong></div>
             <p>{state.today.waterMl.toLocaleString()} מתוך {profile.waterMl.toLocaleString()} מ״ל נוזלים</p>
-            <div className="daily-hydration-pitcher" aria-label="הרכב השתייה היום"><div className="hydration-pitcher"><div className="hydration-liquid">{dailyHydrationLayers.slice().reverse().map((item, index) => <i key={item.id} title={`${item.name}: ${item.contribution} מ״ל`} style={{ height: `${Math.min(100, item.contribution / Math.max(1, dailyHydrationTotal) * 100)}%`, "--layer-color": item.id === "water" ? "#55b7ea" : item.id === "coffee" ? "#a96742" : item.id === "tea" ? "#72ad75" : item.id === "juice" ? "#f0a33c" : item.id === "milk" ? "#d9e2e8" : "#8977d1", "--layer-delay": `${index * 90}ms` } as CSSProperties} />)}</div></div><div>{dailyHydrationLayers.length ? dailyHydrationLayers.map((item) => <span key={item.id}><b>{item.icon} {item.name}</b><small>{item.contribution.toLocaleString()} מ״ל למיכל</small></span>) : <span><b>המיכל עדיין ריק</b><small>הוספת משקה תמלא אותו</small></span>}</div></div>
-            <div className="beverage-bars">{hydrationRows.map((beverage) => <article key={beverage.id} style={{ "--beverage-color": beverage.id === "water" ? "#5aaee6" : beverage.id === "coffee" ? "#bd7b50" : beverage.id === "tea" ? "#70a975" : "#8b7bd4" } as CSSProperties}><header><span>{beverage.icon}</span><div><strong>{beverage.name}</strong><small>{beverage.amount.toLocaleString()} מ״ל{beverage.factor < 1 && beverage.amount > 0 ? ` · ${beverage.contribution.toLocaleString()} מ״ל למיכל` : ""}</small></div></header><div className="water-control-row" dir="ltr"><button onClick={() => addWater(-beverage.defaultAmount, beverage.id)} disabled={beverage.amount <= 0} aria-label={`הפחתת ${beverage.name}`}>−</button><div className="water-progress"><i style={{ width: `${Math.min(100, beverage.contribution / profile.waterMl * 100)}%` }} /></div><button onClick={() => addWater(beverage.defaultAmount, beverage.id)} aria-label={`הוספת ${beverage.name}`}>+</button></div></article>)}</div>
+            <div className="daily-hydration-pitcher" aria-label="הרכב השתייה היום"><div className="hydration-pitcher"><div className="hydration-liquid">{dailyHydrationLayers.slice().reverse().map((item, index) => <i key={item.id} title={`${item.name}: ${item.contribution} מ״ל`} style={{ height: `${Math.min(100, item.contribution / Math.max(1, dailyHydrationTotal) * 100)}%`, "--layer-color": item.color, "--layer-delay": `${index * 90}ms` } as CSSProperties} />)}</div></div><div>{dailyHydrationLayers.length ? dailyHydrationLayers.map((item) => <span key={item.id}><b>{item.icon} {item.name}</b><small>{item.contribution.toLocaleString()} מ״ל למיכל</small></span>) : <span><b>המיכל עדיין ריק</b><small>הוסף משקה כדי להתחיל</small></span>}</div></div>
+            <div className="beverage-bars">{hydrationRows.map((beverage) => <article key={beverage.id} style={{ "--beverage-color": beverage.color } as CSSProperties}><header><span>{beverage.icon}</span><div><strong>{beverage.name}</strong><small>{beverage.amount.toLocaleString()} מ״ל{beverage.factor < 1 && beverage.amount > 0 ? ` · ${beverage.contribution.toLocaleString()} מ״ל למיכל` : ""}</small></div></header><div className="water-control-row" dir="ltr"><button onClick={() => addWater(-beverage.defaultAmount, beverage.id)} disabled={beverage.amount <= 0} aria-label={`הפחתת ${beverage.name}`}>−</button><div className="water-progress"><i style={{ width: `${Math.min(100, beverage.contribution / profile.waterMl * 100)}%` }} /></div><button onClick={() => addWater(beverage.defaultAmount, beverage.id)} aria-label={`הוספת ${beverage.name}`}>+</button></div></article>)}</div>
           </section>
           <button type="button" className="panel trends-tile" onClick={openInsights}>
             <span><AppIcon name="activity" /></span>
@@ -5134,7 +5148,7 @@ export default function Home() {
               <div className="insights-loading" role="status" aria-live="polite"><span /><strong>מכין את תמונת המגמות שלך</strong><small>מחשב נתונים ומסדר את הגרפים…</small><i><b /></i></div>
             ) : (
               <>
-                <section className="hydration-mix-insight"><header><strong>ממה מורכבת השתייה שלך?</strong><small>תרומת המשקאות למיכל הנוזלים ב־30 הימים האחרונים</small></header>{hydrationTrendTotal > 0 ? <div className="hydration-pitcher-layout"><div className="hydration-pitcher" aria-label="התפלגות משקאות"><div className="hydration-liquid">{hydrationTrendLayers.slice().reverse().map((item, index) => <i key={item.id} style={{ height: `${item.amount / hydrationTrendTotal * 100}%`, "--layer-color": item.id === "water" ? "#55b7ea" : item.id === "coffee" ? "#a96742" : item.id === "tea" ? "#72ad75" : item.id === "juice" ? "#f0a33c" : item.id === "milk" ? "#d9e2e8" : "#8977d1", "--layer-delay": `${index * 110}ms` } as CSSProperties} />)}</div></div><div className="hydration-legend">{hydrationTrendLayers.map((item) => <span key={item.id}><i style={{ background: item.id === "water" ? "#55b7ea" : item.id === "coffee" ? "#a96742" : item.id === "tea" ? "#72ad75" : item.id === "juice" ? "#f0a33c" : item.id === "milk" ? "#d9e2e8" : "#8977d1" }} /><b>{item.icon} {item.name}</b><strong>{item.amount.toLocaleString()} מ״ל</strong><small>{Math.round(item.amount / hydrationTrendTotal * 100)}%</small></span>)}</div></div> : <p>הקנקן יתחיל להתמלא לאחר הוספת משקאות.</p>}</section>
+                <section className="hydration-mix-insight"><header><strong>הרכב השתייה שלך</strong><small>תרומת המשקאות למיכל הנוזלים ב־30 הימים האחרונים</small></header>{hydrationTrendTotal > 0 ? <div className="hydration-pitcher-layout"><div className="hydration-pitcher" aria-label="התפלגות משקאות"><div className="hydration-liquid">{hydrationTrendLayers.slice().reverse().map((item, index) => <i key={item.id} style={{ height: `${item.amount / hydrationTrendTotal * 100}%`, "--layer-color": item.color, "--layer-delay": `${index * 110}ms` } as CSSProperties} />)}</div></div><div className="hydration-legend">{hydrationTrendLayers.map((item) => <span key={item.id}><i style={{ background: item.color }} /><b>{item.icon} {item.name}</b><strong>{item.amount.toLocaleString()} מ״ל</strong><small>{Math.round(item.amount / hydrationTrendTotal * 100)}%</small></span>)}</div></div> : <p>המיכל יתחיל להתמלא לאחר הוספת משקאות.</p>}</section>
                 <section className="water-hours-insight"><header><strong>מתי שותים הכי הרבה?</strong><small>התפלגות השתייה לפי שעות ב־30 הימים האחרונים · כוס מחושבת כ־250 מ״ל</small></header><div>{waterByHour.map((item) => { const cups = Math.round(Number(item.amount || 0) / 250); return <span key={item.hour} title={`${String(item.hour).padStart(2,"0")}:00 · ${item.amount} מ״ל · ${cups} כוסות`}><i style={{ height: `${item.amount ? Math.max(6, item.amount / maximumWaterHour * 100) : 2}%` }}>{cups > 1 && <b>{cups}</b>}</i><small>{item.hour % 3 === 0 ? String(item.hour).padStart(2,"0") : ""}</small></span>; })}</div>{!waterByHour.some((item) => item.amount > 0) && <p>הגרף יתחיל להיבנות מהוספות השתייה הבאות.</p>}</section>
                 {insightsData.sugar?.enabled && (
                   <section className="sugar-insights">
@@ -5504,43 +5518,21 @@ export default function Home() {
       {waterOpen && (
         <div className="modal-layer">
           <button className="backdrop" onClick={() => setWaterOpen(false)} />
-          <section className="settings-modal compact-modal">
+          <section className="settings-modal compact-modal beverage-manager-modal">
             <header>
               <div>
-                <p className="eyebrow">שתייה</p>
-                <h2>עריכת מים להיום</h2>
+                <h2>הוספת משקה</h2>
+                <small>בחר אילו משקאות יוצגו במרכז השתייה</small>
               </div>
               <button onClick={() => setWaterOpen(false)}>×</button>
             </header>
-            <div className="water-adjust">
-              <button
-                onClick={() => setWaterValue(Math.max(0, waterValue - 250))}
-              >
-                −
-              </button>
-              <label>
-                מ״ל
-                <input
-                  type="number"
-                  min="0"
-                  max="20000"
-                  step="50"
-                  value={waterValue}
-                  onChange={(e) => setWaterValue(Number(e.target.value))}
-                />
-              </label>
-              <button
-                onClick={() => setWaterValue(Math.min(20000, waterValue + 250))}
-              >
-                ＋
-              </button>
-            </div>
             <label className="water-target-field">יעד שתייה יומי<select value={waterTargetValue} onChange={(event) => setWaterTargetValue(Number(event.target.value))}>{[1500,1750,2000,2250,2500,2750].map((amount) => <option key={amount} value={amount}>{(amount / 1000).toLocaleString("he-IL")} ליטר</option>)}</select><small>היעד משקף את כלל הנוזלים שתרמו המשקאות שנבחרו.</small></label>
-            <div className="beverage-picker"><strong>משקאות שיופיעו בכרטיס</strong><small>מים נשארים קבועים. אפשר לבחור משקאות נוספים.</small><div>{HYDRATION_BEVERAGES.filter((item) => !item.fixed).map((beverage) => <label key={beverage.id} className={selectedHydrationBeverages.includes(beverage.id) ? "selected" : ""}><input type="checkbox" checked={selectedHydrationBeverages.includes(beverage.id)} onChange={(event) => setSelectedHydrationBeverages((current) => event.target.checked ? [...current, beverage.id] : current.filter((id) => id !== beverage.id))} /><span>{beverage.icon}</span><b>{beverage.name}</b><small>{Math.round(beverage.factor * 100)}% מהכמות למיכל</small></label>)}</div></div>
+            <div className="beverage-picker"><strong>אפשרויות משקה</strong><small>לחיצה מסמנת משקה. לאחר שמירה יופיע עבורו בר חדש.</small><div>{[...HYDRATION_BEVERAGES.filter((item) => !item.fixed && !item.legacy), ...customHydrationBeverages].map((beverage) => <label key={beverage.id} className={selectedHydrationBeverages.includes(beverage.id) ? "selected" : ""}><input type="checkbox" checked={selectedHydrationBeverages.includes(beverage.id)} onChange={(event) => setSelectedHydrationBeverages((current) => event.target.checked ? [...new Set([...current, beverage.id])] : current.filter((id) => id !== beverage.id))} /><span>{beverage.icon}</span><b>{beverage.name}</b><small>{beverage.defaultAmount} מ״ל · {beverage.kcalPer100} קל׳ ל־100 מ״ל</small></label>)}</div></div>
+            {!customBeverageOpen ? <button type="button" className="add-custom-beverage" onClick={() => setCustomBeverageOpen(true)}>＋ הוספה מותאמת</button> : <div className="custom-beverage-form"><header><strong>משקה מותאם</strong><button type="button" onClick={() => setCustomBeverageOpen(false)}>×</button></header><label>שם המשקה<input value={customBeverageDraft.name} onChange={(event) => setCustomBeverageDraft({ ...customBeverageDraft, name: event.target.value })} placeholder="למשל: לימונדה ביתית" /></label><div><label>כמות לכוס (מ״ל)<input type="number" min="50" max="1000" step="50" value={customBeverageDraft.defaultAmount} onChange={(event) => setCustomBeverageDraft({ ...customBeverageDraft, defaultAmount: Number(event.target.value) })} /></label><label>קלוריות ל־100 מ״ל<input type="number" min="0" max="900" value={customBeverageDraft.kcalPer100} onChange={(event) => setCustomBeverageDraft({ ...customBeverageDraft, kcalPer100: Number(event.target.value) })} /></label></div><details><summary>ערכים נוספים</summary><div>{[["proteinPer100","חלבון"],["carbsPer100","פחמימות"],["fatPer100","שומן"]].map(([key,label]) => <label key={key}>{label} ל־100 מ״ל<input type="number" min="0" max="100" step="0.1" value={(customBeverageDraft as any)[key]} onChange={(event) => setCustomBeverageDraft({ ...customBeverageDraft, [key]: Number(event.target.value) })} /></label>)}</div></details><button type="button" className="primary" onClick={addCustomBeverage}>הוסף לרשימה</button></div>}
             <footer>
               <button onClick={() => setWaterOpen(false)}>ביטול</button>
               <button className="primary" onClick={saveWater} disabled={busy}>
-                שמור
+                שמור והצג במרכז השתייה
               </button>
             </footer>
           </section>
