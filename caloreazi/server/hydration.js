@@ -22,6 +22,29 @@ export function beverageNutrition(amount, beverageId = "water", custom = []) { c
 export function eventHydration(event) { return Math.max(0, Number(event?.hydrationMl ?? event?.amount) || 0); }
 export function hydrationTotal(events = []) { return Math.round(events.reduce((sum, event) => sum + eventHydration(event), 0)); }
 
+export function removeLatestBeverageServing(day, beverageId = "water", requestedAmount = 250, custom = []) {
+  day.waterEvents = Array.isArray(day.waterEvents) ? day.waterEvents : [];
+  day.meals = Array.isArray(day.meals) ? day.meals : [];
+  const index = day.waterEvents.findLastIndex((event) => (event.beverageId || "water") === beverageId && !event.inferredFromHistory && !event.sourceMealId);
+  if (index < 0) return 0;
+  const event = day.waterEvents[index];
+  const eventAmount = Math.max(0, Number(event.amount) || 0);
+  const removedAmount = Math.min(eventAmount, Math.max(0, Number(requestedAmount) || 0));
+  const nextAmount = eventAmount - removedAmount;
+  if (nextAmount <= 0) {
+    day.waterEvents.splice(index, 1);
+    if (event.mealId) day.meals = day.meals.filter((meal) => meal.id !== event.mealId);
+  } else {
+    day.waterEvents[index] = { ...event, amount: nextAmount, hydrationMl: hydrationContribution(nextAmount, beverageId, custom) };
+    if (event.mealId) {
+      const nutrition = beverageNutrition(nextAmount, beverageId, custom);
+      day.meals = day.meals.map((meal) => meal.id === event.mealId ? { ...meal, ...nutrition, items: (meal.items || []).map((item) => ({ ...item, grams: nextAmount })) } : meal);
+    }
+  }
+  day.waterMl = hydrationTotal(day.waterEvents);
+  return removedAmount;
+}
+
 export function inferHydrationBeverage(name, custom = []) {
   const value = String(name || "").toLocaleLowerCase();
   const customMatch = custom.map(normalizeCustomBeverage).find((item) => value.includes(item.name.toLocaleLowerCase()));
