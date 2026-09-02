@@ -21,3 +21,45 @@ export function hydrationContribution(amount, beverageId = "water", custom = [])
 export function beverageNutrition(amount, beverageId = "water", custom = []) { const beverage = hydrationBeverage(beverageId, custom); const factor = Math.max(0, Number(amount) || 0) / 100; return { kcal: Math.round(beverage.kcalPer100 * factor), protein: Math.round(beverage.proteinPer100 * factor * 10) / 10, carbs: Math.round(beverage.carbsPer100 * factor * 10) / 10, fat: Math.round(beverage.fatPer100 * factor * 10) / 10 }; }
 export function eventHydration(event) { return Math.max(0, Number(event?.hydrationMl ?? event?.amount) || 0); }
 export function hydrationTotal(events = []) { return Math.round(events.reduce((sum, event) => sum + eventHydration(event), 0)); }
+
+export function inferHydrationBeverage(name, custom = []) {
+  const value = String(name || "").toLocaleLowerCase();
+  const customMatch = custom.map(normalizeCustomBeverage).find((item) => value.includes(item.name.toLocaleLowerCase()));
+  if (customMatch) return customMatch;
+  const rules = [
+    ["milk_coffee", /קפה.*חלב|נס קפה|קפוצ׳ינו|קפוצ'ינו|לאטה|cappuccino|latte/],
+    ["black_coffee", /קפה שחור|אספרסו|אמריקנו|espresso|americano/],
+    ["chocolate_milk", /שוקו|chocolate milk/],
+    ["cocoa", /קקאו|cocoa/],
+    ["green_tea", /תה ירוק|green tea/],
+    ["herbal_tea", /תה צמחים|חליטה|herbal tea/],
+    ["soft_drink", /קולה|ספרייט|פאנטה|משקה קל|cola|soda|soft drink/],
+    ["wine", /יין|wine/],
+    ["juice", /מיץ|juice/],
+    ["milk", /(?:^|\s)חלב(?:\s|$)|(?:^|\s)milk(?:\s|$)/],
+    ["tea", /(?:^|\s)תה(?:\s|$)|(?:^|\s)tea(?:\s|$)/],
+    ["coffee", /(?:^|\s)קפה(?:\s|$)|(?:^|\s)coffee(?:\s|$)/],
+    ["sparkling", /סודה|מים מוגזים|sparkling water/],
+    ["water", /(?:^|\s)כוס מים(?:\s|$)|(?:^|\s)מים(?:\s|$)|(?:^|\s)water(?:\s|$)/],
+  ];
+  const match = rules.find(([, pattern]) => pattern.test(value));
+  return match ? hydrationBeverage(match[0], custom) : null;
+}
+
+export function backfillDayHydration(day, custom = []) {
+  if (!day || !Array.isArray(day.meals)) return 0;
+  day.waterEvents = Array.isArray(day.waterEvents) ? day.waterEvents : [];
+  if (!day.waterEvents.length && Number(day.waterMl || 0) > 0) day.waterEvents.push({ id: `legacy-water-${day.date}`, amount: Number(day.waterMl), hydrationMl: Number(day.waterMl), beverageId: "water", beverageName: "מים", icon: "💧", legacyAggregate: true, time: `${day.date}T12:00:00.000Z` });
+  let added = 0;
+  for (const meal of day.meals) {
+    if (meal.beverageEntry || day.waterEvents.some((event) => event.sourceMealId === meal.id || event.mealId === meal.id)) continue;
+    const beverage = inferHydrationBeverage([meal.name, ...(meal.items || []).map((item) => item.name)].join(" "), custom);
+    if (!beverage) continue;
+    const itemAmount = (meal.items || []).filter((item) => inferHydrationBeverage(item.name, custom)?.id === beverage.id).reduce((sum, item) => sum + Math.max(0, Number(item.grams) || 0) * Math.max(.1, Number(item.quantity) || 1), 0);
+    const amount = Math.max(50, Math.min(2000, Math.round(itemAmount || Number(meal.amountMl) || beverage.defaultAmount)));
+    day.waterEvents.push({ id: `meal-drink-${meal.id}`, sourceMealId: meal.id, amount, hydrationMl: hydrationContribution(amount, beverage.id, custom), beverageId: beverage.id, beverageName: beverage.name, icon: beverage.icon, time: meal.time || `${day.date}T12:00:00.000Z`, inferredFromHistory: true });
+    added += 1;
+  }
+  if (day.waterEvents.length) day.waterMl = hydrationTotal(day.waterEvents);
+  return added;
+}
