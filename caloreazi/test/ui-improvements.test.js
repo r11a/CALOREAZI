@@ -592,3 +592,11 @@ test("produce category separates vegetables from fruits", () => {
   assert.match(page, /food\.category === produceFilter/);
   assert.match(css, /\.produce-filter\{[^}]*grid-template-columns:repeat\(2/);
 });
+
+test("the bottom meal action always resets every overlay to the meal launcher", () => {
+  assert.match(page, /function openMealLauncher\(\)/);
+  assert.match(page, /setBarcodeScannerOpen\(false\); closeInAppCamera\(\)/);
+  assert.match(page, /setQuickCategory\(""\);\s*setQuickSearch\(""\);/);
+  assert.match(page, /className="nav-camera"\s*onClick=\{openMealLauncher\}/);
+  assert.match(css, /\.bottom-nav\{z-index:20000!important\}/);
+});
