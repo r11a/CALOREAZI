@@ -58,7 +58,7 @@ test("photo meals automatically complete calories and remain recalculable after 
 test("home greeting opens the shared add menu and that menu exposes meal capture", () => {
   assert.match(page, /welcome-add-button/);
   assert.match(page, /setQuickAddOpen\(true\)/);
-  assert.match(page, /capture-meal-entry/);
+  assert.match(page, /label: "צלם ארוחה", icon: "camera", action: openInAppCamera/);
   assert.match(page, /צלם ארוחה/);
   assert.match(page, /uploadInput\.current\?\.click\(\)/);
   assert.doesNotMatch(page, /manual-camera-action/);
@@ -432,12 +432,10 @@ test("meal add flows wait for an explicit field tap before opening the keyboard"
   assert.match(page, /aria-label="חיפוש בהוספת אוכל"/);
 });
 
-test("meal source actions share white icons on orange while food categories stay untouched", () => {
-  assert.match(page, /capture-meal-entry add-source-entry/);
-  assert.match(page, /forgotten-meal-entry add-source-entry/);
-  assert.match(page, /className="add-source-entry" onClick=\{\(\) => setVoiceOpen/);
-  assert.match(css, /category-grid \.add-source-entry \.manual-meal-art\{[^}]*color:#fff[^}]*var\(--orange\)/);
-  assert.doesNotMatch(page, /className="add-source-entry" onClick=\{\(\) => setQuickCategory/);
+test("meal source actions use a consistent icon-led visual language", () => {
+  assert.match(page, /className=\{`quick-source source-\$\{index \+ 1\}`\}/);
+  assert.match(css, /\.quick-source>span\{[^}]*color:#fff[^}]*background:linear-gradient/);
+  assert.match(page, /label: "ירקות ופירות", icon: "produce"/);
 });
 
 test("history deletion masks meal passwords and supports legacy water entries", () => {
@@ -556,4 +554,18 @@ test("high-value daily flow exposes unified review, undo, insight and quality co
   assert.match(page, /תובנת השבוע שלך/);
   assert.match(page, /בקרת ביצוע ואיכות/);
   assert.match(page, /מרכז הסנכרון/);
+});
+
+test("meal launcher is a compact eight-action hub with recent meals", () => {
+  for (const label of ["ארוחה ידנית", "צלם ארוחה", "שכחתי לעדכן", "סריקת ברקוד", "הקלט ארוחה", "מועדפים", "משקאות", "ירקות ופירות"]) assert.match(page, new RegExp(label));
+  assert.match(page, /className="quick-source-grid"/);
+  assert.match(page, /ארוחות אחרונות ונפוצות/);
+  assert.match(page, /quickRepeatMeals\.slice\(0, 8\)/);
+  assert.match(css, /single-screen meal source launcher/);
+});
+
+test("meal and barcode cameras expose an explicit back action", () => {
+  assert.match(page, /aria-label="חזרה מהמצלמה"/);
+  assert.match(page, /aria-label="חזרה מסריקת ברקוד"/);
+  assert.match(page, /className="capture-exit"/);
 });

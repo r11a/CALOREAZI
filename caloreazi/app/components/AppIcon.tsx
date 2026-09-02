@@ -1,4 +1,4 @@
-export type AppIconName = "camera" | "image" | "plus" | "mealAdd" | "coach" | "sparkles" | "edit" | "calculator" | "list" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic" | "speaker" | "user" | "heart" | "star" | "target" | "bell" | "info";
+export type AppIconName = "camera" | "image" | "plus" | "mealAdd" | "coach" | "sparkles" | "edit" | "calculator" | "list" | "water" | "activity" | "home" | "history" | "settings" | "lock" | "search" | "mic" | "speaker" | "user" | "heart" | "star" | "target" | "bell" | "info" | "barcode" | "drink" | "produce";
 
 export function AppIcon({ name }: { name: AppIconName }) {
   const paths = {
@@ -26,6 +26,9 @@ export function AppIcon({ name }: { name: AppIconName }) {
     target: <><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="m15 9 6-6M17 3h4v4"/></>,
     bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
     info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></>,
+    barcode: <><path d="M4 5v14M7 5v14M11 5v14M14 5v14M16.5 5v14M20 5v14"/><path d="M3 3h4M3 3v4M21 3h-4M21 3v4M3 21h4M3 21v-4M21 21h-4M21 21v-4"/></>,
+    drink: <><path d="M6 4h12l-1 16H7L6 4Z"/><path d="M7 9h10M14 4l3-2"/></>,
+    produce: <><path d="M12 21c-5-2-7-6-6-10 4 0 7 2 8 6"/><path d="M12 21c5-3 7-8 5-13-4 1-6 4-6 8M12 21V9"/></>,
   };
   return <svg className="app-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
