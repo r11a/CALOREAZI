@@ -13,6 +13,7 @@ import {
 import { flushOfflineCaptures, flushOfflineMutations, listOfflineQueue, offlinePendingCount, queueOfflineCapture, queueOfflineMutation, retryOfflineItem, type OfflineQueueItem } from "./offline-queue";
 import { AppIcon } from "./components/AppIcon";
 import { assessMealReliability } from "../server/meal-reliability.js";
+import { HYDRATION_BEVERAGES, beverageNutrition, hydrationBeverage, hydrationContribution, hydrationTotal } from "../server/hydration.js";
 
 type AppState = {
   authenticated?: boolean;
@@ -685,6 +686,7 @@ export default function Home() {
   const [waterOpen, setWaterOpen] = useState(false);
   const [waterValue, setWaterValue] = useState(0);
   const [waterTargetValue, setWaterTargetValue] = useState(2000);
+  const [selectedHydrationBeverages, setSelectedHydrationBeverages] = useState<string[]>([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [acquaintanceOpen, setAcquaintanceOpen] = useState(false);
   const [profileTab, setProfileTab] = useState<"basic" | "health" | "goals" | "notifications" | "account">("basic");
@@ -1079,6 +1081,9 @@ export default function Home() {
   });
   const waterByHour = Array.from({ length: 24 }, (_, hour) => ({ hour, amount: historyDays.slice(-30).flatMap((day: any) => day.waterEvents || []).filter((event: any) => new Date(event.time).getHours() === hour).reduce((sum: number, event: any) => sum + Number(event.amount || 0), 0) }));
   const maximumWaterHour = Math.max(1, ...waterByHour.map((item) => item.amount));
+  const hydrationTrendEvents = historyDays.slice(-30).flatMap((day: any) => day.waterEvents || []);
+  const hydrationTrendLayers = HYDRATION_BEVERAGES.map((beverage) => ({ ...beverage, amount: hydrationTrendEvents.filter((event: any) => (event.beverageId || "water") === beverage.id).reduce((sum: number, event: any) => sum + Number(event.hydrationMl ?? event.amount ?? 0), 0) })).filter((item) => item.amount > 0).sort((a, b) => b.amount - a.amount);
+  const hydrationTrendTotal = hydrationTrendLayers.reduce((sum, item) => sum + item.amount, 0);
   const trend30Days = insightsData?.daily?.slice(-30) || [];
   const trend30Points = trend30Days.map((day: any, index: number) => ({
     ...day,
@@ -1101,6 +1106,14 @@ export default function Home() {
     0,
     Number(profile?.waterMl || 0) - Number(state?.today?.waterMl || 0),
   );
+  const hydrationRows = [HYDRATION_BEVERAGES[0], ...HYDRATION_BEVERAGES.filter((item) => (profile?.hydrationBeverages || []).includes(item.id))].map((beverage) => {
+    const events = (state?.today?.waterEvents || []).filter((event: any) => (event.beverageId || "water") === beverage.id);
+    const amount = events.length ? events.reduce((sum: number, event: any) => sum + Number(event.amount || 0), 0) : beverage.id === "water" && !(state?.today?.waterEvents || []).length ? Number(state?.today?.waterMl || 0) : 0;
+    const contribution = events.length ? events.reduce((sum: number, event: any) => sum + Number(event.hydrationMl ?? event.amount ?? 0), 0) : amount;
+    return { ...beverage, amount, contribution };
+  });
+  const dailyHydrationLayers = hydrationRows.filter((item) => item.contribution > 0).sort((a, b) => b.contribution - a.contribution);
+  const dailyHydrationTotal = dailyHydrationLayers.reduce((sum, item) => sum + item.contribution, 0);
   const proteinRemaining = Math.max(
     0,
     Number(profile?.protein || 0) - macros.protein,
@@ -1397,7 +1410,7 @@ export default function Home() {
     }
   }
 
-  async function addWater(amount = 250) {
+  async function addWater(amount = 250, beverageId = "water") {
     if (waterMutationInFlight.current) return;
     waterMutationInFlight.current = true;
     try {
@@ -1405,12 +1418,17 @@ export default function Home() {
       const localDate = profile?.dayBoundaryMode === "manual" ? state.today.date : clientLocalDate(new Date(), profile?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone);
       const mutationKey = crypto.randomUUID();
       if (!navigator.onLine) {
-        await queueMutation("/api/water", "POST", JSON.stringify({ amount, recordedAt, localDate }));
+        await queueMutation("/api/water", "POST", JSON.stringify({ amount, beverageId, recordedAt, localDate }));
         setState((current: any) => {
           const waterEvents = [...(current.today.waterEvents || [])];
-          if (amount > 0) waterEvents.push({ id: `offline-${mutationKey}`, amount, time: recordedAt, pendingSync: true });
-          else { let remainingRemoval = Math.abs(amount); for (let index = waterEvents.length - 1; index >= 0 && remainingRemoval > 0; index -= 1) { const eventAmount = Number(waterEvents[index].amount || 0); if (eventAmount <= remainingRemoval) { remainingRemoval -= eventAmount; waterEvents.splice(index, 1); } else { waterEvents[index] = { ...waterEvents[index], amount: eventAmount - remainingRemoval }; remainingRemoval = 0; } } }
-          return { ...current, today: { ...current.today, date: localDate, waterMl: Math.max(0, Number(current.today.waterMl || 0) + amount), waterEvents } };
+          let meals = [...(current.today.meals || [])];
+          const beverage = hydrationBeverage(beverageId);
+          if (amount > 0) {
+            const eventId = `offline-${mutationKey}`; const nutrition = beverageNutrition(amount, beverage.id); const mealId = nutrition.kcal > 0 ? `${eventId}-meal` : null;
+            waterEvents.push({ id: eventId, amount, hydrationMl: hydrationContribution(amount, beverage.id), beverageId: beverage.id, beverageName: beverage.name, icon: beverage.icon, ...(mealId ? { mealId } : {}), time: recordedAt, pendingSync: true });
+            if (mealId) meals.push({ id: mealId, hydrationEventId: eventId, beverageEntry: true, name: beverage.name, period: "snack", ...nutrition, sugar: 0, items: [{ name: beverage.name, grams: amount, quantity: 1, kcalPer100: beverage.kcalPer100, proteinPer100: beverage.proteinPer100, carbsPer100: beverage.carbsPer100, fatPer100: beverage.fatPer100 }], source: "manual", confidence: .9, time: recordedAt, logicalDate: localDate, pendingSync: true });
+          } else { let remainingRemoval = Math.abs(amount); for (let index = waterEvents.length - 1; index >= 0 && remainingRemoval > 0; index -= 1) { if ((waterEvents[index].beverageId || "water") !== beverage.id) continue; const eventAmount = Number(waterEvents[index].amount || 0); if (eventAmount <= remainingRemoval) { remainingRemoval -= eventAmount; const removed = waterEvents.splice(index, 1)[0]; if (removed.mealId) meals = meals.filter((meal: any) => meal.id !== removed.mealId); } else { const nextAmount = eventAmount - remainingRemoval; const event = waterEvents[index]; waterEvents[index] = { ...event, amount: nextAmount, hydrationMl: hydrationContribution(nextAmount, beverage.id) }; if (event.mealId) { const nutrition = beverageNutrition(nextAmount, beverage.id); meals = meals.map((meal: any) => meal.id === event.mealId ? { ...meal, ...nutrition, items: (meal.items || []).map((item: any) => ({ ...item, grams: nextAmount })) } : meal); } remainingRemoval = 0; } } }
+          return { ...current, today: { ...current.today, date: localDate, waterMl: hydrationTotal(waterEvents), waterEvents, meals } };
         });
         setOfflineQueueCount(await offlinePendingCount()); setMealResult({ name: "המים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
       }
@@ -1418,7 +1436,7 @@ export default function Home() {
         await api("/api/water", {
           method: "POST",
           headers: { "Idempotency-Key": mutationKey },
-          body: JSON.stringify({ amount, recordedAt, localDate }),
+          body: JSON.stringify({ amount, beverageId, recordedAt, localDate }),
         }),
       );
     } catch (e) {
@@ -1439,20 +1457,21 @@ export default function Home() {
   function openWaterEditor() {
     setWaterValue(Number(state?.today?.waterMl || 0));
     setWaterTargetValue(Number(profile?.waterMl || 2000));
+    setSelectedHydrationBeverages(Array.isArray(profile?.hydrationBeverages) ? profile.hydrationBeverages : []);
     setWaterOpen(true);
   }
   async function saveWater() {
     setBusy(true);
     try {
       if (!navigator.onLine) {
-        await queueMutation("/api/water", "PUT", JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue, localDate: state.today.date }));
-        setState((current: any) => ({ ...current, profile: { ...current.profile, waterMl: waterTargetValue }, today: { ...current.today, waterMl: waterValue } }));
+        await queueMutation("/api/water", "PUT", JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue, beverages: selectedHydrationBeverages, localDate: state.today.date }));
+        setState((current: any) => ({ ...current, profile: { ...current.profile, waterMl: waterTargetValue, hydrationBeverages: selectedHydrationBeverages }, today: { ...current.today, waterMl: waterValue } }));
         setOfflineQueueCount(await offlinePendingCount()); setWaterOpen(false); return;
       }
       setState(
         await api("/api/water", {
           method: "PUT",
-          body: JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue }),
+          body: JSON.stringify({ amount: waterValue, targetWaterMl: waterTargetValue, beverages: selectedHydrationBeverages }),
         }),
       );
       setWaterOpen(false);
@@ -3218,12 +3237,12 @@ export default function Home() {
             </div>
           ) : (
             <div className="meal-list">
-              {[...state.today.meals.map((meal: any) => ({ ...meal, kind: "meal" })), ...(state.today.waterEvents || []).map((water: any) => ({ ...water, kind: "water" }))]
+              {[...state.today.meals.filter((meal: any) => !meal.beverageEntry).map((meal: any) => ({ ...meal, kind: "meal" })), ...(state.today.waterEvents || []).map((water: any) => ({ ...water, kind: "water" }))]
                 .sort((a, b) => String(a.time).localeCompare(String(b.time)))
                 .map((meal: any) => meal.kind === "water" ? (
                   <article className="water-timeline-entry" key={`water-${meal.id}`}>
                     <span className="meal-icon water"><AppIcon name="water" /></span>
-                    <div><span className="meal-meta"><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><em>שתייה</em>{meal.pendingSync && <em className="pending-sync">ממתין לסנכרון</em>}</span><strong>כוס מים</strong><small>{Number(meal.amount || 250).toLocaleString()} מ״ל</small></div>
+                    <div><span className="meal-meta"><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><em>שתייה</em>{meal.pendingSync && <em className="pending-sync">ממתין לסנכרון</em>}</span><strong>{meal.beverageName || "כוס מים"}</strong><small>{Number(meal.amount || 250).toLocaleString()} מ״ל{meal.hydrationMl && Number(meal.hydrationMl) !== Number(meal.amount) ? ` · ${Number(meal.hydrationMl).toLocaleString()} מ״ל למיכל` : ""}</small></div>
                     <b>{Math.max(1, Math.round(Number(meal.amount || 250) / 250))}<small> כוסות</small></b>
                   </article>
                 ) : (
@@ -3277,19 +3296,17 @@ export default function Home() {
           </button>
         </div>
         </div><div className="side-stack">
-          <section className="panel water-panel">
+          <section className="panel water-panel hydration-panel">
             <header>
-              <div><p className="eyebrow">שתייה</p><h2>מים היום</h2></div>
+              <div><p className="eyebrow">מיכל שתייה יומי</p><h2>שתייה היום</h2></div>
               <button className="water-edit" onClick={openWaterEditor} aria-label="עריכת כמות המים">
-                {state.today.waterMl}<small>ml</small><span>עריכה</span>
+                {state.today.waterMl.toLocaleString()}<small>מ״ל</small><span>ניהול</span>
               </button>
             </header>
-            <div className="water-control-row" dir="ltr">
-              <button onClick={() => addWater(-250)} disabled={state.today.waterMl <= 0} aria-label="הפחתת 250 מיליליטר מים">−</button>
-              <div className="water-progress"><i style={{ width: `${Math.min(100, (state.today.waterMl / profile.waterMl) * 100)}%` }} /></div>
-              <button onClick={() => addWater(250)} aria-label="הוספת 250 מיליליטר מים">+</button>
-            </div>
-            <p>{state.today.waterMl.toLocaleString()} מתוך {profile.waterMl.toLocaleString()} מ״ל</p>
+            <div className="hydration-total"><div className="water-progress"><i style={{ width: `${Math.min(100, (state.today.waterMl / profile.waterMl) * 100)}%` }} /></div><strong>{Math.round((state.today.waterMl / Math.max(1, profile.waterMl)) * 100)}%</strong></div>
+            <p>{state.today.waterMl.toLocaleString()} מתוך {profile.waterMl.toLocaleString()} מ״ל נוזלים</p>
+            <div className="daily-hydration-pitcher" aria-label="הרכב השתייה היום"><div className="hydration-pitcher"><div className="hydration-liquid">{dailyHydrationLayers.slice().reverse().map((item, index) => <i key={item.id} title={`${item.name}: ${item.contribution} מ״ל`} style={{ height: `${Math.min(100, item.contribution / Math.max(1, dailyHydrationTotal) * 100)}%`, "--layer-color": item.id === "water" ? "#55b7ea" : item.id === "coffee" ? "#a96742" : item.id === "tea" ? "#72ad75" : item.id === "juice" ? "#f0a33c" : item.id === "milk" ? "#d9e2e8" : "#8977d1", "--layer-delay": `${index * 90}ms` } as CSSProperties} />)}</div></div><div>{dailyHydrationLayers.length ? dailyHydrationLayers.map((item) => <span key={item.id}><b>{item.icon} {item.name}</b><small>{item.contribution.toLocaleString()} מ״ל למיכל</small></span>) : <span><b>המיכל עדיין ריק</b><small>הוספת משקה תמלא אותו</small></span>}</div></div>
+            <div className="beverage-bars">{hydrationRows.map((beverage) => <article key={beverage.id} style={{ "--beverage-color": beverage.id === "water" ? "#5aaee6" : beverage.id === "coffee" ? "#bd7b50" : beverage.id === "tea" ? "#70a975" : "#8b7bd4" } as CSSProperties}><header><span>{beverage.icon}</span><div><strong>{beverage.name}</strong><small>{beverage.amount.toLocaleString()} מ״ל{beverage.factor < 1 && beverage.amount > 0 ? ` · ${beverage.contribution.toLocaleString()} מ״ל למיכל` : ""}</small></div></header><div className="water-control-row" dir="ltr"><button onClick={() => addWater(-beverage.defaultAmount, beverage.id)} disabled={beverage.amount <= 0} aria-label={`הפחתת ${beverage.name}`}>−</button><div className="water-progress"><i style={{ width: `${Math.min(100, beverage.contribution / profile.waterMl * 100)}%` }} /></div><button onClick={() => addWater(beverage.defaultAmount, beverage.id)} aria-label={`הוספת ${beverage.name}`}>+</button></div></article>)}</div>
           </section>
           <button type="button" className="panel trends-tile" onClick={openInsights}>
             <span><AppIcon name="activity" /></span>
@@ -3344,7 +3361,7 @@ export default function Home() {
         </button>
       </nav>
       {calorieOverage && <div className="modal-layer overage-layer"><button className="backdrop" onClick={() => setCalorieOverage(null)} /><section className="settings-modal overage-modal"><header><div><h2>חריגה מהיעד היומי</h2><small>הארוחה נשמרה, אבל אפשר עדיין לתקן את הבחירה</small></div></header><div className="overage-ring"><strong>+{Math.round(calorieOverage.overBy)}</strong><small>קלוריות מעל היעד</small></div><p>אין צורך להילחץ מיום אחד. אפשר להשאיר את הארוחה, לערוך כמויות או לבטל את ההוספה.</p><footer><button type="button" onClick={() => setCalorieOverage(null)}>השאר ביומן</button><button type="button" onClick={() => { const meal = calorieOverage.meal; setCalorieOverage(null); editMeal({ ...meal, id: calorieOverage.id, time: meal.occurredAt }); }}>ערוך ארוחה</button><button className="danger" type="button" onClick={async () => { await deleteMeal(calorieOverage.id); setCalorieOverage(null); }}>בטל את ההוספה</button></footer></section></div>}
-      {dayCloseConfirm && <div className="modal-layer"><button className="backdrop" onClick={() => setDayCloseConfirm(false)} /><section className="settings-modal compact-modal finish-day-modal"><header><div><h2>לסיים את היום הפעיל?</h2><small>היום יישמר בהיסטוריה והמדדים יתחילו מחדש</small></div></header><div className="finish-day-summary"><span><small>קלוריות</small><strong>{consumed.toLocaleString()}</strong></span><span><small>ארוחות</small><strong>{state.today.meals.length}</strong></span><span><small>מים</small><strong>{Number(state.today.waterMl || 0).toLocaleString()} מ״ל</strong></span></div><p>הפעולה אינה מוחקת דבר. אפשר יהיה לפתוח את היום הזה מההיסטוריה.</p><footer><button type="button" onClick={() => setDayCloseConfirm(false)}>חזור</button><button className="primary" type="button" disabled={busy} onClick={finishActiveDay}>{busy ? "שומר…" : "סיים והתחל יום חדש"}</button></footer></section></div>}
+      {dayCloseConfirm && <div className="modal-layer"><button className="backdrop" onClick={() => setDayCloseConfirm(false)} /><section className="settings-modal compact-modal finish-day-modal"><header><div><h2>לסיים את היום הפעיל?</h2><small>היום יישמר בהיסטוריה והמדדים יתחילו מחדש</small></div></header><div className="finish-day-summary"><span><small>קלוריות</small><strong>{consumed.toLocaleString()}</strong></span><span><small>ארוחות</small><strong>{state.today.meals.filter((meal: any) => !meal.beverageEntry).length}</strong></span><span><small>שתייה</small><strong>{Number(state.today.waterMl || 0).toLocaleString()} מ״ל</strong></span></div><p>הפעולה אינה מוחקת דבר. אפשר יהיה לפתוח את היום הזה מההיסטוריה.</p><footer><button type="button" onClick={() => setDayCloseConfirm(false)}>חזור</button><button className="primary" type="button" disabled={busy} onClick={finishActiveDay}>{busy ? "שומר…" : "סיים והתחל יום חדש"}</button></footer></section></div>}
       {cameraCaptureOpen && <div className="modal-layer meal-camera-layer"><button className="backdrop" type="button" onClick={closeInAppCamera} aria-label="סגירת המצלמה" /><section className="settings-modal meal-camera-modal"><header><div><h2>צילום ארוחה</h2><p>מקם את כל הצלחת בפריים ובתאורה טובה</p></div><button type="button" onClick={closeInAppCamera} aria-label="סגור">×</button></header><div className="live-meal-camera"><video ref={mealCameraVideo} playsInline muted /><span><AppIcon name="target" /></span></div><p className="camera-status" role="status">{cameraStatus}</p><label>פרט שיעזור בזיהוי <input value={cameraHint} onChange={(event) => setCameraHint(event.target.value)} maxLength={300} placeholder="לא חובה — למשל: חזה עוף עם מעט שמן" /></label><footer><button type="button" onClick={() => { closeInAppCamera(); uploadInput.current?.click(); }}>בחר מהגלריה</button><button className="primary camera-shutter" type="button" onClick={captureInAppMeal} aria-label="צלם ונתח"><AppIcon name="camera" /> צלם ונתח</button></footer></section></div>}
       {historyDeleteRequest && <div className="modal-layer modal-nested"><button className="backdrop" type="button" onClick={() => setHistoryDeleteRequest(null)} /><form className="settings-modal compact-modal history-password-modal" onSubmit={async (event) => { event.preventDefault(); if (!historyDeleteRequest.password) return; await performHistoryDelete("meal", historyDeleteRequest.id, historyDeleteRequest.date, historyDeleteRequest.password); }}><header><div><h2>מחיקת ארוחה מההיסטוריה</h2><p>המחיקה תעדכן מיד את הקלוריות, אבות המזון והציון.</p></div></header><label>הסיסמה הנוכחית<input type="password" autoComplete="current-password" value={historyDeleteRequest.password} onChange={(event) => setHistoryDeleteRequest({ ...historyDeleteRequest, password: event.target.value })} /></label><footer><button type="button" onClick={() => setHistoryDeleteRequest(null)}>ביטול</button><button className="danger" type="submit" disabled={!historyDeleteRequest.password}>המשך למחיקה</button></footer></form></div>}
       {mealPreview && (
@@ -4899,7 +4916,7 @@ export default function Home() {
                     carbs: goalStatus(totals.carbs, goals.carbs),
                     fat: goalStatus(totals.fat, goals.fat),
                   };
-                  const timelineEntries = [...day.meals.map((meal: any) => ({ ...meal, kind: "meal" })), ...(day.waterEvents || []).map((event: any) => ({ ...event, kind: "water", name: "כוס מים" }))].sort((a: any, b: any) => String(a.time).localeCompare(String(b.time)));
+                  const timelineEntries = [...day.meals.filter((meal: any) => !meal.beverageEntry).map((meal: any) => ({ ...meal, kind: "meal" })), ...(day.waterEvents || []).map((event: any) => ({ ...event, kind: "water", name: event.beverageName || "כוס מים" }))].sort((a: any, b: any) => String(a.time).localeCompare(String(b.time)));
                   return (
                     <details key={day.date} open>
                       <summary>
@@ -4914,7 +4931,7 @@ export default function Home() {
                             })}
                           </strong>
                           <small>
-                            {day.meals.length} ארוחות · {day.waterMl || 0} מ״ל
+                            {day.meals.filter((meal: any) => !meal.beverageEntry).length} ארוחות · {day.waterMl || 0} מ״ל
                             מים
                           </small>
                         </div>
@@ -4958,7 +4975,7 @@ export default function Home() {
                         <small>הציון מחושב אוטומטית במנוע 2.0 · כיסוי הנתונים: {Number(day.dailyScore?.coverage || 0)}%. נתון שלא תועד אינו מוצג כאילו נכשל.</small>
                       </section>
                       <section className="history-timeline">
-                        {timelineEntries.map((meal: any) => meal.kind === "water" ? <article className="timeline-water" key={meal.id || meal.time}><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><i /><span className="timeline-icon">💧</span><div><em>שתייה</em><strong>כוס מים</strong><small>{meal.amount} מ״ל</small></div><b>{meal.amount}<small> מ״ל</small></b><button className="history-delete-entry" type="button" onClick={() => deleteHistoryEntry("water", String(meal.id || meal.time), day.date)} aria-label="מחיקת כוס המים">מחיקה</button></article> : (
+                        {timelineEntries.map((meal: any) => meal.kind === "water" ? <article className="timeline-water" key={meal.id || meal.time}><time>{new Date(meal.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</time><i /><span className="timeline-icon">{meal.icon || "💧"}</span><div><em>שתייה</em><strong>{meal.beverageName || "כוס מים"}</strong><small>{meal.amount} מ״ל{meal.hydrationMl && Number(meal.hydrationMl) !== Number(meal.amount) ? ` · ${meal.hydrationMl} מ״ל למיכל` : ""}</small></div><b>{meal.amount}<small> מ״ל</small></b><button className="history-delete-entry" type="button" onClick={() => deleteHistoryEntry("water", String(meal.id || meal.time), day.date)} aria-label={`מחיקת ${meal.beverageName || "כוס המים"}`}>מחיקה</button></article> : (
                             <article
                               className={`timeline-${meal.period || "snack"}`}
                               key={meal.id}
@@ -5117,7 +5134,8 @@ export default function Home() {
               <div className="insights-loading" role="status" aria-live="polite"><span /><strong>מכין את תמונת המגמות שלך</strong><small>מחשב נתונים ומסדר את הגרפים…</small><i><b /></i></div>
             ) : (
               <>
-                <section className="water-hours-insight"><header><strong>מתי שותים הכי הרבה?</strong><small>התפלגות השתייה לפי שעות ב־30 הימים האחרונים · כוס מחושבת כ־250 מ״ל</small></header><div>{waterByHour.map((item) => { const cups = Math.round(Number(item.amount || 0) / 250); return <span key={item.hour} title={`${String(item.hour).padStart(2,"0")}:00 · ${item.amount} מ״ל · ${cups} כוסות`}><i style={{ height: `${item.amount ? Math.max(6, item.amount / maximumWaterHour * 100) : 2}%` }}>{cups > 1 && <b>{cups}</b>}</i><small>{item.hour % 3 === 0 ? String(item.hour).padStart(2,"0") : ""}</small></span>; })}</div>{!waterByHour.some((item) => item.amount > 0) && <p>הגרף יתחיל להיבנות מהוספות המים הבאות.</p>}</section>
+                <section className="hydration-mix-insight"><header><strong>ממה מורכבת השתייה שלך?</strong><small>תרומת המשקאות למיכל הנוזלים ב־30 הימים האחרונים</small></header>{hydrationTrendTotal > 0 ? <div className="hydration-pitcher-layout"><div className="hydration-pitcher" aria-label="התפלגות משקאות"><div className="hydration-liquid">{hydrationTrendLayers.slice().reverse().map((item, index) => <i key={item.id} style={{ height: `${item.amount / hydrationTrendTotal * 100}%`, "--layer-color": item.id === "water" ? "#55b7ea" : item.id === "coffee" ? "#a96742" : item.id === "tea" ? "#72ad75" : item.id === "juice" ? "#f0a33c" : item.id === "milk" ? "#d9e2e8" : "#8977d1", "--layer-delay": `${index * 110}ms` } as CSSProperties} />)}</div></div><div className="hydration-legend">{hydrationTrendLayers.map((item) => <span key={item.id}><i style={{ background: item.id === "water" ? "#55b7ea" : item.id === "coffee" ? "#a96742" : item.id === "tea" ? "#72ad75" : item.id === "juice" ? "#f0a33c" : item.id === "milk" ? "#d9e2e8" : "#8977d1" }} /><b>{item.icon} {item.name}</b><strong>{item.amount.toLocaleString()} מ״ל</strong><small>{Math.round(item.amount / hydrationTrendTotal * 100)}%</small></span>)}</div></div> : <p>הקנקן יתחיל להתמלא לאחר הוספת משקאות.</p>}</section>
+                <section className="water-hours-insight"><header><strong>מתי שותים הכי הרבה?</strong><small>התפלגות השתייה לפי שעות ב־30 הימים האחרונים · כוס מחושבת כ־250 מ״ל</small></header><div>{waterByHour.map((item) => { const cups = Math.round(Number(item.amount || 0) / 250); return <span key={item.hour} title={`${String(item.hour).padStart(2,"0")}:00 · ${item.amount} מ״ל · ${cups} כוסות`}><i style={{ height: `${item.amount ? Math.max(6, item.amount / maximumWaterHour * 100) : 2}%` }}>{cups > 1 && <b>{cups}</b>}</i><small>{item.hour % 3 === 0 ? String(item.hour).padStart(2,"0") : ""}</small></span>; })}</div>{!waterByHour.some((item) => item.amount > 0) && <p>הגרף יתחיל להיבנות מהוספות השתייה הבאות.</p>}</section>
                 {insightsData.sugar?.enabled && (
                   <section className="sugar-insights">
                     <header><div><strong>סוכרים תזונתיים משוערים</strong><small>מוצג בגלל מצב הסוכר שסומן בכרטיס האישי</small></div><b>לא גלוקוז בדם</b></header>
@@ -5324,7 +5342,7 @@ export default function Home() {
                       מים <b>{shared.today.waterMl} מ״ל</b>
                     </span>
                     <span>
-                      ארוחות <b>{shared.today.meals.length}</b>
+                      ארוחות <b>{shared.today.meals.filter((meal: any) => !meal.beverageEntry).length}</b>
                     </span>
                   </div>
                 )}
@@ -5517,7 +5535,8 @@ export default function Home() {
                 ＋
               </button>
             </div>
-            <label className="water-target-field">יעד שתייה יומי<select value={waterTargetValue} onChange={(event) => setWaterTargetValue(Number(event.target.value))}>{[1500,1750,2000,2250,2500,2750].map((amount) => <option key={amount} value={amount}>{(amount / 1000).toLocaleString("he-IL")} ליטר</option>)}</select><small>היעד ישמש את פס המים ואת חישוב הציון היומי.</small></label>
+            <label className="water-target-field">יעד שתייה יומי<select value={waterTargetValue} onChange={(event) => setWaterTargetValue(Number(event.target.value))}>{[1500,1750,2000,2250,2500,2750].map((amount) => <option key={amount} value={amount}>{(amount / 1000).toLocaleString("he-IL")} ליטר</option>)}</select><small>היעד משקף את כלל הנוזלים שתרמו המשקאות שנבחרו.</small></label>
+            <div className="beverage-picker"><strong>משקאות שיופיעו בכרטיס</strong><small>מים נשארים קבועים. אפשר לבחור משקאות נוספים.</small><div>{HYDRATION_BEVERAGES.filter((item) => !item.fixed).map((beverage) => <label key={beverage.id} className={selectedHydrationBeverages.includes(beverage.id) ? "selected" : ""}><input type="checkbox" checked={selectedHydrationBeverages.includes(beverage.id)} onChange={(event) => setSelectedHydrationBeverages((current) => event.target.checked ? [...current, beverage.id] : current.filter((id) => id !== beverage.id))} /><span>{beverage.icon}</span><b>{beverage.name}</b><small>{Math.round(beverage.factor * 100)}% מהכמות למיכל</small></label>)}</div></div>
             <footer>
               <button onClick={() => setWaterOpen(false)}>ביטול</button>
               <button className="primary" onClick={saveWater} disabled={busy}>

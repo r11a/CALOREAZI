@@ -112,6 +112,7 @@ function produceAmountForMeal(meal) {
 
 export function calculateDayScore(day, profile, activity = []) {
   const meals = Array.isArray(day?.meals) ? day.meals : [];
+  const foodMeals = meals.filter((meal) => !meal.beverageEntry);
   const totals = meals.reduce((sum, meal) => ({
     kcal: sum.kcal + Number(meal.kcal || 0),
     protein: sum.protein + Number(meal.protein || 0),
@@ -141,7 +142,7 @@ export function calculateDayScore(day, profile, activity = []) {
     { key: "water", group: "habits", label: "שתייה", value: Number(day?.waterMl || 0), target: waterTarget, unit: "מ״ל", max: 5, score: adequacy(Number(day?.waterMl || 0), waterTarget, 5), available: true, tip: "להשלים את השתייה בהדרגה." },
     { key: "activity", group: "habits", label: "פעילות שבועית", value: weeklyMinutes, target: 150, unit: "דקות", max: 7, score: adequacy(weeklyMinutes, 150, 7), available: true, tip: "להוסיף פעילות שמתאימה לך במהלך השבוע." },
     { key: "variety", group: "habits", label: "גיוון", value: uniqueFoods, target: 8, unit: "מזונות", max: 5, score: adequacy(uniqueFoods, 8, 5), available: itemCount > 0, tip: "לגוון בין מקורות מזון שונים." },
-    { key: "logging", group: "habits", label: "כיסוי היום", value: meals.length, target: 3, unit: "ארוחות", max: 3, score: adequacy(meals.length, 3, 3), available: true, tip: "להשלים תיעוד כדי לקבל תמונה מדויקת." },
+    { key: "logging", group: "habits", label: "כיסוי היום", value: foodMeals.length, target: 3, unit: "ארוחות", max: 3, score: adequacy(foodMeals.length, 3, 3), available: true, tip: "להשלים תיעוד כדי לקבל תמונה מדויקת." },
   ].map((item) => ({ ...item, score: Math.round(item.score * 10) / 10, percent: Math.round(item.score / item.max * 100) }));
   const groupMax = { quality: 50, targets: 30, habits: 20 }; const components = {};
   for (const group of Object.keys(groupMax)) { const available = parameters.filter((item) => item.group === group && item.available); const rawMax = available.reduce((sum, item) => sum + item.max, 0); const value = rawMax ? available.reduce((sum, item) => sum + item.score, 0) / rawMax * groupMax[group] : 0; components[group] = { score: Math.round(value), max: groupMax[group], coverage: Math.round(rawMax / parameters.filter((item) => item.group === group).reduce((sum, item) => sum + item.max, 0) * 100) }; }
