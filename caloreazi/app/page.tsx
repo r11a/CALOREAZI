@@ -633,6 +633,7 @@ export default function Home() {
   const [photoQuality, setPhotoQuality] = useState<{ level: "good" | "warning"; message: string } | null>(null);
   const [mealConfidence, setMealConfidence] = useState<"low" | "medium" | "high">("low");
   const [mealResult, setMealResult] = useState<any>(null);
+  const [recentUndo, setRecentUndo] = useState<{ kind: "meal" | "water" | "activity"; id?: string; name: string; amount?: number; beverageId?: string } | null>(null);
   const [calorieOverage, setCalorieOverage] = useState<any>(null);
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification === "undefined" ? "unsupported" : Notification.permission);
   const [notificationStatus, setNotificationStatus] = useState("");
@@ -643,6 +644,11 @@ export default function Home() {
     const timer = window.setTimeout(() => setMealResult(null), 15_000);
     return () => window.clearTimeout(timer);
   }, [mealResult]);
+  useEffect(() => {
+    if (!recentUndo) return;
+    const timer = window.setTimeout(() => setRecentUndo(null), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [recentUndo]);
   const [weightValue, setWeightValue] = useState(0);
   const [weightDate, setWeightDate] = useState("");
   const [weightFeedback, setWeightFeedback] = useState("");
@@ -774,8 +780,10 @@ export default function Home() {
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const mealSaveInFlight = useRef(false);
   const duplicateMealApproval = useRef("");
+  const mealInteractionStartedAt = useRef(Date.now());
   const waterMutationInFlight = useRef(false);
   const mealSaveRequestId = useRef("");
+  useEffect(() => { if (mealOpen) mealInteractionStartedAt.current = Date.now(); }, [mealOpen]);
   const mealEditBaseUpdatedAt = useRef("");
   const imageCompletionRequested = useRef(new Set<string>());
   const audioChunks = useRef<Blob[]>([]);
@@ -1448,7 +1456,7 @@ export default function Home() {
           } else { const draftDay = { waterEvents, meals, waterMl: current.today.waterMl }; removeLatestBeverageServing(draftDay, beverage.id, Math.abs(amount), custom); meals = draftDay.meals; waterEvents.splice(0, waterEvents.length, ...draftDay.waterEvents); }
           return { ...current, today: { ...current.today, date: localDate, waterMl: hydrationTotal(waterEvents), waterEvents, meals } };
         });
-        setOfflineQueueCount(await offlinePendingCount()); setMealResult({ name: "המים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
+        setOfflineQueueCount(await offlinePendingCount()); setMealResult({ name: "השתייה נשמרה במכשיר וממתינה לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
       }
       setState(
         await api("/api/water", {
@@ -1457,6 +1465,7 @@ export default function Home() {
           body: JSON.stringify({ amount, beverageId, recordedAt, localDate }),
         }),
       );
+      if (amount > 0) { const beverage = hydrationBeverage(beverageId, profile?.customHydrationBeverages || []); setMealResult({ name: `${amount} מ״ל ${beverage.name} נוספו`, kcal: 0, protein: 0, carbs: 0, fat: 0 }); setRecentUndo({ kind: "water", name: beverage.name, amount, beverageId }); }
     } catch (e) {
       setError((e as Error).message);
     } finally { waterMutationInFlight.current = false; }
@@ -1585,16 +1594,18 @@ export default function Home() {
     try {
       if (!navigator.onLine) {
         const recordedAt = new Date().toISOString();
+        const localId = `offline-${crypto.randomUUID()}`;
         await queueMutation("/api/activity", "POST", JSON.stringify({ ...activityForm, recordedAt, localDate: state.today.date }));
-        setState((current: any) => ({ ...current, activity: [...(current.activity || []), { ...activityForm, id: `offline-${crypto.randomUUID()}`, date: current.today.date, time: recordedAt, pendingSync: true }] }));
+        setState((current: any) => ({ ...current, activity: [...(current.activity || []), { ...activityForm, id: localId, date: current.today.date, time: recordedAt, pendingSync: true }] }));
         setOfflineQueueCount(await offlinePendingCount()); setActivityOpen(false); return;
       }
-      setState(
-        await api("/api/activity", {
+      const latest = await api("/api/activity", {
           method: "POST",
           body: JSON.stringify(activityForm),
-        }),
-      );
+        });
+      setState(latest);
+      const added = [...(latest.activity || [])].reverse().find((item: any) => item.type === activityForm.type);
+      if (added?.id) { setMealResult({ name: `${activityForm.type} נוספה`, kcal: 0, protein: 0, carbs: 0, fat: 0 }); setRecentUndo({ kind: "activity", id: added.id, name: activityForm.type }); }
       setActivityOpen(false);
     } catch (e) {
       setError((e as Error).message);
@@ -1719,6 +1730,8 @@ export default function Home() {
         confidence: mealConfidence === "high" ? .9 : mealConfidence === "medium" ? .7 : .45,
         recognitionScore: ["photo", "voice"].includes(mealSource) ? mealRecognitionScore : null,
         nutritionReliability: mealReliabilityPreview,
+        interactionDurationMs: Math.max(0, Date.now() - mealInteractionStartedAt.current),
+        userEdited: aiOriginalItems.length > 0 && JSON.stringify(aiOriginalItems) !== JSON.stringify(normalizedItems),
       };
       let latest: AppState = state;
       let savedMealId = editingMealId;
@@ -1767,6 +1780,7 @@ export default function Home() {
       }
       setState(latest);
       if (!catalogOnly) setMealResult({ name: navigator.onLine ? finalMeal.name : `${finalMeal.name} · ממתין לסנכרון`, kcal: finalMeal.kcal, protein: finalMeal.protein, carbs: finalMeal.carbs, fat: finalMeal.fat, edited: Boolean(editingMealId), favoriteSaved: saveAsFavorite });
+      if (navigator.onLine && !catalogOnly && !editingMealId && savedMealId) setRecentUndo({ kind: "meal", id: savedMealId, name: finalMeal.name });
       if (!catalogOnly && !editingMealId && savedLocalDate === latest.today?.date && consumed + Number(finalMeal.kcal) > dailyCalorieTarget) {
         setCalorieOverage({ id: savedMealId, meal: finalMeal, overBy: consumed + Number(finalMeal.kcal) - dailyCalorieTarget });
         if (notificationPermission === "granted") new Notification("CALOREAZI", { body: `חריגה של ${Math.round(consumed + Number(finalMeal.kcal) - dailyCalorieTarget)} קלוריות. אפשר לערוך או לבטל את ההוספה.` });
@@ -1870,6 +1884,17 @@ export default function Home() {
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+  async function undoRecentAction() {
+    if (!recentUndo) return;
+    const action = recentUndo;
+    setRecentUndo(null);
+    try {
+      if (action.kind === "meal" && action.id) setState(await api("/api/meals", { method: "DELETE", body: JSON.stringify({ id: action.id }) }));
+      else if (action.kind === "water" && action.amount && action.beverageId) setState(await api("/api/water", { method: "POST", body: JSON.stringify({ amount: -action.amount, beverageId: action.beverageId }) }));
+      else if (action.kind === "activity" && action.id) setState(await api("/api/activity", { method: "DELETE", body: JSON.stringify({ id: action.id }) }));
+      setMealResult({ name: `הפעולה “${action.name}” בוטלה`, kcal: 0, protein: 0, carbs: 0, fat: 0, edited: true });
+    } catch (e) { setError((e as Error).message); }
   }
   function editMeal(meal: any) {
     const date = new Date(meal.time);
@@ -2325,6 +2350,8 @@ export default function Home() {
       return;
     }
     const factor = item.basis === "100g" ? Math.max(1, quickFoodWeight) / 100 : 1;
+    const grams = item.basis === "100g" ? Math.max(1, quickFoodWeight) : Math.max(1, Number(item.defaultWeight || 100));
+    const per100Factor = item.basis === "100g" ? 1 : 100 / grams;
     setMealForm({
       name: `${item.name} · ${item.basis === "100g" ? `${quickFoodWeight} גרם` : item.portion}`,
       kcal: Math.round(Number(item.kcal || 0) * factor),
@@ -2332,14 +2359,14 @@ export default function Home() {
       carbs: Math.round(Number(item.carbs || 0) * factor * 10) / 10,
       fat: Math.round(Number(item.fat || 0) * factor * 10) / 10,
     });
-    setMealItems([]);
+    setMealItems([{ name: item.name, grams, quantity: 1, unit: item.portion || "מנה", kcalPer100: Math.round(Number(item.kcal || 0) * per100Factor), proteinPer100: Math.round(Number(item.protein || 0) * per100Factor * 10) / 10, carbsPer100: Math.round(Number(item.carbs || 0) * per100Factor * 10) / 10, fatPer100: Math.round(Number(item.fat || 0) * per100Factor * 10) / 10, nutritionSource: { source: String(item.source || item.attribution || (item.barcode ? "Open Food Facts" : "CALOREAZI_CURATED")), sourceId: String(item.barcode || item.id || "catalog") } }]);
     setAiOriginalItems([]);
     setMealSource("manual");
     setMealPeriod(mealPeriodFor());
     setManualAiMode(false);
     setPhotoPreview("");
     setMealDateTime(localDateTimeInput());
-    setPhotoStatus("ערכים משוערים למנה המקובלת — אפשר לתקן לפני השמירה.");
+    setPhotoStatus("הפריט מוכן לבדיקה באותו מסך אישור של צילום, דיבור וחיפוש.");
     setMealReviewReady(true);
     setMealDetailsOpen(false);
     setMealSaveFeedback("");
@@ -3164,6 +3191,10 @@ export default function Home() {
         </div>
       )}
       <details className="calm-challenges expandable-surface"><summary><span>◇</span><div><strong>יעדים רגועים להיום</strong><small>מותאמים לשעה, לפערים ולשלב שלך בתהליך</small></div></summary><div>{calmChallenges.map((challenge) => <span className={`challenge-${challenge.tone}`} key={challenge.label}><small>{challenge.label}</small><i><b style={{ width: `${Math.min(100, challenge.value / Math.max(1, challenge.target) * 100)}%` }} /></i><em>{Math.round(challenge.value).toLocaleString()} מתוך {challenge.target.toLocaleString()} {challenge.unit}</em></span>)}</div></details>
+      <section className="today-focus-card" aria-label="סיכום היום בקצרה">
+        <div><small>תמונת מצב עכשיו</small><strong>{remaining > 0 ? `נותרו ${remaining.toLocaleString()} קלוריות` : `חריגה של ${(consumed - dailyCalorieTarget).toLocaleString()} קלוריות`}{proteinRemaining > 8 ? ` · חסרים כ־${Math.round(proteinRemaining)} גרם חלבון` : " · החלבון בקצב טוב"}{waterRemaining > 300 ? ` · נותרו ${waterRemaining.toLocaleString()} מ״ל שתייה` : " · השתייה בקצב טוב"}</strong></div>
+        <button type="button" onClick={() => { const hour = new Date().getHours(); setSuggestionPeriod(hour < 11 ? "breakfast" : hour < 16 ? "lunch" : hour < 20 ? "dinner" : "snack"); window.setTimeout(() => document.getElementById("meal-suggestions")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0); }}>הצג 3 הצעות</button>
+      </section>
       <details className={`daily-score-details score-${scoreTone}`}>
         <summary aria-label="פתיחת הסבר על הציון היומי">
           <div className="daily-score-bar" role="progressbar" aria-label="ציון יומי" aria-valuemin={0} aria-valuemax={100} aria-valuenow={dailyScore}>
@@ -3255,7 +3286,7 @@ export default function Home() {
       )}
       {offlineQueueCount > 0 && !syncCenterOpen && <button className="offline-queue-status" type="button" onClick={async () => { setOfflineQueueItems(await listOfflineQueue()); setSyncCenterOpen(true); }}>{offlineQueueCount} {offlineQueueCount === 1 ? "פעולה ממתינה" : "פעולות ממתינות"} לסנכרון · לפרטים</button>}
       {syncCenterOpen && <div className="modal-layer sync-center-layer"><button className="backdrop" onClick={() => setSyncCenterOpen(false)} /><section className="settings-modal sync-center"><header><div><h2>מרכז הסנכרון</h2><p>{!online ? "אין חיבור כרגע. אפשר להמשיך לעבוד כרגיל." : syncStatus === "syncing" ? "הנתונים נשלחים כעת לפי סדר ההזנה." : offlineQueueItems.length ? "הנתונים שמורים במכשיר ולא ייעלמו." : "כל הנתונים מעודכנים בשרת."}</p></div><button type="button" onClick={() => setSyncCenterOpen(false)} aria-label="סגור">×</button></header><div className="sync-summary"><span className={online ? "connected" : "disconnected"}><i />{online ? "מחובר" : "Offline"}</span><strong>{offlineQueueItems.length}</strong><small>פעולות ממתינות</small></div><div className="sync-items">{offlineQueueItems.map((item) => <article className={item.attempts >= 3 ? "failed" : ""} key={`${item.kind}-${item.id}`}><div><strong>{item.label}</strong><small>נשמר {new Date(item.createdAt).toLocaleString("he-IL")}</small>{item.attempts >= 3 && <><em>לא הצלחנו לסנכרן אחרי {item.attempts} ניסיונות</em>{item.lastError && <small>{item.lastError}</small>}</>}</div>{item.attempts >= 3 ? <button type="button" disabled={!online} onClick={async () => { await retryOfflineItem(item); setOfflineQueueItems(await listOfflineQueue()); setSyncRequested((value) => value + 1); }}>נסה שוב</button> : <span>{syncStatus === "syncing" ? "מסנכרן" : "ממתין"}</span>}</article>)}{!offlineQueueItems.length && <div className="sync-empty"><b>✓</b><strong>הכול מסונכרן</strong><span>אין פעולות שממתינות לשליחה.</span></div>}</div><footer><button type="button" onClick={() => setSyncCenterOpen(false)}>סגור</button><button className="primary" type="button" disabled={!online || !offlineQueueItems.length || syncStatus === "syncing"} onClick={() => setSyncRequested((value) => value + 1)}>סנכרן עכשיו</button></footer></section></div>}
-      {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הארוחה עודכנה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name} · {mealResult.kcal} קלוריות</span><small>{mealResult.protein} גרם חלבון · {mealResult.carbs} גרם פחמימות · {mealResult.fat} גרם שומן{mealResult.favoriteSaved ? " · נשמרה גם במועדפים ★" : ""}{mealResult.imageCompleted ? " · תמונה הושלמה" : ""}</small></div><button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
+      {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הפעולה הושלמה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name}{mealResult.kcal > 0 ? ` · ${mealResult.kcal} קלוריות` : ""}</span>{mealResult.kcal > 0 && <small>{mealResult.protein} גרם חלבון · {mealResult.carbs} גרם פחמימות · {mealResult.fat} גרם שומן{mealResult.favoriteSaved ? " · נשמרה גם במועדפים ★" : ""}{mealResult.imageCompleted ? " · תמונה הושלמה" : ""}</small>}</div>{recentUndo && <button className="toast-undo-action" type="button" onClick={undoRecentAction}>ביטול</button>}<button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
       {undoMeal && (
         <aside className="undo-toast" role="status">
           <span>“{undoMeal.name}” נמחקה</span>
@@ -3267,7 +3298,7 @@ export default function Home() {
       )}
       <section className="content-grid">
         <div className="main-feed">
-        <section className="panel meal-suggestions-panel">
+        <section className="panel meal-suggestions-panel" id="meal-suggestions">
           <header><div><h2>מה כדאי לאכול עכשיו?</h2><p>בחר סוג ארוחה כדי לקבל המלצות מותאמות</p></div><div className="suggestion-actions">{suggestionPeriod && <button type="button" onClick={() => setSuggestionRefresh((value) => value + 1)}>רענן</button>}<button type="button" onClick={openTasteWizard}>העדפות</button></div></header>
           <div className="suggestion-periods">{[["breakfast","בוקר"],["lunch","צהריים"],["dinner","ערב"],["snack","בין ארוחות"]].map(([key,label]) => <button type="button" className={suggestionPeriod === key ? "selected" : ""} onClick={() => setSuggestionPeriod(key)} key={key}>{label}</button>)}</div>
           {suggestionPeriod && <div className="meal-suggestion-list">{mealSuggestions.map((meal) => <article key={meal.name}><div><strong>{meal.name}</strong><small>{meal.reason}{meal.personal ? " · מתאים להעדפות שלך" : ""}</small></div><span><b>{meal.kcal}</b> kcal</span><footer>{meal.protein}g חלבון · {meal.carbs}g פחמימות · {meal.fat}g שומן</footer></article>)}</div>}
@@ -3687,6 +3718,15 @@ export default function Home() {
                 <article><span className={adminHealth.trashItems ? "health-warn" : "health-ok"}>●</span><small>סל מחזור</small><strong>{adminHealth.trashItems || 0} פריטים</strong></article>
               </section>
             )}
+            {adminTab === "ai" && adminHealth?.quality && <section className="quality-metrics-panel"><header><div><strong>בקרת ביצוע ואיכות</strong><small>מדדים מצטברים מהשימוש בפועל — ללא חשיפת תוכן אישי</small></div></header><div>
+              <article><small>זמן הוספה ממוצע</small><strong>{adminHealth.quality.averageAddSeconds == null ? "נאסף מעכשיו" : `${adminHealth.quality.averageAddSeconds} שנ׳`}</strong></article>
+              <article><small>זיהויים שאושרו ללא תיקון</small><strong>{adminHealth.quality.recognitionApprovalRate == null ? "אין נתונים" : `${adminHealth.quality.recognitionApprovalRate}%`}</strong></article>
+              <article><small>שיעור תיקונים</small><strong>{adminHealth.quality.correctionRate == null ? "אין נתונים" : `${adminHealth.quality.correctionRate}%`}</strong></article>
+              <article><small>ארוחות באמינות גבוהה</small><strong>{adminHealth.quality.highReliabilityRate == null ? "אין נתונים" : `${adminHealth.quality.highReliabilityRate}%`}</strong></article>
+              <article><small>כפילויות שנחסמו</small><strong>{adminHealth.quality.duplicateBlocks}</strong></article>
+              <article><small>עלות AI ממוצעת לארוחה</small><strong>${Number(adminHealth.quality.aiCostPerMeal || 0).toFixed(4)}</strong></article>
+              <article><small>עלות AI למשתמש פעיל החודש</small><strong>${Number(adminHealth.quality.aiCostPerActiveUser || 0).toFixed(4)}</strong></article>
+            </div></section>}
             <div className="admin-intro" id="admin-ai">
               <strong>הגדרת AI גלובלית</strong>
               <span>
@@ -5161,6 +5201,7 @@ export default function Home() {
               {insightsData.goalPlan.calibration.missing?.length > 0 && <ul>{insightsData.goalPlan.calibration.missing.map((item: string) => <li key={item}>{item}</li>)}</ul>}
               {insightsData.goalPlan.proposal && <article className="goal-adjustment-proposal"><strong>{insightsData.goalPlan.proposal.title}</strong><p>{insightsData.goalPlan.proposal.currentCalories.toLocaleString()} ← {insightsData.goalPlan.proposal.suggestedCalories.toLocaleString()} קלוריות</p><small>שינוי קטן של {Math.abs(insightsData.goalPlan.proposal.delta)} קלוריות בלבד. שום יעד לא משתנה ללא אישורך.</small><button type="button" disabled={busy} onClick={acceptGoalAdjustment}>אשר התאמה</button></article>}
             </section>}
+            {insightsData?.weeklyInsight && <section className="weekly-insight-card"><span>✦</span><div><small>תובנת השבוע שלך</small><strong>{insightsData.weeklyInsight}</strong><em>מחושב מקומית מהתיעוד שלך, ללא קריאת AI נוספת</em></div></section>}
             <section className="weight-trends">
               <div className="weight-trends-heading">
                 <div><strong>מעקב משקל</strong><small>כל עדכון נשמר כמדידה חדשה לפי תאריך ואינו מוחק את ההיסטוריה</small></div>

@@ -548,3 +548,12 @@ test("favorite selection persists across historic days and offline sync", () => 
   assert.match(page, /נשמר במועדפים ✓/);
   assert.match(favoritesRoute, /item\.meal\?\.name !== String\(name \|\| ""\)\.trim\(\)/);
 });
+
+test("high-value daily flow exposes unified review, undo, insight and quality controls", () => {
+  assert.match(page, /אותו מסך אישור של צילום, דיבור וחיפוש/);
+  assert.match(page, /undoRecentAction/);
+  assert.match(page, /תמונת מצב עכשיו/);
+  assert.match(page, /תובנת השבוע שלך/);
+  assert.match(page, /בקרת ביצוע ואיכות/);
+  assert.match(page, /מרכז הסנכרון/);
+});

@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   if (hasBlockingNutritionIssue)
     return Response.json({ error: nutritionValidation.issues[0].message, issues: nutritionValidation.issues, requiresConfirmation: true }, { status: 422 });
   const duplicateData = ensureUserData(initial, session.userId); const requestedDuplicateTime = new Date(body.occurredAt || Date.now()); const duplicateDate = entryDateFor(duplicateData, requestedDuplicateTime); const duplicateDay = duplicateData.today.date === duplicateDate ? duplicateData.today : duplicateData.history.find((day) => day.date === duplicateDate); const duplicate = findPossibleDuplicate((duplicateDay?.meals || []).filter((meal) => !clientRequestId || meal.clientRequestId !== clientRequestId), { name, time: requestedDuplicateTime });
-  if (duplicate && body.allowDuplicate !== true) return Response.json({ error: `הארוחה “${name}” כבר נוספה לפני זמן קצר. אם זו ארוחה נוספת, אשר שוב.`, duplicate: { id: duplicate.id, name: duplicate.name, time: duplicate.time }, requiresDuplicateConfirmation: true }, { status: 409 });
+  if (duplicate && body.allowDuplicate !== true) { await updateState((latest) => { addAudit(latest, { userId: session.userId, action: "meal.duplicate_blocked", target: duplicate.id, details: name }); return latest; }); return Response.json({ error: `הארוחה “${name}” כבר נוספה לפני זמן קצר. אם זו ארוחה נוספת, אשר שוב.`, duplicate: { id: duplicate.id, name: duplicate.name, time: duplicate.time }, requiresDuplicateConfirmation: true }, { status: 409 }); }
   let savedMealId = ""; let savedLocalDate = ""; let idempotent = false;
   if (databaseStateEnabled()) {
     const data = ensureUserData(initial, session.userId);
@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     const persisted = [state.userData[session.userId]?.today, ...(state.userData[session.userId]?.history || [])].filter(Boolean).flatMap((day) => day.meals || []).find((item) => item.id === id || (clientRequestId && item.clientRequestId === clientRequestId));
     if (!persisted) throw new Error("השמירה הטרנזקציונית לא אומתה במסד הנתונים");
     if (persisted.id !== id && media) await deleteMedia(initial, media);
+    await updateState((latest) => { addAudit(latest, { userId: session.userId, action: "meal.created", target: persisted.id, details: JSON.stringify({ source, durationMs: Date.now() - startedAt, interactionDurationMs: Math.max(0, Number(body.interactionDurationMs || 0)), userEdited: body.userEdited === true, reliability: nutritionReliability.score }) }); return latest; });
     return Response.json({ ...userView(state, session.userId, session.role === "admin"), savedMealId: persisted.id, savedLocalDate: localDate, persistence: { idempotent: persisted.id !== id, transactional: true, durationMs: Date.now() - startedAt } });
   }
   const state = await updateState(async (latest) => {
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
       data.foodCalibration.push(...buildFoodCorrections(Array.isArray(body.aiOriginalItems) ? body.aiOriginalItems : [], items, source));
       data.foodCalibration = data.foodCalibration.slice(-100);
     }
+    addAudit(latest, { userId: session.userId, action: "meal.created", target: meal.id, details: JSON.stringify({ source, durationMs: Date.now() - startedAt, interactionDurationMs: Math.max(0, Number(body.interactionDurationMs || 0)), userEdited: body.userEdited === true, reliability: nutritionReliability.score }) });
     return latest;
   });
   return Response.json({ ...userView(state, session.userId, session.role === "admin"), savedMealId, savedLocalDate, persistence: { idempotent, transactional: false, durationMs: Date.now() - startedAt } });
