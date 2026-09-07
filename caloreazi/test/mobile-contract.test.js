@@ -26,8 +26,8 @@ test("voice offers speech recognition and media-recorder fallback", () => {
 
 test("PWA uses safe-area viewport and persistent mobile navigation", () => {
   assert.match(layout, /viewportFit: "cover"/);
-  assert.match(layout, /maximumScale: 1/);
-  assert.match(layout, /userScalable: false/);
+  assert.doesNotMatch(layout, /maximumScale: 1/);
+  assert.doesNotMatch(layout, /userScalable: false/);
   assert.match(page, /className="bottom-nav"/);
   assert.match(expansion, /env\(safe-area-inset-bottom\)/);
 });
@@ -36,6 +36,6 @@ test("mobile PWA stays at device width and scrolls vertically only", () => {
   const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(styles, /Mobile PWA is a fixed-width application surface/);
   assert.match(styles, /overflow-x:clip!important/);
-  assert.match(styles, /touch-action:pan-y!important/);
+  assert.match(styles, /touch-action:pan-y pinch-zoom!important/);
   assert.match(page, /inline: "nearest"/);
 });

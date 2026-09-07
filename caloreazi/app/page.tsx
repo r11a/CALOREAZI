@@ -10,7 +10,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { flushOfflineCaptures, flushOfflineMutations, listOfflineQueue, offlinePendingCount, queueOfflineCapture, queueOfflineMutation, retryOfflineItem, type OfflineQueueItem } from "./offline-queue";
+import { setOfflineUser, getOfflineCapture, discardOfflineItem, flushOfflineCaptures, flushOfflineMutations, listOfflineQueue, offlinePendingCount, queueOfflineCapture, queueOfflineMutation, retryOfflineItem, type OfflineQueueItem } from "./offline-queue";
+import { useModalAccessibility } from "./use-modal-accessibility";
 import { AppIcon } from "./components/AppIcon";
 import { assessMealReliability } from "../server/meal-reliability.js";
 import { HYDRATION_BEVERAGES, beverageNutrition, hydrationBeverage, hydrationContribution, hydrationTotal, normalizeCustomBeverage, removeLatestBeverageServing } from "../server/hydration.js";
@@ -525,6 +526,7 @@ function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: stri
 }
 
 export default function Home() {
+  useModalAccessibility();
   const [state, setState] = useState<AppState | null>(null);
   const [error, setError] = useState("");
   const [dark, setDark] = useState(false);
@@ -653,6 +655,7 @@ export default function Home() {
   const [weightDate, setWeightDate] = useState("");
   const [weightFeedback, setWeightFeedback] = useState("");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [moreMealActions, setMoreMealActions] = useState(false);
   const [forgottenOpen, setForgottenOpen] = useState(false);
   const [forgottenMeals, setForgottenMeals] = useState<any[]>([]);
   const [forgottenStatus, setForgottenStatus] = useState("");
@@ -691,8 +694,9 @@ export default function Home() {
   const [syncCenterOpen, setSyncCenterOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"offline" | "idle" | "syncing" | "success" | "attention">("idle");
   const [syncRequested, setSyncRequested] = useState(0);
+  const [offlineReviewId, setOfflineReviewId] = useState("");
   const [waterOpen, setWaterOpen] = useState(false);
-  const [waterValue, setWaterValue] = useState(0);
+  const [, setWaterValue] = useState(0);
   const [waterTargetValue, setWaterTargetValue] = useState(2000);
   const [selectedHydrationBeverages, setSelectedHydrationBeverages] = useState<string[]>([]);
   const [customHydrationBeverages, setCustomHydrationBeverages] = useState<any[]>([]);
@@ -864,24 +868,30 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
+    const userId = state?.currentUser?.id || "";
+    setOfflineUser(userId);
+    if (!userId) { setOfflineQueueItems([]); setOfflineQueueCount(0); return; }
+    let cancelled = false;
     setOnline(navigator.onLine);
     let syncing = false;
     const refreshQueue = async () => { const items = await listOfflineQueue(); setOfflineQueueItems(items); setOfflineQueueCount(items.length); if (items.some((item) => item.attempts >= 3)) setSyncStatus("attention"); return items; };
     const update = async () => {
-      setOnline(navigator.onLine); if (syncing) return;
+      setOnline(navigator.onLine); if (syncing || cancelled) return;
       if (!navigator.onLine) { setSyncStatus("offline"); refreshQueue().catch(() => undefined); return; }
       syncing = true;
       setSyncStatus("syncing");
       try {
-        const mutationsSent = await flushOfflineMutations(async (mutation) => { await api(mutation.url, { method: mutation.method, headers: { "Idempotency-Key": mutation.id }, body: mutation.body }); });
+        const mutationsSent = await flushOfflineMutations(async (mutation) => { await api(mutation.url, { method: mutation.method, headers: { "Idempotency-Key": mutation.id, "X-Caloreazi-User": userId }, body: mutation.body }); });
         const capturesSent = await flushOfflineCaptures(async (capture) => {
-          let result = await api("/api/ai/analyze-meal", { method: "POST", headers: { "Idempotency-Key": capture.clientId }, body: JSON.stringify(capture) });
-          if (!result.items && result.jobId) result = await api(`/api/ai/analyze-meal?id=${encodeURIComponent(result.jobId)}`);
-          result = result.result ? { ...result.result, jobId: result.jobId } : result;
-          if (!result.items) throw new Error("הצילום עדיין ממתין לניתוח");
-          setPhotoPreview(capture.imageDataUrl); setMealSource("photo"); setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 }); setMealItems(result.items); setAiOriginalItems(structuredClone(result.items)); setMealConfidence(result.confidence || "low"); setMealReviewReady(true); setPhotoStatus("הצילום שסונכרן נותח ומוכן לבדיקה ולאישור."); setMealOpen(true);
+          const headers = { "Idempotency-Key": capture.clientId, "X-Caloreazi-User": userId };
+          let result = capture.analysisJobId ? await api("/api/ai/analyze-meal?id=" + encodeURIComponent(capture.analysisJobId), { headers }) : await api("/api/ai/analyze-meal", { method: "POST", headers, body: JSON.stringify(capture) });
+          if (result.status === "failed" || result.status === "cancelled") throw new Error(result.errorMessage || "הניתוח נכשל; אפשר לנסות שוב");
+          const jobId = result.jobId || result.id || capture.analysisJobId;
+          result = result.result ? { ...result.result, jobId } : { ...result, jobId };
+          if (!result.items) return { pendingJobId: jobId };
+          return result;
         });
-        const latest = await api("/api/state"); setState(latest);
+        const latest = await api("/api/state"); if (cancelled) return; setState(latest);
         const remaining = await refreshQueue();
         setSyncStatus(remaining.some((item) => item.attempts >= 3) ? "attention" : remaining.length ? "idle" : mutationsSent + capturesSent > 0 ? "success" : "idle");
       } catch { const remaining = await refreshQueue().catch(() => []); setSyncStatus(remaining.some((item) => item.attempts >= 3) ? "attention" : "idle"); }
@@ -896,12 +906,13 @@ export default function Home() {
       navigator.serviceWorker.register("./sw.js").catch(() => undefined);
     void update();
     return () => {
+      cancelled = true; setOfflineUser("");
       window.removeEventListener("online", update);
       window.removeEventListener("offline", update);
       document.removeEventListener("visibilitychange", visibility);
       window.clearInterval(retryTimer);
     };
-  }, [syncRequested]);
+  }, [syncRequested, state?.currentUser?.id]);
   useEffect(() => {
     const saved = window.localStorage.getItem("caloreazi-theme");
     if (saved) setDark(saved === "dark");
@@ -1529,6 +1540,7 @@ export default function Home() {
     setMacroDetail(""); setMealPreview(null); setPendingQuickFood(null); setPendingFavorite(null); setEditingFood(null);
   }
   function openMealLauncher() {
+    setMoreMealActions(false); setOfflineReviewId("");
     closeOpenScreens();
     setQuickCategory("");
     setQuickSearch("");
@@ -1795,6 +1807,7 @@ export default function Home() {
       if (!catalogOnly && savedMealId && !photoPreview) void api("/api/meals/image", { method: "POST", body: JSON.stringify({ id: savedMealId, allowGenerate: state?.ai?.autoGenerateMealImages === true && state?.ai?.economyMode === false }) }).then((imageState) => { setState(imageState); if (imageState.imageCompleted) setMealResult((current: any) => current ? { ...current, imageCompleted: true } : current); }).catch(() => undefined);
       if (!catalogOnly && savedLocalDate && savedLocalDate !== latest.today?.date)
         setError(`הארוחה נשמרה בהיסטוריה בתאריך ${savedLocalDate}, בהתאם לשעה שנבחרה.`);
+      if (!catalogOnly && offlineReviewId) { await discardOfflineItem({ id: offlineReviewId, kind: "capture" }); setOfflineReviewId(""); setOfflineQueueItems(await listOfflineQueue()); setOfflineQueueCount(await offlinePendingCount()); }
       setMealOpen(false);
       mealSaveRequestId.current = "";
       setEditingMealId("");
@@ -2032,7 +2045,7 @@ export default function Home() {
         if (weightValue && Number(weightValue) !== Number(latestWeight)) await queueMutation("/api/measurements", "POST", JSON.stringify({ weight: weightValue, date: state.today.date }));
         setState((current: any) => ({ ...current, profile: { ...current.profile, ...offlineProfile, age: exactAge(offlineProfile.birthDate) ?? current.profile.age, weight: weightValue || current.profile.weight } }));
         setCoachVoice(offlineProfile.coachVoice === "female" ? "female" : "male"); setCoachVoiceStyle(offlineProfile.coachVoiceStyle === "clear" ? "clear" : "warm"); setCoachVoiceProvider(offlineProfile.coachVoiceProvider === "device" ? "device" : "cloud");
-        setOfflineQueueCount(await offlinePendingCount()); setProfileOpen(false); setMealResult({ name: "הפרטים נשמרו במכשיר וממתינים לסנכרון", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
+        setOfflineQueueCount(await offlinePendingCount()); setProfileOpen(false); setMealResult({ name: "הפרטים נשמרו במכשיר וממתינים לטיפול", kcal: 0, protein: 0, carbs: 0, fat: 0 }); return;
       }
       let latest = await api("/api/profile", {
         method: "PUT",
@@ -2131,6 +2144,7 @@ export default function Home() {
     }
   }
   async function switchUser() {
+    setOfflineUser("");
     await api("/api/auth/session", { method: "DELETE" });
     window.location.reload();
   }
@@ -2184,7 +2198,19 @@ export default function Home() {
       setError((e as Error).message);
     }
   }
+  async function openOfflineReview(id: string) {
+    const capture = await getOfflineCapture(id); if (!capture?.analysis) return;
+    openManualMeal();
+    const result: any = capture.analysis;
+    setOfflineReviewId(id); mealSaveRequestId.current = capture.clientId;
+    setPhotoPreview(capture.imageDataUrl); setMealSource("photo"); setMealDateTime(localDateTimeInput(new Date(capture.createdAt)));
+    setAnalysisJobId(result.jobId || result.id || ""); setMealForm({ name: result.name, kcal: 0, protein: 0, carbs: 0, fat: 0 });
+    setMealItems(result.items); setAiOriginalItems(structuredClone(result.items)); setMealConfidence(result.confidence || "low"); setMealReviewReady(true);
+    setPhotoStatus("הצילום שמור במכשיר עד לאישור והוספה."); setSyncCenterOpen(false);
+  }
+
   function openManualMeal(category = "meals") {
+    setOfflineReviewId("");
     if (category !== "meals") {
       setFoodCategory(category);
       openCustomFood();
@@ -2217,6 +2243,7 @@ export default function Home() {
     setMealOpen(true);
   }
   function openForgottenMeals() {
+    setOfflineReviewId("");
     setQuickAddOpen(false);
     setForgottenMeals([newForgottenMeal()]);
     setForgottenStatus("");
@@ -2259,6 +2286,7 @@ export default function Home() {
     finally { setBusy(false); }
   }
   function openCustomFood() {
+    setOfflineReviewId("");
     setCustomFoodName("");
     setCustomFoodDraft(null);
     setCustomFoodStatus("");
@@ -2325,6 +2353,7 @@ export default function Home() {
     }
   }
   function selectQuickFood(item: any) {
+    setOfflineReviewId("");
     setMealPeriod("snack");
     setQuickFoodWeight(Number(item.defaultWeight || 100));
     setPendingQuickFood(item);
@@ -2575,6 +2604,7 @@ export default function Home() {
     return canvas.toDataURL("image/jpeg", quality);
   }
   async function analyzePhotoFile(file: File, recognitionHint = "") {
+    setOfflineReviewId("");
     setManualAiMode(false);
     setMealSource("photo");
     setMealItems([]);
@@ -2982,6 +3012,7 @@ export default function Home() {
     setCameraStatus("");
   }
   async function openInAppCamera() {
+    setOfflineReviewId("");
     setQuickAddOpen(false);
     setCameraHint("");
     setCameraStatus("פותח מצלמה…");
@@ -3291,8 +3322,8 @@ export default function Home() {
           {error} ×
         </button>
       )}
-      {offlineQueueCount > 0 && !syncCenterOpen && <button className="offline-queue-status" type="button" onClick={async () => { setOfflineQueueItems(await listOfflineQueue()); setSyncCenterOpen(true); }}>{offlineQueueCount} {offlineQueueCount === 1 ? "פעולה ממתינה" : "פעולות ממתינות"} לסנכרון · לפרטים</button>}
-      {syncCenterOpen && <div className="modal-layer sync-center-layer"><button className="backdrop" onClick={() => setSyncCenterOpen(false)} /><section className="settings-modal sync-center"><header><div><h2>מרכז הסנכרון</h2><p>{!online ? "אין חיבור כרגע. אפשר להמשיך לעבוד כרגיל." : syncStatus === "syncing" ? "הנתונים נשלחים כעת לפי סדר ההזנה." : offlineQueueItems.length ? "הנתונים שמורים במכשיר ולא ייעלמו." : "כל הנתונים מעודכנים בשרת."}</p></div><button type="button" onClick={() => setSyncCenterOpen(false)} aria-label="סגור">×</button></header><div className="sync-summary"><span className={online ? "connected" : "disconnected"}><i />{online ? "מחובר" : "Offline"}</span><strong>{offlineQueueItems.length}</strong><small>פעולות ממתינות</small></div><div className="sync-items">{offlineQueueItems.map((item) => <article className={item.attempts >= 3 ? "failed" : ""} key={`${item.kind}-${item.id}`}><div><strong>{item.label}</strong><small>נשמר {new Date(item.createdAt).toLocaleString("he-IL")}</small>{item.attempts >= 3 && <><em>לא הצלחנו לסנכרן אחרי {item.attempts} ניסיונות</em>{item.lastError && <small>{item.lastError}</small>}</>}</div>{item.attempts >= 3 ? <button type="button" disabled={!online} onClick={async () => { await retryOfflineItem(item); setOfflineQueueItems(await listOfflineQueue()); setSyncRequested((value) => value + 1); }}>נסה שוב</button> : <span>{syncStatus === "syncing" ? "מסנכרן" : "ממתין"}</span>}</article>)}{!offlineQueueItems.length && <div className="sync-empty"><b>✓</b><strong>הכול מסונכרן</strong><span>אין פעולות שממתינות לשליחה.</span></div>}</div><footer><button type="button" onClick={() => setSyncCenterOpen(false)}>סגור</button><button className="primary" type="button" disabled={!online || !offlineQueueItems.length || syncStatus === "syncing"} onClick={() => setSyncRequested((value) => value + 1)}>סנכרן עכשיו</button></footer></section></div>}
+      {offlineQueueCount > 0 && !syncCenterOpen && <button className="offline-queue-status" type="button" onClick={async () => { setOfflineQueueItems(await listOfflineQueue()); setSyncCenterOpen(true); }}>{offlineQueueCount} {offlineQueueCount === 1 ? "פעולה ממתינה" : "פעולות ממתינות"} לסנכרון או לאישור · לפרטים</button>}
+      {syncCenterOpen && <div className="modal-layer sync-center-layer"><button className="backdrop" onClick={() => setSyncCenterOpen(false)} /><section className="settings-modal sync-center"><header><div><h2>מרכז הסנכרון</h2><p>{!online ? "אין חיבור כרגע. אפשר להמשיך לעבוד כרגיל." : syncStatus === "syncing" ? "הנתונים נשלחים כעת לפי סדר ההזנה." : offlineQueueItems.length ? "הנתונים שמורים במכשיר ולא ייעלמו." : "כל הנתונים מעודכנים בשרת."}</p></div><button type="button" onClick={() => setSyncCenterOpen(false)} aria-label="סגור">×</button></header><div className="sync-summary"><span className={online ? "connected" : "disconnected"}><i />{online ? "מחובר" : "Offline"}</span><strong>{offlineQueueItems.length}</strong><small>פעולות ממתינות</small></div><div className="sync-items">{offlineQueueItems.map((item) => <article className={item.attempts >= 3 ? "failed" : ""} key={`${item.kind}-${item.id}`}><div><strong>{item.label}</strong><small>נשמר {new Date(item.createdAt).toLocaleString("he-IL")}</small>{item.attempts >= 3 && <><em>לא הצלחנו לסנכרן אחרי {item.attempts} ניסיונות</em>{item.lastError && <small>{item.lastError}</small>}</>}</div>{item.ready ? <button type="button" onClick={() => openOfflineReview(item.id)}>בדיקה ואישור</button> : item.attempts >= 3 ? <button type="button" disabled={!online} onClick={async () => { await retryOfflineItem(item); setOfflineQueueItems(await listOfflineQueue()); setSyncRequested((value) => value + 1); }}>נסה שוב</button> : <span>{syncStatus === "syncing" ? "מסנכרן" : "ממתין"}</span>}{item.kind === "capture" && <button type="button" disabled={syncStatus === "syncing"} onClick={async () => { if (!window.confirm("למחוק את טיוטת הצילום מהמכשיר?")) return; await discardOfflineItem(item); setOfflineQueueItems(await listOfflineQueue()); setOfflineQueueCount(await offlinePendingCount()); }}>מחק טיוטה</button>}</article>)}{!offlineQueueItems.length && <div className="sync-empty"><b>✓</b><strong>הכול מסונכרן</strong><span>אין פעולות שממתינות לשליחה.</span></div>}</div><footer><button type="button" onClick={() => setSyncCenterOpen(false)}>סגור</button><button className="primary" type="button" disabled={!online || !offlineQueueItems.length || syncStatus === "syncing"} onClick={() => setSyncRequested((value) => value + 1)}>סנכרן עכשיו</button></footer></section></div>}
       {mealResult && <aside className="meal-result-toast" role="status"><div><strong>{mealResult.edited ? "הפעולה הושלמה" : "הארוחה נוספה ליומן"} ✓</strong><span>{mealResult.name}{mealResult.kcal > 0 ? ` · ${mealResult.kcal} קלוריות` : ""}</span>{mealResult.kcal > 0 && <small>{mealResult.protein} גרם חלבון · {mealResult.carbs} גרם פחמימות · {mealResult.fat} גרם שומן{mealResult.favoriteSaved ? " · נשמרה גם במועדפים ★" : ""}{mealResult.imageCompleted ? " · תמונה הושלמה" : ""}</small>}</div>{recentUndo && <button className="toast-undo-action" type="button" onClick={undoRecentAction}>ביטול</button>}<button onClick={() => setMealResult(null)} aria-label="סגור">×</button></aside>}
       {undoMeal && (
         <aside className="undo-toast" role="status">
@@ -4349,18 +4380,21 @@ export default function Home() {
                 <p className="online-food-status">{onlineFoodStatus}</p>
               </div>
             ) : !quickCategory ? (
-              <><div className="quick-source-grid">
+              <><div className="quick-source-grid quick-primary-actions">
+                <button type="button" className="quick-source source-2" onClick={openInAppCamera}><span><AppIcon name="camera" /></span><strong>צלם ארוחה</strong></button>
+                <button type="button" className="quick-source source-1" onClick={() => openManualMeal()}><span><AppIcon name="edit" /></span><strong>ארוחה ידנית</strong></button>
+                <button type="button" className="quick-source source-6" onClick={() => { setQuickAddOpen(false); setFoodLibraryOpen(true); }}><span><AppIcon name="star" /></span><strong>מועדפים</strong></button>
+                <button type="button" className="quick-source source-more" aria-expanded={moreMealActions} aria-controls="additional-meal-actions" onClick={() => setMoreMealActions(value => !value)}><span><AppIcon name="list" /></span><strong>{moreMealActions ? "סגור פעולות נוספות" : "פעולות נוספות"}</strong></button>
+              </div>
+              {moreMealActions && <div className="quick-source-grid quick-additional-actions" id="additional-meal-actions">
                 {[
-                  { label: "ארוחה ידנית", icon: "edit", action: () => openManualMeal() },
-                  { label: "צלם ארוחה", icon: "camera", action: openInAppCamera },
                   { label: "שכחתי לעדכן", icon: "history", action: openForgottenMeals },
                   { label: "סריקת ברקוד", icon: "barcode", action: () => setBarcodeScannerOpen(true) },
                   { label: "הקלט ארוחה", icon: "mic", action: () => { setQuickAddOpen(false); setVoiceOpen(true); } },
-                  { label: "מועדפים", icon: "star", action: () => { setQuickAddOpen(false); setFoodLibraryOpen(true); } },
                   { label: "משקאות", icon: "drink", action: () => setQuickCategory("drinks") },
                   { label: "ירקות ופירות", icon: "produce", action: () => { setProduceFilter("vegetables"); setQuickCategory("produce"); } },
-                ].map((entry: any, index) => <button type="button" className={`quick-source source-${index + 1}`} onClick={entry.action} key={entry.label}><span><AppIcon name={entry.icon} /></span><strong>{entry.label}</strong></button>)}
-              </div>{quickRepeatMeals.length > 0 && <section className="quick-add-recents"><header><strong>ארוחות אחרונות ונפוצות</strong><small>להוספה חוזרת בלחיצה</small></header><div>{quickRepeatMeals.slice(0, 8).map(({ meal, count }) => <button type="button" key={meal.id || meal.name} disabled={busy} onClick={() => { setQuickAddOpen(false); repeatRecentMeal(meal); }}><span>＋</span><strong>{meal.name}</strong><small>{Math.round(Number(meal.kcal))} קלוריות{count > 1 ? ` · ${count} פעמים` : ""}</small></button>)}</div></section>}</>
+                ].map((entry: any, index) => <button type="button" className={"quick-source source-" + [3,4,5,7,8][index]} onClick={entry.action} key={entry.label}><span><AppIcon name={entry.icon} /></span><strong>{entry.label}</strong></button>)}
+              </div>}<div>              </div>{quickRepeatMeals.length > 0 && <section className="quick-add-recents"><header><strong>ארוחות אחרונות ונפוצות</strong><small>להוספה חוזרת בלחיצה</small></header><div>{quickRepeatMeals.slice(0, 8).map(({ meal, count }) => <button type="button" key={meal.id || meal.name} disabled={busy} onClick={() => { setQuickAddOpen(false); repeatRecentMeal(meal); }}><span>＋</span><strong>{meal.name}</strong><small>{Math.round(Number(meal.kcal))} קלוריות{count > 1 ? ` · ${count} פעמים` : ""}</small></button>)}</div></section>}</>
             ) : (
               <>
                 <button
@@ -5249,7 +5283,7 @@ export default function Home() {
                     <span>דקות השבוע</span>
                   </article>
                   <article className={Number(insightsData.summary.targetCompliance) >= 70 ? "kpi-range is-good" : "kpi-range needs-attention"}><i>✓</i><small>ימים בטווח</small><strong>{insightsData.summary.targetCompliance}%</strong><span>{insightsData.summary.trackedDays} ימי מעקב</span></article>
-                  <article className={`kpi-meal ${insightsData.summary.topMealDetails?.id ? "is-clickable" : ""}`} role={insightsData.summary.topMealDetails?.id ? "button" : undefined} tabIndex={insightsData.summary.topMealDetails?.id ? 0 : undefined} onClick={openTopMealPreview} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && insightsData.summary.topMealDetails?.id) { event.preventDefault(); openTopMealPreview(); } }} aria-label={insightsData.summary.topMealDetails?.id ? `פתיחת פרטי ${insightsData.summary.topMeal}` : undefined}><i>★</i><small>הארוחה המאוזנת</small><strong className="trend-meal-name" title={insightsData.summary.topMeal}>{String(insightsData.summary.topMeal || "—").length > 42 ? `${String(insightsData.summary.topMeal).slice(0, 39).trim()}…` : insightsData.summary.topMeal}</strong><span>{insightsData.summary.topMealDetails?.id ? "לחץ להצגת הארוחה" : "לפי ציון הארוחה"}</span></article>
+                  <div className={`kpi-meal ${insightsData.summary.topMealDetails?.id ? "is-clickable" : ""}`} role={insightsData.summary.topMealDetails?.id ? "button" : undefined} tabIndex={insightsData.summary.topMealDetails?.id ? 0 : undefined} onClick={openTopMealPreview} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && insightsData.summary.topMealDetails?.id) { event.preventDefault(); openTopMealPreview(); } }} aria-label={insightsData.summary.topMealDetails?.id ? `פתיחת פרטי ${insightsData.summary.topMeal}` : undefined}><i>★</i><small>הארוחה המאוזנת</small><strong className="trend-meal-name" title={insightsData.summary.topMeal}>{String(insightsData.summary.topMeal || "—").length > 42 ? `${String(insightsData.summary.topMeal).slice(0, 39).trim()}…` : insightsData.summary.topMeal}</strong><span>{insightsData.summary.topMealDetails?.id ? "לחץ להצגת הארוחה" : "לפי ציון הארוחה"}</span></div>
                 </div>
                 <p className="trend-narrative">{insightsData.narrative}</p>
                 <p className="coach-recommendation"><b>המלצת זהב:</b> {insightsData.recommendation}</p>
@@ -5893,7 +5927,8 @@ export default function Home() {
             </div></details>}
             {(mealForm.name || mealItems.length > 0) && <details className={`meal-reliability ${mealReliabilityPreview.level}`} open={mealReliabilityPreview.level === "low"}>
               <summary><span><AppIcon name={mealReliabilityPreview.level === "high" ? "target" : "info"} /><b>{mealReliabilityPreview.label}</b><small>{mealReliabilityPreview.score}/100 · כיסוי {mealReliabilityPreview.coverage}%</small></span><i aria-hidden="true" /></summary>
-              {mealReliabilityPreview.items.length > 0 && <div>{mealReliabilityPreview.items.map((item: any, index: number) => <article key={`${item.name}-${index}`}><header><strong>{item.name}</strong><b>{item.score}/100</b></header><p>{item.source}</p><small>{item.formula}</small></article>)}</div>}
+              <p>זהו מדד איכות המידע, ולא אחוז דיוק מוכח. זיהוי המזון, הכמות ומקור הערכים נבדקים בנפרד; מומלץ לבדוק במיוחד כמויות שהוערכו מצילום.</p>
+              {mealReliabilityPreview.items.length > 0 && <div>{mealReliabilityPreview.items.map((item: any, index: number) => <article key={`${item.name}-${index}`}><header><strong>{item.name}</strong><b>{item.score}/100</b></header><p>{item.identificationBasis}</p><p>{item.quantityBasis}</p><p>מקור הערכים: {item.source}</p><small>{item.formula}</small></article>)}</div>}
               {mealReliabilityPreview.issues.length > 0 && <ul>{mealReliabilityPreview.issues.map((issue: any, index: number) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}</ul>}
             </details>}
             {mealItems.length > 0 && (

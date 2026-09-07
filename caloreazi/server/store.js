@@ -127,13 +127,18 @@ export async function writeState(state) {
   return state;
 }
 
+let fileUpdateQueue = Promise.resolve();
 export async function updateState(updater) {
   if (databaseStateEnabled()) {
     return updateDatabaseState(updater, structuredClone(defaultState));
   }
-  const state = await readState();
-  const next = await updater(state) || state;
-  return writeState(next);
+  const operation = fileUpdateQueue.then(async () => {
+    const state = await readState();
+    const next = await updater(state) || state;
+    return writeState(next);
+  });
+  fileUpdateQueue = operation.catch(() => undefined);
+  return operation;
 }
 
 async function encryptionKey() {

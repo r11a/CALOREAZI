@@ -15,7 +15,9 @@ export async function POST(request: Request) {
   const startedAt = Date.now();
   const initial = await readState(); const session = requireUser(initial, request);
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
-  const body = await request.json(); const name = String(body.name || "").trim();
+  const body = await request.json();
+  if (body.analysisJobId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(body.analysisJobId))) return Response.json({ error: "מזהה ניתוח אינו תקין" }, { status: 400 });
+  const name = String(body.name || "").trim();
   const clientRequestId = String(body.clientRequestId || request.headers.get("idempotency-key") || "").trim().slice(0, 120);
   const items = Array.isArray(body.items) ? body.items.slice(0, 30) : [];
   const calculated = items.length ? calculateMealFromItems(items) : body;
@@ -105,7 +107,7 @@ export async function PATCH(request: Request) {
     if (body.baseUpdatedAt !== undefined && String(meal.updatedAt || "") !== String(body.baseUpdatedAt || "")) { editConflict = true; return latest; }
     if (body.scale !== undefined) {
       const scale = Math.max(.25, Math.min(4, Number(body.scale) || 1));
-      ["protein", "carbs", "fat"].forEach((field) => { meal[field] = Math.round(Number(meal[field] || 0) * scale * 10) / 10; });
+      ["protein", "carbs", "fat", "sugar", "fiber", "sodiumMg", "saturatedFat", "addedSugar"].forEach((field) => { meal[field] = Math.round(Number(meal[field] || 0) * scale * 10) / 10; });
       meal.kcal = roundCalories(Number(meal.kcal || 0) * scale);
       meal.items = (meal.items || []).map((item) => ({ ...item, quantity: Math.round(Number(item.quantity || 1) * scale * 100) / 100 }));
     } else {
@@ -115,12 +117,12 @@ export async function PATCH(request: Request) {
       meal.period = ["breakfast", "lunch", "dinner", "snack"].includes(body.period) ? body.period : meal.period;
       meal.kcal = roundCalories(calculated.kcal); meal.protein = Math.max(0, Number(calculated.protein) || 0); meal.carbs = Math.max(0, Number(calculated.carbs) || 0); meal.fat = Math.max(0, Number(calculated.fat) || 0); meal.sugar = Math.max(0, Number(calculated.sugar) || 0); meal.sugarTrackedItems = Math.max(0, Number(calculated.sugarTrackedItems) || 0); meal.items = items;
       meal.nutritionReliability = assessMealReliability({ ...body, ...calculated, items });
-      const requested = new Date(body.occurredAt || meal.time); if (Number.isFinite(requested.getTime()) && requested.getTime() <= Date.now()) meal.time = requested.toISOString();
+      const requested = new Date(body.occurredAt || meal.time); if (Number.isFinite(requested.getTime()) && requested.getTime() <= Date.now() && requested.toISOString() !== meal.time) { meal.time = requested.toISOString(); meal.logicalDate = localDateAt(meal.time, userTimeZone(ensureUserData(latest, session.userId))); }
     }
     if (body.scale === undefined && editedItems.length) { const data = ensureUserData(latest, session.userId); data.foodCalibration.push(...buildFoodCorrections(previousItems, editedItems, "meal_edit")); data.foodCalibration = data.foodCalibration.slice(-100); }
     meal.score = calculateMealScore(meal); meal.updatedAt = new Date().toISOString();
     const previousDay = found.day; previousDay.meals = previousDay.meals.filter((item) => item.id !== id); restoreOwnedMeal(latest, session.userId, meal);
-    savedLocalDate = localDateAt(meal.time, userTimeZone(ensureUserData(latest, session.userId)));
+    savedLocalDate = meal.logicalDate || localDateAt(meal.time, userTimeZone(ensureUserData(latest, session.userId)));
     addAudit(latest, { userId: session.userId, action: "meal.updated", target: id }); return latest;
   });
   if (!foundMeal) return Response.json({ error: "הארוחה לא נמצאה" }, { status: 404 });
