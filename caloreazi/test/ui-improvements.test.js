@@ -58,7 +58,7 @@ test("photo meals automatically complete calories and remain recalculable after 
 test("home greeting opens the shared add menu and that menu exposes meal capture", () => {
   assert.match(page, /welcome-add-button/);
   assert.match(page, /setQuickAddOpen\(true\)/);
-  assert.match(page, /label: "צלם ארוחה", icon: "camera", action: openInAppCamera/);
+  assert.match(page, /onClick=\{openInAppCamera\}/);
   assert.match(page, /צלם ארוחה/);
   assert.match(page, /uploadInput\.current\?\.click\(\)/);
   assert.doesNotMatch(page, /manual-camera-action/);
@@ -433,7 +433,7 @@ test("meal add flows wait for an explicit field tap before opening the keyboard"
 });
 
 test("meal source actions use a consistent icon-led visual language", () => {
-  assert.match(page, /className=\{`quick-source source-\$\{index \+ 1\}`\}/);
+  assert.match(page, /className="quick-source source-2"/);
   assert.match(css, /\.quick-source>span\{[^}]*color:#fff[^}]*background:linear-gradient/);
   assert.match(page, /label: "ירקות ופירות", icon: "produce"/);
 });
@@ -556,9 +556,9 @@ test("high-value daily flow exposes unified review, undo, insight and quality co
   assert.match(page, /מרכז הסנכרון/);
 });
 
-test("meal launcher is a compact eight-action hub with recent meals", () => {
+test("meal launcher keeps primary actions and recent meals with additional tools", () => {
   for (const label of ["ארוחה ידנית", "צלם ארוחה", "שכחתי לעדכן", "סריקת ברקוד", "הקלט ארוחה", "מועדפים", "משקאות", "ירקות ופירות"]) assert.match(page, new RegExp(label));
-  assert.match(page, /className="quick-source-grid"/);
+  assert.match(page, /quick-primary-actions/);
   assert.match(page, /ארוחות אחרונות ונפוצות/);
   assert.match(page, /quickRepeatMeals\.slice\(0, 8\)/);
   assert.match(css, /single-screen meal source launcher/);

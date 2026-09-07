@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -58,12 +58,41 @@ try {
   assert.equal(crossDelete.response.status, 200);
   const memberState = await json("/api/state", { headers: { Cookie: memberCookie } });
   assert.equal(memberState.body.today.meals.some((meal) => meal.id === memberMealId), true, "another user deleted the member meal");
+  const ingredients = ["first", "second", "third"].map(name => ({ name, grams: 100, quantity: 1, kcalPer100: 100, proteinPer100: 5, carbsPer100: 15, fatPer100: 2 }));
+  const multiItem = await json("/api/meals", { method: "POST", headers: { "Content-Type": "application/json", Cookie: memberCookie }, body: JSON.stringify({ name: "Three ingredients", items: ingredients, clientRequestId: "multi-item-check" }) });
+  assert.equal(multiItem.response.status, 200, JSON.stringify(multiItem.body));
+  if (databaseUrl) {
+    assert.match(multiItem.body.savedMealId, /^[a-f0-9-]{36}$/i);
+    const sql = "SELECT COUNT(*) FROM meal_items WHERE meal_id = '" + multiItem.body.savedMealId + "'";
+    assert.equal(Number(execFileSync("psql", [databaseUrl, "-X", "-A", "-t", "-c", sql], { encoding: "utf8", windowsHide: true }).trim()), 3, "all normalized ingredient rows must persist");
+  }
+  const movedDate = new Date(Date.now() - 2 * 86400000).toISOString();
+  const moved = await json("/api/meals", { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: memberCookie }, body: JSON.stringify({ id: memberMealId, name: "Moved meal", kcal: 200, protein: 10, carbs: 30, fat: 4, sugar: 8, occurredAt: movedDate }) });
+  assert.equal(moved.response.status, 200, JSON.stringify(moved.body));
+  assert.ok(moved.body.history.some(day => day.date === moved.body.savedLocalDate && day.meals.some(meal => meal.id === memberMealId)), "edited meal must move to the requested date");
+  const scaled = await json("/api/meals", { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: memberCookie }, body: JSON.stringify({ id: memberMealId, scale: 2 }) });
+  assert.equal(scaled.response.status, 200);
+  const scaledMeal = scaled.body.history.flatMap(day => day.meals).find(meal => meal.id === memberMealId);
+  assert.equal(scaledMeal.sugar, 16); assert.equal(scaledMeal.kcal, 400);
+  const invalidAnalysis = await json("/api/meals", { method: "POST", headers: { "Content-Type": "application/json", Cookie: memberCookie }, body: JSON.stringify({ name: "Invalid identifier", kcal: 200, analysisJobId: "not-a-uuid" }) });
+  assert.equal(invalidAnalysis.response.status, 400);
+  const wrongOwner = await json("/api/water", { method: "POST", headers: { "Content-Type": "application/json", Cookie: memberCookie, "X-Caloreazi-User": "another-user" }, body: JSON.stringify({ amount: 250 }) });
+  assert.equal(wrongOwner.response.status, 401);
+  const concurrentHeaders = { "Content-Type": "application/json", Cookie: memberCookie, "Idempotency-Key": "parallel-water" };
+  const parallelWater = await Promise.all([1,2].map(() => json("/api/water", { method: "POST", headers: concurrentHeaders, body: JSON.stringify({ amount: 250 }) })));
+  parallelWater.forEach(item => assert.equal(item.response.status, 200));
+  const afterParallel = await json("/api/state", { headers: { Cookie: memberCookie } });
+  assert.equal(afterParallel.body.today.waterMl, 250, "concurrent retries must add water once");
   const backup = await json("/api/admin/backups", { method: "POST", headers: { "Content-Type": "application/json", Cookie: adminCookie, Origin: base }, body: JSON.stringify({ type: "database" }) }); assert.equal(backup.response.status, 200, JSON.stringify(backup.body)); assert.equal(backup.body.backup.verified, true);
   const listedBackups = await json("/api/admin/backups", { headers: { Cookie: adminCookie } }); assert.equal(listedBackups.body.backups[0].verified, true); assert.equal(listedBackups.body.backups[0].type, "database");
   const restored = await json("/api/admin/backups", { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: adminCookie, Origin: base }, body: JSON.stringify({ name: backup.body.backup.name }) }); assert.equal(restored.response.status, 200, JSON.stringify(restored.body)); assert.ok(restored.body.safetyBackup);
   const sessions = await json("/api/auth/session", { headers: { Cookie: memberCookie } }); assert.equal(sessions.response.status, 200); assert.equal(sessions.body.sessions.length, 1);
   const revoked = await json("/api/auth/session", { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: memberCookie, Origin: base }, body: JSON.stringify({ all: true }) }); assert.equal(revoked.response.status, 200);
   const deniedAfterRevoke = await json("/api/state", { headers: { Cookie: memberCookie } }); assert.equal(deniedAfterRevoke.body.authenticated, false);
+  const revokedList = await json("/api/auth/session", { headers: { Cookie: memberCookie } });
+  assert.equal(revokedList.response.status, 401);
+  const revokedMutation = await json("/api/auth/session", { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: memberCookie }, body: JSON.stringify({ all: true }) });
+  assert.equal(revokedMutation.response.status, 401);
   console.log("multi-user integration: ownership and session revocation passed");
 } finally {
   server.kill();

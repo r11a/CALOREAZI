@@ -1,7 +1,7 @@
 const FOOD_DATA_USER_AGENT = "CALOREAZI food image cache (https://github.com/r11a/CALOREAZI)";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export const normalizeFoodImageName = (value) => String(value || "").toLocaleLowerCase("he-IL").replace(/[׳'״".,()\-]/g, " ").replace(/\s+/g, " ").trim();
+export const normalizeFoodImageName = (value) => String(value || "").toLocaleLowerCase("he-IL").replace(/[׳'״".,()-]/g, " ").replace(/\s+/g, " ").trim();
 
 export function categoryArtwork(candidates = []) {
   const text = candidates.map(normalizeFoodImageName).join(" ");

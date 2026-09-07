@@ -5,6 +5,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const initial = await readState(); const session = requireUser(initial, request);
   if (!session) return Response.json({ error: "יש להתחבר" }, { status: 401 });
+  if (!ensureUserData(initial, session.userId).profile) return Response.json({ error: "יש להשלים פרופיל לפני הוספת מדידה" }, { status: 409 });
   const body = await request.json(); const weight = Number(body.weight);
   if (!(weight >= 25 && weight <= 350)) return Response.json({ error: "יש להזין משקל תקין" }, { status: 400 });
   const date = String(body.date || new Date().toISOString().slice(0, 10));

@@ -66,13 +66,15 @@ export async function readDatabaseState() { const encoded = await psql(["-c", re
 
 export async function insertDatabaseMeal({ userId, localDate, timeZone, meal, analysisJobId = "", calibrations = [] }) {
   if (!databaseStateEnabled()) throw new Error("Database is not configured");
+  if (!validUuid(userId) || !validUuid(meal.id) || (analysisJobId && !validUuid(analysisJobId))) throw new Error("Invalid meal or analysis identifier");
   const mediaId = meal.media ? meal.id : null;
   const statements = [
     `INSERT INTO daily_records(user_id,local_date,timezone,water_ml,payload) VALUES('${userId}',${textSql(localDate)},${textSql(timeZone || "Asia/Jerusalem")},0,${jsonSql({ date: localDate, waterMl: 0, waterEvents: [] })}) ON CONFLICT(user_id,local_date) DO NOTHING;`,
   ];
   if (meal.media) statements.push(`INSERT INTO media_objects(id,user_id,kind,destination,relative_path,file_name,mime_type,byte_size,sha256) SELECT '${mediaId}','${userId}','meal',${textSql(meal.media.destination || "internal")},${textSql(meal.media.relativePath || "CALOREAZI/Gallery")},${textSql(meal.media.file)},${textSql(meal.media.contentType || "application/octet-stream")},${numberSql(meal.media.size)},${textSql(meal.media.sha256 || "unavailable")} WHERE NOT EXISTS (SELECT 1 FROM meals WHERE user_id='${userId}' AND client_request_id=${textSql(meal.clientRequestId)}) ON CONFLICT(id) DO NOTHING;`);
   statements.push(`INSERT INTO meals(id,user_id,daily_record_id,media_id,client_request_id,name,period,source,occurred_at,kcal,protein_g,carbs_g,fat_g,score,confidence,transcript,payload) SELECT '${meal.id}','${userId}',id,${mediaId ? `'${mediaId}'` : "NULL"},${textSql(meal.clientRequestId)},${textSql(meal.name)},${textSql(meal.period)},${textSql(meal.source)},${dateSql(meal.time)},${numberSql(meal.kcal)},${numberSql(meal.protein)},${numberSql(meal.carbs)},${numberSql(meal.fat)},${meal.score == null ? "NULL" : numberSql(meal.score)},${meal.confidence == null ? "NULL" : numberSql(meal.confidence)},${textSql(meal.transcript)},${jsonSql(meal)} FROM daily_records WHERE user_id='${userId}' AND local_date=${textSql(localDate)} ON CONFLICT(user_id,client_request_id) WHERE client_request_id IS NOT NULL DO NOTHING;`);
-  for (const item of meal.items || []) statements.push(`INSERT INTO meal_items(meal_id,detected_name,confirmed_name,grams,quantity,unit,confidence,nutrition_source,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g) SELECT m.id,${textSql(item.name || "unknown")},${textSql(item.confirmedName)},${numberSql(item.grams,1)},${numberSql(item.quantity,1)},${textSql(item.unit || "portion")},${item.confidence == null ? "NULL" : numberSql(item.confidence)},${textSql(item.nutritionSource?.source)},${item.kcalPer100 == null ? "NULL" : numberSql(item.kcalPer100)},${item.proteinPer100 == null ? "NULL" : numberSql(item.proteinPer100)},${item.carbsPer100 == null ? "NULL" : numberSql(item.carbsPer100)},${item.fatPer100 == null ? "NULL" : numberSql(item.fatPer100)} FROM meals m WHERE m.id='${meal.id}' AND NOT EXISTS (SELECT 1 FROM meal_items WHERE meal_id=m.id);`);
+  statements.push("DELETE FROM meal_items WHERE meal_id = " + textSql(meal.id) + ";");
+  for (const item of meal.items || []) statements.push(`INSERT INTO meal_items(meal_id,detected_name,confirmed_name,grams,quantity,unit,confidence,nutrition_source,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g) SELECT m.id,${textSql(item.name || "unknown")},${textSql(item.confirmedName)},${numberSql(item.grams,1)},${numberSql(item.quantity,1)},${textSql(item.unit || "portion")},${item.confidence == null ? "NULL" : numberSql(item.confidence)},${textSql(item.nutritionSource?.source)},${item.kcalPer100 == null ? "NULL" : numberSql(item.kcalPer100)},${item.proteinPer100 == null ? "NULL" : numberSql(item.proteinPer100)},${item.carbsPer100 == null ? "NULL" : numberSql(item.carbsPer100)},${item.fatPer100 == null ? "NULL" : numberSql(item.fatPer100)} FROM meals m WHERE m.id='${meal.id}';`);
   for (const item of calibrations) statements.push(`INSERT INTO food_calibrations(user_id,detected_name,confirmed_name,previous_grams,confirmed_grams,quantity,payload,created_at) SELECT '${userId}',${textSql(item.originalName)},${textSql(item.name || "unknown")},${item.previousGrams == null ? "NULL" : numberSql(item.previousGrams)},${numberSql(item.grams,1)},${numberSql(item.quantity,1)},${jsonSql(item)},${dateSql(item.at)} WHERE EXISTS (SELECT 1 FROM meals WHERE id='${meal.id}');`);
   if (analysisJobId) statements.push(`UPDATE analysis_jobs SET status='completed',completed_at=NOW(),updated_at=NOW(),payload=jsonb_set(jsonb_set(payload,'{status}',${jsonSql("completed")}),'{mealId}',to_jsonb('${meal.id}'::text)) WHERE id='${analysisJobId}' AND user_id='${userId}';`);
   statements.push("UPDATE app_settings SET value=to_jsonb(COALESCE((value #>> '{}')::bigint,0)+1),updated_at=NOW() WHERE key='runtime_revision';");
@@ -114,18 +116,35 @@ export async function replaceDatabaseState(state, expectedRevision = null) {
   for (const item of state.partnerships || []) if (hasUser(item.ownerId)) statements.push(`INSERT INTO partnerships(id,owner_id,partner_id,invite_email,permissions,status,created_at,updated_at,payload) VALUES('${uuid(item.id)}','${item.ownerId}',${item.partnerId && hasUser(item.partnerId) ? `'${item.partnerId}'` : "NULL"},${textSql(item.inviteEmail || "")},${jsonSql(item.permissions || {})},${textSql(item.status || "pending")},${dateSql(item.createdAt)},${dateSql(item.updatedAt || item.createdAt)},${jsonSql(item)});`);
   for (const item of state.trash || []) if (hasUser(item.userId)) statements.push(`INSERT INTO trash_items(id,user_id,entity_type,entity_id,payload,deleted_at,purge_after) VALUES('${uuid(item.id)}','${item.userId}',${textSql(item.type || "unknown")},${textSql(item.data?.id || item.id)},${jsonSql(item)},${dateSql(item.deletedAt)},${dateSql(new Date(new Date(item.deletedAt || Date.now()).getTime() + Number(state.systemSettings?.trashRetentionDays || 30) * 86400000))});`);
   for (const item of state.aiUsage || []) statements.push(`INSERT INTO ai_usage_log(user_id,provider,model,feature,input_tokens,output_tokens,estimated_cost_usd,status,created_at,payload) VALUES(${item.userId && hasUser(item.userId) ? `'${item.userId}'` : "NULL"},${textSql(item.provider || "unknown")},${textSql(item.model || "unknown")},${textSql(["coach","meal_vision","menu_scan","insight"].includes(item.feature) ? item.feature : item.feature === "meal_photo" ? "meal_vision" : "insight")},${numberSql(item.inputTokens)},${numberSql(item.outputTokens)},${numberSql(item.cost)},'success',${dateSql(item.at)},${jsonSql(item)});`);
-  for (const item of state.auditLog || []) statements.push(`INSERT INTO audit_log(user_id,action,entity_type,entity_id,details,created_at,payload) VALUES(${item.userId && hasUser(item.userId) ? `'${item.userId}'` : "NULL"},${textSql(item.action || "unknown")},'runtime',${textSql(item.target)},${jsonSql({ result: item.result, details: item.details })},${dateSql(item.at)},${jsonSql(item)});`);
+  statements.push(...auditLogStatements(state));
   for (const item of state.foodCatalog || []) statements.push(`INSERT INTO food_catalog(id,owner_id,visibility,payload,created_at) VALUES('${uuid(item.id)}',${item.ownerId && hasUser(item.ownerId) ? `'${item.ownerId}'` : "NULL"},${textSql(item.visibility === "shared" ? "shared" : "private")},${jsonSql(item)},${dateSql(item.createdAt)});`);
   await transaction(statements);
   return state;
 }
 
+
+function auditLogStatements(state) {
+  const statements = ["DELETE FROM audit_log;"];
+  const hasUser = (id) => (state.users || []).some(user => user.id === id);
+  for (const item of state.auditLog || []) statements.push(`INSERT INTO audit_log(user_id,action,entity_type,entity_id,details,created_at,payload) VALUES(${item.userId && hasUser(item.userId) ? `'${item.userId}'` : "NULL"},${textSql(item.action || "unknown")},'runtime',${textSql(item.target)},${jsonSql({ result: item.result, details: item.details })},${dateSql(item.at)},${jsonSql(item)});`);
+  return statements;
+}
+
 export async function updateDatabaseState(updater, defaultState) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const revision = await readRevision();
-    const draft = structuredClone(await readDatabaseState() || defaultState);
+    const previous = await readDatabaseState() || defaultState;
+    const draft = structuredClone(previous);
     const next = await updater(draft) || draft;
-    try { return await replaceDatabaseState(next, revision); }
+    try {
+      if (JSON.stringify(previous) === JSON.stringify(next)) return next;
+      if (JSON.stringify({ ...previous, auditLog: undefined }) === JSON.stringify({ ...next, auditLog: undefined })) {
+        await transaction([`DO $$ BEGIN IF COALESCE((SELECT value #>> '{}' FROM app_settings WHERE key='runtime_revision'),'0')::bigint <> ${Number(revision)} THEN RAISE EXCEPTION 'CALOREAZI_CONCURRENT_WRITE'; END IF; END $$;`, ...auditLogStatements(next),
+          "UPDATE app_settings SET value=to_jsonb(" + (revision + 1) + "::bigint) WHERE key='runtime_revision';"]);
+        return next;
+      }
+      return await replaceDatabaseState(next, revision);
+    }
     catch (error) { if (!String(error?.message || error).includes("CALOREAZI_CONCURRENT_WRITE")) throw error; }
   }
   throw new Error("הנתונים השתנו במקביל. יש לנסות שוב");
