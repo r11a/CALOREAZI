@@ -2,6 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ensureUserData } from "../server/store.js";
 import { entryDateFor, localDateAt, validTimeZone } from "../server/local-date.js";
+import { findOwnedMeal, restoreOwnedMeal } from "../server/domains/meals/repository.js";
+
+test("moving a current meal retains the repository day reference after normalization", () => {
+  const today = localDateAt();
+  const meal = { id: "move", time: new Date().toISOString(), logicalDate: today, kcal: 200 };
+  const state = { userData: { u1: { profile: {}, today: { date: today, meals: [meal] } } } };
+  const found = findOwnedMeal(state, "u1", meal.id);
+  ensureUserData(state, "u1");
+  found.meal.logicalDate = "2025-01-01";
+  found.day.meals = found.day.meals.filter(item => item.id !== meal.id);
+  restoreOwnedMeal(state, "u1", meal);
+  assert.equal(state.userData.u1.today.meals.length, 0);
+  assert.equal(state.userData.u1.history.flatMap(day => day.meals).length, 1);
+});
 
 test("uses the user's local midnight instead of UTC", () => {
   const instant = new Date("2026-08-20T21:30:00.000Z");

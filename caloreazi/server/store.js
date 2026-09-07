@@ -92,7 +92,8 @@ export function ensureUserData(state, userId) {
   data.activity = Array.isArray(data.activity) ? data.activity : [];
   data.foodCalibration = Array.isArray(data.foodCalibration) ? data.foodCalibration : [];
   data.coachHistory = Array.isArray(data.coachHistory) ? data.coachHistory : [];
-  data.today = { ...structuredClone(defaultState.today), ...(data.today || {}) };
+  // Keep references held by meal repositories valid while applying missing defaults.
+  data.today = Object.assign(data.today || {}, { ...structuredClone(defaultState.today), ...(data.today || {}) });
   const todayDate = localDateAt(new Date(), userTimeZone(data));
   const manualDay = data.profile?.dayBoundaryMode === "manual";
   if (!manualDay && data.today.date && data.today.date !== todayDate) {
