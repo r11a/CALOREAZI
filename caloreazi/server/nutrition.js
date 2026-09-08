@@ -160,3 +160,12 @@ export function calculateMealScore(meal) {
   const confidence = Math.round(Math.max(0, Math.min(10, Number(meal?.confidence || .7) * 10)));
   return Math.round(Math.min(100, protein + energy + composition + confidence));
 }
+
+export function mealScorePresentation(meal) {
+  if (!meal || meal.beverageEntry || meal.hydrationEventId || meal.kind === "water" || meal.category === "drinks") return null;
+  const stored = meal.score;
+  const value = stored !== null && stored !== undefined && Number.isFinite(Number(stored)) ? Number(stored) : calculateMealScore(meal);
+  const score = Math.round(Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0)));
+  const tone = score <= 30 ? "red" : score <= 50 ? "orange" : score <= 70 ? "yellow" : score <= 90 ? "light-green" : "sky-blue";
+  return { score, tone };
+}
