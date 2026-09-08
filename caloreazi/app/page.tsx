@@ -12,6 +12,7 @@ import {
 } from "react";
 import { setOfflineUser, getOfflineCapture, discardOfflineItem, flushOfflineCaptures, flushOfflineMutations, listOfflineQueue, offlinePendingCount, queueOfflineCapture, queueOfflineMutation, retryOfflineItem, type OfflineQueueItem } from "./offline-queue";
 import { useModalAccessibility } from "./use-modal-accessibility";
+import { MealScoreBadge } from "./components/MealScoreBadge";
 import { AppIcon } from "./components/AppIcon";
 import { assessMealReliability } from "../server/meal-reliability.js";
 import { HYDRATION_BEVERAGES, beverageNutrition, hydrationBeverage, hydrationContribution, hydrationTotal, normalizeCustomBeverage, removeLatestBeverageServing } from "../server/hydration.js";
@@ -3389,6 +3390,7 @@ export default function Home() {
                         {meal.pendingSync && <em className="pending-sync">ממתין לסנכרון</em>}
                       </span>
                       <strong>{meal.name}</strong>
+                      <MealScoreBadge meal={meal} />
                       <small>
                         {meal.protein}g חלבון · {meal.carbs}g פחמימות ·{" "}
                         {meal.fat}g שומן
@@ -3494,6 +3496,7 @@ export default function Home() {
             <header><div><h2>{mealPreview.name}</h2><small>{periodLabels[mealPreview.period || "snack"]} · {new Date(mealPreview.time).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}</small></div><button onClick={closeMealPreview}>×</button></header>
             {mealPreview.image ? <img className="meal-preview-image" src={mealPreview.image} alt={mealPreview.name} /> : <div className="meal-preview-placeholder">🍽</div>}
             {Number(mealPreview.recognitionScore) > 0 && <div className={`meal-preview-recognition ${Number(mealPreview.recognitionScore) >= 85 ? "high" : Number(mealPreview.recognitionScore) >= 60 ? "medium" : "low"}`}><span><small>ציון הזיהוי בעת ההוספה</small><strong>{Math.round(Number(mealPreview.recognitionScore))}/100</strong></span><p>{Number(mealPreview.recognitionScore) >= 85 ? "הזיהוי היה ברור" : Number(mealPreview.recognitionScore) >= 60 ? "הזיהוי טוב, אך הכמות הוערכה" : "הזיהוי נשמר לאחר בדיקת המשתמש"}</p></div>}
+            <MealScoreBadge meal={mealPreview} />
             <div className="meal-preview-values"><span className="calories"><small>קלוריות</small><strong>{mealPreview.kcal}</strong></span><span className="protein"><small>חלבון</small><strong>{mealPreview.protein} גרם</strong></span><span className="carbs"><small>פחמימות</small><strong>{mealPreview.carbs} גרם</strong></span><span className="fat"><small>שומן</small><strong>{mealPreview.fat} גרם</strong></span></div>
             {Array.isArray(mealPreview.items) && mealPreview.items.length > 0 && <div className="meal-preview-items"><strong>מרכיבי הארוחה</strong>{mealPreview.items.map((item: any, index: number) => <span key={`${item.name}-${index}`}><b>{item.name}</b><small>{item.grams ? `${item.grams} גרם` : item.quantity ? `כמות ${item.quantity}` : ""}</small></span>)}</div>}
             <footer><button type="button" onClick={() => addMealToFavorites(mealPreview.id)} disabled={state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name)}>{state.favorites?.some((favorite) => favorite.meal.name === mealPreview.name) ? "כבר במועדפים" : "הוסף למועדפים"}</button><button className="primary" type="button" onClick={closeMealPreview}>{mealPreviewReturnToHistory ? "חזרה להיסטוריה" : mealPreviewReturnToInsights ? "חזרה למגמות" : "חזרה למה אכלתי היום"}</button></footer>
@@ -5106,6 +5109,7 @@ export default function Home() {
                               <div>
                                 <em>{periodLabels[meal.period || "snack"]}</em>
                                 <strong>{meal.name}</strong>
+                                <MealScoreBadge meal={meal} />
                                 <small>
                                   {meal.protein}g חלבון · {meal.carbs}g פחמימות
                                   · {meal.fat}g שומן
